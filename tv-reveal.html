@@ -172,11 +172,11 @@
     var RIBY  = BOX.y + BOX.h + 56;   // 744 · baseline of the reading-pace ribbon
     var TLY   = BOX.y + BOX.h + 74;   // 762 · the event timeline
     var BANDS = [
-      { k: 'delta', gl: 'δ', nm: 'Delta', ds: 'slow waves',        col: 'var(--w-delta)' },
-      { k: 'theta', gl: 'θ', nm: 'Theta', ds: 'internal thinking', col: 'var(--w-theta)' },
-      { k: 'alpha', gl: 'α', nm: 'Alpha', ds: 'relaxed alertness', col: 'var(--w-alpha)' },
-      { k: 'beta',  gl: 'β', nm: 'Beta',  ds: 'focused thinking',  col: 'var(--w-beta)' },
-      { k: 'gamma', gl: 'γ', nm: 'Gamma', ds: 'peak processing',   col: 'var(--w-gamma)' }
+      { k: 'delta', gl: 'δ', nm: 'Delta', ds: 'slow activity',        col: 'var(--w-delta)' },
+      { k: 'theta', gl: 'θ', nm: 'Theta', ds: 'internal attention', col: 'var(--w-theta)' },
+      { k: 'alpha', gl: 'α', nm: 'Alpha', ds: 'calm alertness', col: 'var(--w-alpha)' },
+      { k: 'beta',  gl: 'β', nm: 'Beta',  ds: 'active engagement',  col: 'var(--w-beta)' },
+      { k: 'gamma', gl: 'γ', nm: 'Gamma', ds: 'high-frequency activity',   col: 'var(--w-gamma)' }
     ];
     function el(tag, a) { var e = document.createElementNS(NS, tag); for (var k in a) e.setAttribute(k, a[k]); return e; }
     function mean(a){ var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return a.length? s/a.length : 0; }
@@ -334,7 +334,7 @@
         // axis ran the caption off the left edge of the screen.
         var cap = el('text', { x:BOX.x, y:BOX.y-16, fill:'var(--fg-faint)',
           'font-family':'var(--font-mono)', 'font-size':12, 'letter-spacing':'2' });
-        cap.textContent = 'SHARE OF YOUR SIGNAL';
+        cap.textContent = 'RELATIVE BAND POWER';
         gridG.appendChild(cap);
       }
       // time axis in minutes, so the guest can place every read on a clock
@@ -756,20 +756,20 @@
         { no:'01', title:'How you settled', k:'Settle', v:'an easy settle', color:'var(--c-signal)', r0:0, r1:0.24,
           stat:{ value:'1 min 20 sec', label:'to reach your steady level' },
           sentence:'You were at your steady level 1 min 20 sec in, the first 26% of your reading. That is close to a cold start.',
-          bandNote:'As you settled, beta rose 18% above its session level and alpha fell 9%. Delta held 34% of your signal power through the climb.',
+          bandNote:'As you settled, beta rose 18% above its session level and alpha fell 9%. Delta held 34% of the measured band power through the climb.',
           bandFocus:['beta','alpha'] },
         { no:'02', title:'Your attention rhythm', k:'Rhythm', v:'long, steady stretches', color:'var(--c-signal)', r0:0.24, r1:0.40,
           stat:{ value:'81%', label:'of the time inside your steady band' },
           sentence:'Once you were in, you stayed in. Your focus sat inside its steady band 81% of the time and crossed its average only 4 times.',
-          bandNote:'Through the steady stretch beta ran 14% above its session level, alpha 7% below. Delta carried 35% of your signal.',
+          bandNote:'Through the steady stretch beta ran 14% above its session level, alpha 7% below. Delta carried 35% of the measured band power.',
           bandFocus:['beta','alpha'],
           ledger:{ said:'“It drifts here and there.”', did:'It ran in long stretches, crossing its own average only 4 times.' } },
-        { no:'03', title:'Your interruption cost', k:'Interruption', v:'a clear dip, a steady climb back', color:'var(--c-orange)', r0:0.42, r1:0.60,
+        { no:'03', title:'The notification', k:'Interruption', v:'one notification, mid-read', color:'var(--c-orange)', r0:0.42, r1:0.60,
           stat:{ value:'1 min 5 sec', label:'to get back to where you were' },
-          sentence:'One notification, at 2:05. Your focus fell 38% of its own range and needed 1 min 5 sec to return to the level it held before.',
+          sentence:'One notification arrived while you were reading. How your signal responded is being re-measured and is not shown here yet.',
           bandNote:'Your beta rhythm, the focused-thinking one, fell 31% below its session level in this window while alpha rose 22%. The pull is in the bands, not just the line.',
           bandFocus:['beta','alpha'],
-          ledger:{ said:'“A notification barely breaks me.”', did:'Your focus fell 38% of its own range, then took 1 min 5 sec to return.' } },
+          ledger:{ said:'“A notification barely breaks me.”', did:'One notification arrived while you were reading.' } },
         { no:'04', title:'Your strongest stretch', k:'Strongest', v:'your best run today', color:'var(--c-signal)', r0:0.74, r1:0.86,
           stat:{ value:'3:40–4:20', label:'your highest run of the session' },
           sentence:'Your strongest 40 sec ran from 3:40 to 4:20, sitting 24% of the scale above your own session average.',

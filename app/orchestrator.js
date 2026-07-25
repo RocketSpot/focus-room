@@ -132,12 +132,17 @@ class Orchestrator extends EventEmitter {
     this.events = [];            // [{kind, masterT, eegT}]
     this.interruptionFired = false;
     this.interruptEegT = null;
+    this.interruptionTiming = null;   // Phase 2A event-timing record
     this.signalIssue = false;
     this._lowSqCount = 0;
     this._reseatActive = false;
     this._fitAllGood = false;
     this._fitGood = 0;           // consecutive clean-signal frames during the signal check
     this._fitSlow = false;
+    // Phase 2A: EEG-quality gate state (from eeg/quality-v1)
+    this._eegQualitySeen = false;
+    this._eegQualityStatus = null;
+    this._fitQualityOk = false;
     this.sessionSamples = null;
     this.reveal = null;
     this.revealTimer = null;
@@ -381,6 +386,18 @@ class Orchestrator extends EventEmitter {
           const p = Math.max(0, Math.min(1, (msg.payload && msg.payload.p) || 0));
           const last = this.scrollTrack[this.scrollTrack.length - 1];
           this.scrollTrack.push({ t: this._streamT(), p: last ? Math.max(last.p, p) : p });
+        } else if (kind === GUEST_EVENT.NOTIFICATION_SHOWN) {
+          // the iPad reports the actual rendered-frame time of the notification
+          // card — a real (if not sample-accurate) onset. Upgrade the timing.
+          if (this.interruptionTiming && this.interruptionTiming.eventRenderedTime == null) {
+            const shown = (msg.payload && msg.payload.shownAt) || msg.t || this.now();
+            this.interruptionTiming.eventRenderedTime = shown;
+            this.interruptionTiming.eventRenderedEegT = this.eegTimeOf(shown);
+            this.interruptionTiming.timingMethod = 'ipad_render_report';
+            this.interruptionTiming.timingUncertaintyMs = 400;  // real render time; still no sample marker
+            this.interruptionTiming.timingConfidence = 'low_medium';
+            this._record('notification_shown', shown);
+          }
         } else if (kind === GUEST_EVENT.READING_FINISHED) {
           this._clearReadingFallback();
           this.sup.send(SIDECAR_IN.STOP_SESSION); // captures session/samples + archetype
@@ -468,6 +485,10 @@ class Orchestrator extends EventEmitter {
       this.answers.archetype = this.reveal.archetype.label;
       this.answers.archetypeName = this.reveal.archetype.name;
     }
+    // Phase 2A: fold the measured event-timing record into the reveal's timing
+    // (reads.js provides the metric/confidence defaults; this adds the real
+    // request/rendered times and method upgrade).
+    if (this.interruptionTiming) this.reveal.timing = Object.assign({}, this.reveal.timing, this.interruptionTiming);
     this.log(`reveal: ${this.reveal.archetype ? this.reveal.archetype.name : '(no archetype)'}${this.reveal.flat ? ' (flat session)' : ''}${this.signalIssue ? ' (signal issue)' : ''}`);
     // results are processed → the card auto-prints + the profile renders now
     this.emit('process-outputs', { reveal: this.reveal, answers: this.answers });
@@ -598,6 +619,7 @@ class Orchestrator extends EventEmitter {
       signalIssue: !!this.signalIssue,
       interruptT: r.interruptT != null ? r.interruptT : null,
       interruptEegT: this.interruptEegT,
+      interruptionTiming: this.interruptionTiming || null,   // Phase 2A event-timing record
       reads: r.reads || null,                        // the four reads
       stats: r.stats || null,                        // the measured figures the reveal quoted
       scroll: this.scrollTrack || [],                // reading pace, on the EEG clock
@@ -922,6 +944,9 @@ class Orchestrator extends EventEmitter {
         if (this._preReadingBeat()) break;
         this.sessionSamples = msg.samples; // handed to the reveal/card/profile
         break;
+      case SIDECAR_OUT.EEG_QUALITY:        // Phase 2A honest signal quality
+        this._onEegQuality(msg);
+        break;
     }
   }
 
@@ -970,6 +995,20 @@ class Orchestrator extends EventEmitter {
     this._clearReadingFallback();
     const t = this.now();
     this.interruptEegT = this.eegTimeOf(t); // anchor for the reveal's interruption read
+    // Phase 2A event-timing instrumentation: the interruption is a VISUAL event
+    // (the iPad card) + a room-audio duck — NOT earbud audio. We capture the app
+    // fire time now; the iPad reports its actual rendered-frame time back as
+    // `notification_shown` (upgrading method/confidence). No firmware onset marker
+    // exists (hardware doc Q23-24), so we never claim sample-accurate alignment.
+    this.interruptionTiming = {
+      eventRequestTime: t, eventRequestEegT: this.interruptEegT,
+      eventRenderedTime: null, eventRenderedEegT: null,
+      deviceSampleIndex: null, estimatedPhysicalOnset: null,
+      timingMethod: 'app_fire_call',
+      timingUncertaintyMs: 1200,  // ~1 s emit cadence + 2 s window + transport (provisional)
+      timingConfidence: 'low',
+      media: ['ipad_visual_card', 'room_audio_duck'],
+    };
     this.server.broadcast(SERVER.INTERRUPTION_FIRE, { onMind: this.answers.onMind, t });
     this.sup.send(SIDECAR_IN.MARK, { kind: 'interruption' }); // real dip is whatever the brain does
     this._record('interruption_fired', t);
@@ -988,8 +1027,28 @@ class Orchestrator extends EventEmitter {
     const sq = typeof frame.signalQuality === 'number' ? frame.signalQuality : 1;
     if (sq >= 0.5) {
       this._fitGood = (this._fitGood || 0) + 1;
-      if (this._fitGood >= 3) { this._fitAllGood = true; this._clearFitHint(); this._broadcastState(); this.log('signal-check: live signal clean → ready'); }
+      // Phase 2A: "signal is clear" must not come from packet rate alone. When a
+      // real EEG-quality stream (eeg/quality-v1) is present this session, ALSO
+      // require its overallStatus to be 'clear'. When no quality stream exists
+      // (legacy/unit paths that inject frames directly), fall back to the frame
+      // signal-quality gate so nothing regresses.
+      const qualityOk = !this._eegQualitySeen || this._fitQualityOk;
+      if (this._fitGood >= 3 && qualityOk) { this._fitAllGood = true; this._clearFitHint(); this._broadcastState(); this.log('signal-check: live signal + EEG quality clean → ready'); }
     } else { this._fitGood = 0; }
+  }
+
+  // Phase 2A: consume the honest per-channel EEG quality (eeg/quality-v1). Drives
+  // the fit-ready gate above (real cleanliness, not packet rate) and lets the
+  // signal-check surface show a truthful partial/poor state.
+  _onEegQuality(msg) {
+    this._eegQualitySeen = true;
+    this._eegQualityStatus = msg.overallStatus;
+    // Advance-ready = both ears delivering usable channels. In REAL mode the final
+    // "clear" label is gated OFF until thresholds are validated (status caps at
+    // 'received'), so the FIT GATE accepts 'received' OR 'clear' — the guest still
+    // advances; only the guest-facing "Signal is clear" wording is withheld.
+    this._fitQualityOk = msg.overallStatus === 'clear' || msg.overallStatus === 'received';
+    if (!this._fitQualityOk && this.beat === 'fit' && !this._fitAllGood) this._fitGood = 0;
   }
 
   _watchSignal(frame) {

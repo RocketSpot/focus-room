@@ -164,7 +164,16 @@
           if (m.archetype) setAnswers((a) => ({ ...a, archetype: m.archetype }));
         }
         else if (m.type === S.IMPEDANCE) setFitAllGood(!!m.allGood); // real-hardware fit path
-        else if (m.type === S.INTERRUPT) setInterruption({ onMind: m.onMind, t: m.t });
+        else if (m.type === S.INTERRUPT) {
+          setInterruption({ onMind: m.onMind, t: m.t });
+          // Phase 2A event timing: report the ACTUAL rendered-frame time of the
+          // notification card back to the orchestrator (double-rAF ≈ committed
+          // paint), so event alignment stops relying only on the JS fire call.
+          requestAnimationFrame(function () { requestAnimationFrame(function () {
+            bus.send({ type: C.EVENT, kind: 'notification_shown',
+              payload: { shownAt: masterNow(), fireT: m.t }, t: masterNow() });
+          }); });
+        }
         else if (m.type === S.ARCHETYPE && m.label) setAnswers((a) => ({ ...a, archetype: m.label }));
         else if (m.type === S.REVEAL) {
           setReveal({ samples: m.samples || [], interruptT: m.interruptT, reads: m.reads || [] });

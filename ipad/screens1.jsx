@@ -45,11 +45,11 @@
 
   // the five rhythms, in the room's shared band colours + the plain-word key
   const RHYTHMS = [
-    { gl: 'δ', nm: 'Delta', ds: 'slow waves',        v: 'var(--w-delta)', hz: 6 },
-    { gl: 'θ', nm: 'Theta', ds: 'internal thinking', v: 'var(--w-theta)', hz: 10 },
-    { gl: 'α', nm: 'Alpha', ds: 'relaxed alertness', v: 'var(--w-alpha)', hz: 15 },
-    { gl: 'β', nm: 'Beta',  ds: 'focused thinking',  v: 'var(--w-beta)',  hz: 22 },
-    { gl: 'γ', nm: 'Gamma', ds: 'peak processing',   v: 'var(--w-gamma)', hz: 30 },
+    { gl: 'δ', nm: 'Delta', ds: 'slow activity',        v: 'var(--w-delta)', hz: 6 },
+    { gl: 'θ', nm: 'Theta', ds: 'internal attention', v: 'var(--w-theta)', hz: 10 },
+    { gl: 'α', nm: 'Alpha', ds: 'calm alertness', v: 'var(--w-alpha)', hz: 15 },
+    { gl: 'β', nm: 'Beta',  ds: 'active engagement',  v: 'var(--w-beta)',  hz: 22 },
+    { gl: 'γ', nm: 'Gamma', ds: 'high-frequency activity',   v: 'var(--w-gamma)', hz: 30 },
   ];
   // a little wave glyph whose frequency matches the band it labels
   function WaveGlyph({ color, cycles, w = 76, h = 20 }) {

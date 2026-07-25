@@ -55,12 +55,11 @@ function buildData(reveal, answers, dateStr) {
   const caption = st
     ? [
       `Settled in ${secWord(st.settleSec)}.`,
-      // interruptSec is null when the notification never fired (the guest
-      // finished first) — "cost nothing measurable" would then claim an
-      // event that never happened.
-      st.realDip ? `The notification cost ${secWord(st.recoverSec)}.`
-        : st.interruptSec != null ? 'The notification cost nothing measurable.'
-          : 'You finished before the notification was due.',
+      // Phase 2A safety patch: the exact interruption cost (recovery seconds) is
+      // SUPPRESSED (unvalidated timing + smoothed recovery). Associative wording
+      // only. interruptSec is null when the notification never fired.
+      st.interruptSec != null ? 'One notification arrived while you read.'
+        : 'You finished before the notification was due.',
       // On a very short session both clocks can round to the same value — a
       // "0:15 to 0:15" run is the exact nonsense claim reads.js guards its own
       // wall copy against, so the card falls back the same way.

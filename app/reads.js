@@ -83,8 +83,11 @@ const GUESS_REGION = {
 
 // plain-language band names for the reveal narrative
 const BAND_SHORT = { delta: 'delta', theta: 'theta', alpha: 'alpha', beta: 'beta', gamma: 'gamma' };
-const BAND_MEANS = { delta: 'slow waves', theta: 'internal thinking', alpha: 'relaxed alertness',
-  beta: 'focused thinking', gamma: 'peak processing' };
+// Phase 2A terminology (docs/eeg-hardware-confirmations.md): neutral descriptors.
+// "active engagement" for beta is an INTERPRETATION, never the literal definition;
+// gamma is "high-frequency activity", never "peak processing" (no cognition claim).
+const BAND_MEANS = { delta: 'slow activity', theta: 'internal attention', alpha: 'calm alertness',
+  beta: 'active engagement', gamma: 'high-frequency activity' };
 const BANDS5 = ['delta', 'theta', 'alpha', 'beta', 'gamma'];
 // A rhythm holding only a few percent of total power is at the noise floor of a
 // 4-electrode ear read (gamma always is; on a drift-heavy read beta can be too).
@@ -150,18 +153,18 @@ function bandLayer(bands, reads) {
       }
       if (b !== null && b <= -5) return { focus: ['beta'], note: `Your ${BAND_SHORT.beta} rhythm ${fell(b)} here. The notification is in the measurement, not just the line.` };
       if (sl !== null && sl >= 5) return { focus: [slowK], note: `Your slower ${BAND_SHORT[slowK]} rhythm ${rose(sl)} as the notification landed.` };
-      return { focus: [loud], note: `The balance of your rhythms barely moved here. ${cap(BAND_SHORT[loud])} still held ${loudPct}% of your signal.` };
+      return { focus: [loud], note: `The balance of your rhythms barely moved here. ${cap(BAND_SHORT[loud])} still held ${loudPct}% of the measured band power.` };
     }
     if (rd.k === 'Settle') {
-      if (up && up.d >= 4 && down && down.d <= -4) return { focus: [up.k, down.k], note: `As you settled, ${BAND_SHORT[up.k]} ${rose(up.d)} and ${BAND_SHORT[down.k]} ${fellT(down.d)}. ${cap(BAND_SHORT[loud])} held ${loudPct}% of your signal.` };
-      return { focus: [loud], note: `${cap(BAND_SHORT[loud])} held ${loudPct}% of your signal power as you settled, with the other four steady around it.` };
+      if (up && up.d >= 4 && down && down.d <= -4) return { focus: [up.k, down.k], note: `As you settled, ${BAND_SHORT[up.k]} ${rose(up.d)} and ${BAND_SHORT[down.k]} ${fellT(down.d)}. ${cap(BAND_SHORT[loud])} held ${loudPct}% of the measured band power.` };
+      return { focus: [loud], note: `${cap(BAND_SHORT[loud])} held ${loudPct}% of the measured band power as you settled, with the other four steady around it.` };
     }
     if (rd.k === 'Rhythm') {
-      if (up && up.d >= 4 && down && down.d <= -4) return { focus: [up.k, down.k], note: `Through the steady stretch ${BAND_SHORT[up.k]} ${rose(up.d)} and ${BAND_SHORT[down.k]} ${fellT(down.d)}. ${cap(BAND_SHORT[loud])} carried ${loudPct}% of your signal.` };
-      return { focus: [loud], note: `Your five rhythms held their balance through this stretch. ${cap(BAND_SHORT[loud])} carried ${loudPct}% of your signal power, steady throughout.` };
+      if (up && up.d >= 4 && down && down.d <= -4) return { focus: [up.k, down.k], note: `Through the steady stretch ${BAND_SHORT[up.k]} ${rose(up.d)} and ${BAND_SHORT[down.k]} ${fellT(down.d)}. ${cap(BAND_SHORT[loud])} carried ${loudPct}% of the measured band power.` };
+      return { focus: [loud], note: `Your five rhythms held their balance through this stretch. ${cap(BAND_SHORT[loud])} carried ${loudPct}% of the measured band power, steady throughout.` };
     }
     if (up && up.d >= 4) return { focus: [up.k], note: `In your strongest stretch ${BAND_SHORT[up.k]} ${rose(up.d)}, the largest shift of your five rhythms.` };
-    return { focus: [loud], note: `${cap(BAND_SHORT[loud])} ran highest here, holding ${loudPct}% of your signal power.` };
+    return { focus: [loud], note: `${cap(BAND_SHORT[loud])} ran highest here, holding ${loudPct}% of the measured band power.` };
   });
 }
 function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
@@ -215,7 +218,13 @@ const percentile = (sortedAsc, p) => {
   return sortedAsc[i];
 };
 
-function bandFocusLine(bands) {
+// Phase 2A safety patch: the focus envelope is smoothed with a CENTERED window,
+// which bled a post-notification decline backward so it appeared to begin BEFORE
+// the marker (Phase-1 test #18). `eventEegT` splits the smoothing at the event so
+// no post-event sample contributes to a pre-event value (or vice versa).
+// NOTE: this is DISPLAY/feature smoothing only — the canonical unsmoothed spectral
+// pipeline is the deferred phase; here we only stop the boundary bleed.
+function bandFocusLine(bands, eventEegT) {
   if (!bands || bands.length < 6) return null;
   // 1) merge the L/R samples that land at the same instant (they arrive as pairs)
   const merged = [];
@@ -238,12 +247,21 @@ function bandFocusLine(bands) {
   //    tens of seconds; a sample-count window under-smooths short/sparse reads)
   const dt = sh.length > 1 ? (sh[sh.length - 1].t - sh[0].t) / (sh.length - 1) : 1;
   const half = Math.max(1, Math.round((FOCUS_SMOOTH_S / Math.max(dt, 0.4)) / 2));
+  // split index at the notification — smoothing never crosses it, so the dip can
+  // never appear before the event (nor the pre-event level bleed after it).
+  let splitIdx = -1;
+  if (eventEegT != null) { splitIdx = sh.findIndex((s) => s.t >= eventEegT); if (splitIdx < 0) splitIdx = sh.length; }
   const sm = sh.map((_, i) => {
     const o = { t: sh[i].t };
+    let loJ = Math.max(0, i - half), hiJ = Math.min(sh.length - 1, i + half);
+    if (splitIdx >= 0) {
+      if (i < splitIdx) hiJ = Math.min(hiJ, splitIdx - 1);   // pre-event window stays pre-event
+      else loJ = Math.max(loJ, splitIdx);                     // post-event window stays post-event
+    }
     BANDS5.forEach((k) => {
       let a = 0, c = 0;
-      for (let j = Math.max(0, i - half); j <= Math.min(sh.length - 1, i + half); j++) { a += sh[j][k]; c++; }
-      o[k] = a / c;
+      for (let j = loJ; j <= hiJ; j++) { a += sh[j][k]; c++; }
+      o[k] = c ? a / c : sh[i][k];
     });
     return o;
   });
@@ -280,7 +298,7 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands }) {
   }
   // Prefer the band-derived focus signal. Fall back to the sidecar's focusLine
   // only when there are no usable bands (legacy records, or a failed read).
-  const bf = bandFocusLine(bands);
+  const bf = bandFocusLine(bands, interruptEegT);
   let flatOverride = null;
   if (bf && bf.line.length >= 8) { samples = bf.line; flatOverride = bf.flat; }
   const intake = answers.intake || {};
@@ -451,13 +469,15 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands }) {
   // The interruption's "your reading" line leads with whatever actually shows: a
   // measured focus dip, or the band response, or (rarely) an honest "barely moved".
   const intBandPhrase = intShift ? `${BAND_SHORT[intShift.k]}, your ${BAND_MEANS[intShift.k]}, ${intShift.d >= 0 ? roseT(intShift.d) : fellT(intShift.d)}` : '';
+  // Phase 2A.1: the interpretation is HIDDEN from guests. beta/(alpha+theta) is an
+  // unvalidated experimental ratio, the event time is a JS fire call (no firmware
+  // onset marker), and recovery would be read off a smoothed line — so no
+  // focus/direction/cost/recovery claim reaches the guest. The ledger just states
+  // the neutral fact that a notification arrived; the experimental figures live in
+  // the internal `provisional` block for engineering only.
   const dipDid = !intFired
-    ? 'You finished before the room sent its notification, so there was nothing to interrupt.'
-    : realDip
-      ? (sharp ? `Your focus fell ${dipPctOwn}% of its own range and took ${fmtDur(recoverSec)} to climb back.`
-        : `Your focus fell ${dipPctOwn}% of its own range, then took ${fmtDur(recoverSec)} to return.`)
-      : intVisible ? `Your focus barely dipped, but the bands moved: ${intBandPhrase}.`
-        : 'Your rhythms barely moved. This one is small, and we keep it honest.';
+    ? 'You finished before the room sent its notification.'
+    : 'One notification arrived while you were reading.';
 
   const guessRegion = GUESS_REGION[answers.strongest] !== undefined ? GUESS_REGION[answers.strongest] : null;
   // "at 0:00" is a strange clock to quote — when the strongest run starts at the
@@ -502,39 +522,33 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands }) {
       ledger: q2 ? { said: quote(q2), did: rhythmDid } : null,
     },
     {
-      index: 3, no: '03', title: 'Your interruption cost', type: 'point',
-      // when a real dip is claimed, the recovery window ends at the DISPLAYED
-      // figure ("needed 15 sec"), not the raw seconds — the shade is a claim too
+      index: 3, no: '03', title: 'The notification', type: 'point',
       r0: interruptT,
       r1: realDip && totalT > 0 ? Math.min(1, interruptT + round5(recoverSec) / totalT) : recoveredT,
       anchorT: troughT,
       k: 'Interruption',
-      v: !intFired ? 'never sent — you finished first'
-        : realDip ? dipWord : (intVisible ? 'a shift in the bands' : 'a small ripple'),
+      v: !intFired ? 'never sent — you finished first' : 'one notification, mid-read',
       color: 'orange',
-      // The interruption ALWAYS points at something real. A measured focus dip
-      // when there is one; otherwise the band that moved (theta/alpha rising is
-      // the mind pulled inward), which is visible on the chart at the marker.
-      // And when it never fired, NOTHING is claimed: no clock, no figure — a
-      // stat block we couldn't measure must not appear at all.
-      stat: !intFired
-        ? null
-        : realDip
-          ? { value: fmtDur(recoverSec), label: 'to get back to where you were' }
-          : intVisible
-            ? { value: `${cap(BAND_SHORT[intShift.k])} ${intShift.d >= 0 ? 'rose' : 'fell'}`, label: 'in your bands, at the notification' }
-            : { value: 'Held', label: 'your focus barely moved' },
+      // Phase 2A.1: interpretation HIDDEN from guests. No depth %, no recovery
+      // seconds, no exact clock, no "cost"/"focus" claim — the metric is an
+      // unvalidated ratio on an unvalidated event time. The headline is neutral;
+      // the experimental figures are in `provisional` for engineering only.
+      stat: null,
       sentence: !intFired
-        ? 'You finished the reading before the room sent its one notification, so there is no interruption to measure. That speed is its own finding.'
-        : realDip
-          ? `One notification, at ${fmtClockExact(secs(interruptT))}. Your focus fell ${dipPctOwn}% of its own range and needed ${fmtDur(recoverSec)} to return to the level it held before.`
-          : intVisible
-            ? `One notification, at ${fmtClockExact(secs(interruptT))}. Right here your ${BAND_SHORT[intShift.k]} rhythm ${intShift.d >= 0 ? rose(intShift.d) : fell(intShift.d)} — the notification registered in your bands, even where your focus line barely moved.`
-            : `One notification, at ${fmtClockExact(secs(interruptT))}. Your rhythms barely moved. Some notifications land soft, and this one did.`,
-      // No answer, no quotation. The fallback put words in the guest's mouth
-      // under a "You said" label — a fabricated value on the wall. Omit the
-      // ledger entirely and let the read stand on the measurement alone.
+        ? 'You finished the reading before the room sent its one notification. That speed is its own finding.'
+        : 'One notification arrived while you were reading. How your signal responded is being re-measured and is not shown here yet.',
+      // No answer, no quotation. Omit the ledger entirely rather than fabricate.
       ledger: q1 ? { said: quote(q1), did: dipDid } : null,
+      // INTERNAL ONLY — never rendered. Flagged provisional for the deferred
+      // canonical interruption-cost phase; the metric is beta/(alpha+theta), NOT a
+      // validated focus model.
+      provisional: intFired ? {
+        metric: 'betaAlphaThetaRatio', experimental: true, notValidated: true,
+        dipPctOwnRange: realDip ? dipPctOwn : null,
+        recoverSec: realDip ? round5(recoverSec) : null,
+        interruptSec: Math.round(secs(interruptT)),
+        timingConfidence: 'low', timingMethod: 'app_fire_call',
+      } : null,
     },
     {
       index: 4, no: '04', title: 'Your strongest stretch', type: 'span',
@@ -564,10 +578,8 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands }) {
   const intRead = reads.find((r) => r.k === 'Interruption');
   if (intRead && intVisible) {
     intRead.bandFocus = [intShift.k];
-    // keep the band note consistent with the sentence — bandLayer's own wider
-    // window sometimes reported "barely moved" while the tight window found a
-    // real shift, which read as a contradiction.
-    intRead.bandNote = `At the notification, ${BAND_SHORT[intShift.k]} — your ${BAND_MEANS[intShift.k]} — ${intShift.d >= 0 ? roseT(intShift.d) : fellT(intShift.d)} against its session level. That is the notification, in the bands.`;
+    // Phase 2A: directional, not an exact figure — relative band power, associative.
+    intRead.bandNote = `At the notification, ${BAND_SHORT[intShift.k]} — your ${BAND_MEANS[intShift.k]} — ${intShift.d >= 0 ? 'rose' : 'eased'} relative to the rest of your reading (relative band power).`;
   }
 
   return {
@@ -582,13 +594,20 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands }) {
     stats: {
       totalSec: Math.round(totalT), settleSec: round5(settleSec),
       // null, not 0, when there was no measurable dip: a downstream surface must
-      // not be able to print a recovery time for a recovery that never happened
+      // not be able to print a recovery time for a recovery that never happened.
+      // Phase 2A: interruption depth/recovery are INTERNAL + provisional — guest
+      // surfaces must not print them (outputs.js suppresses the exact figures).
       realDip, recoverSec: realDip ? round5(recoverSec) : null,
       dipPctOwn, strongAbove, crossings, insideBand,
       strongFromSec: roundClock(strongFromSec), strongToSec: roundClock(strongToSec),
-      // same rule as recoverSec: no notification, no clock for it
       interruptSec: intFired ? Math.round(secs(interruptT)) : null,
+      interruptionProvisional: true,   // depth/recovery not validated (see timing)
     },
+    // Phase 2A: the focus line is beta/(alpha+theta) on smoothed relative band
+    // shares — NOT a validated focus model. Timing is the app fire call, not a
+    // measured audible onset. Downstream surfaces label accordingly.
+    metric: { name: 'betaAlphaThetaRatio', validated: false, kind: 'focus_indicator' },
+    timing: { method: 'app_fire_call', confidence: 'low', firmwareMarker: false },
     meta: { settleFrac: +settleFrac.toFixed(3), variability: +variability.toFixed(3),
       rawRange: +rawRange.toFixed(3), rawDip: +rawDip.toFixed(3), sharp, modest, flat },
   };
@@ -610,7 +629,7 @@ function minimalReads() {
   return [
     { index: 1, no: '01', title: 'How you settled', type: 'span', r0: 0, r1: 0.4, anchorT: 0.2, k: 'Settle', v: 'a light signal', color: 'signal', sentence: 'The signal ran light this session, so the room says less about your settle rather than guessing.' },
     { index: 2, no: '02', title: 'Your attention rhythm', type: 'span', r0: 0.3, r1: 0.6, anchorT: 0.45, k: 'Rhythm', v: 'read honestly, briefly', color: 'signal', sentence: 'There was not enough clean signal to read a rhythm from, so no figure is claimed here.' },
-    { index: 3, no: '03', title: 'Your interruption cost', type: 'point', r0: 0.55, r1: 0.75, anchorT: 0.62, k: 'Interruption', v: 'a quiet moment', color: 'orange', sentence: 'The signal was light around the interruption, so we keep this one honest and brief.' },
+    { index: 3, no: '03', title: 'The notification', type: 'point', r0: 0.55, r1: 0.75, anchorT: 0.62, k: 'Interruption', v: 'a quiet moment', color: 'orange', sentence: 'The signal was light around the notification, so we keep this one brief.' },
     { index: 4, no: '04', title: 'Your strongest stretch', type: 'span', r0: 0.7, r1: 0.85, anchorT: 0.78, k: 'Strongest', v: 'not singled out', color: 'signal', sentence: 'Too little clean signal survived to single out a strongest stretch, so none is claimed.' },
   ];
 }
