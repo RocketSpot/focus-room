@@ -146,31 +146,72 @@ the `window.__scope.setStaff()/pressE()` bypass (now dev/staff-only), the un-whi
 `kind`/`note` (now a fixed vocabulary, note dropped), `0644→0600` capture files, and a stale `2468`
 reference in this doc.
 
-## OPEN pre-merge finding #5 — WS role is trusted from the client (raw stream reachable)
+## Finding #5 — RESOLVED: WS raw-stream now requires launcher-token authorization (+ loopback)
 
-Found by the same verification pass; **pre-existing** (not introduced by 2A/2A.2) and **not one of
-the four authorized config items**, so it is reported rather than silently expanded:
+**The finding** (from the verification pass; pre-existing, not introduced by 2A/2A.2): `app/server.js`
+took the socket role verbatim from the client `client/hello` with no authentication, and raw
+`eeg/raw-v1`/`eeg/config-v1`/`eeg/quality-v1` were broadcast to the `tv` role — so a LAN guest could
+`hello` as `role:"tv"` and receive the raw four-channel stream directly. Reproduced live (1 raw frame
+to an unauthenticated `tv` socket on the old path), defeating acceptance criterion 20.
 
-- `app/server.js` sets a socket's role verbatim from the client-supplied `client/hello`
-  (`ws.role = String(msg.role || 'unknown')`) with **no authentication**, and `app/room-core.js`
-  broadcasts every `eeg/raw-v1` frame (all four per-channel sample arrays) to the `tv` role.
-- **Consequence:** a guest on the LAN can open `ws://<host>:4321/ws`, send
-  `{"type":"client/hello","role":"tv"}`, and receive the raw four-channel stream **directly — no
-  launcher, no staff mode, no engineering view**. The page-level access control is real but is only
-  a display toggle; it does not protect the data on the wire. This **defeats acceptance criterion 20**
-  ("raw EEG reaches only the authorized signal and engineering surfaces").
+**The fix** (transport/authorization only — no DSP/methodology touched): raw messages are delivered
+ONLY to sockets the **server** authenticated for the `eeg-raw` capability; the client-declared role is
+never trusted for raw. In packaged production, an authorized socket must **also** be loopback.
 
-**Status: OPEN — decision required; blocks production merge** (production merge is already blocked
-pending real-hardware validation). Candidate minimal fixes (each needs sign-off, as it changes
-transport/routing semantics — beyond the four config items):
-1. **Loopback-gate the raw stream** — only route `eeg/raw-v1` to `tv` sockets whose remote address is
-   loopback (the packaged kiosk TV window loads over `127.0.0.1`). Smallest change; a *separate-device*
-   browser TV would lose the raw waveform.
-2. **Launcher-token-gate the raw stream** — the Electron TV window includes the launcher token
-   (already available via preload) in its `client/hello`; the server routes raw only to token-verified
-   `tv` sockets. Preserves a separate-device TV that is given the token; slightly larger.
+**Authorization handshake (server-verified):**
+```json
+{ "type": "client/hello", "role": "tv", "capabilities": ["eeg-raw"],
+  "rawStreamToken": "<ephemeral launcher token>", "clientTime": 0 }
+```
+Server sets a **server-owned** authorization on that socket (never a client field):
+```json
+{ "authenticated": true, "role": "tv", "rawEeg": true,
+  "source": "launcher-token", "authenticatedAtMonotonicMs": 0.0 }
+```
+Raw routing (`server.broadcastRaw` / `server.sendRawTo`, `app/room-core.js`) consults **only**
+`socket.authorization.rawEeg === true`. Evaluated ONCE, on the first hello; a later message can
+never upgrade an unauthenticated socket; a role change never grants raw.
 
-Not implemented here — awaiting a scope decision.
+**Token lifecycle:** a **256-bit** `crypto.randomBytes(32)` token, generated **once per launcher
+process** (`app/main.js`) and **rotated every restart**. **Distinct from `FOCUSROOM_STAFF_TOKEN`.**
+Passed to the server in-process (`server.configureRawAuth`) and to the authorized TV renderer via the
+preload's private `additionalArguments` channel; the preload exposes it **only through a function**
+(`window.__FOCUSROOM__.rawStreamToken()`), never a readable string. It travels only inside the WS
+hello frame — **never** a URL, query param, `localStorage`/`sessionStorage`, console, application log,
+capture file, or the iPad. Disconnect drops the socket's authorization; reconnect re-authenticates;
+a previous-launcher token is rejected.
+
+**Loopback (packaged):** `requireLoopback = config.isPackaged`. Accepts `127.0.0.1`, `::1`,
+`::ffff:127.0.0.1` from the socket's actual `remoteAddress` (never `X-Forwarded-For`, a client IP, or
+a JS-declared location). A separate-device TV is **not** approved this phase; it would need explicit
+secure pairing + encrypted transport.
+
+**Fail-closed:** no server token, no supplied token, invalid token, non-loopback (packaged), or a
+rotated-away token ⇒ **no raw**. Failed attempts emit a minimal event (remote category + count only —
+no token, no reason, no samples), are rate-limited, and the socket is closed after repeats. No raw is
+buffered for a not-yet-authenticated socket. The `ops` diagnostic feed no longer carries raw types.
+The headless `web-main.js` configures no token ⇒ raw stays closed to remote browsers (correct).
+
+**Raw-routing matrix (by client, after the fix):**
+
+| Client | receives eeg/config-v1, raw-v1, quality-v1? |
+|---|---|
+| Guest browser, no token | **no** |
+| Guest/LAN client claiming `role:"tv"`, no/invalid token | **no** |
+| Non-loopback client with a valid token (packaged) | **no** |
+| Browser with staff UI but no raw authorization | **no** |
+| iPad controller / reveal / audio / ops | **no** |
+| Authorized local TV socket (token + loopback), consumer mode | **yes** — min raw for the L/R waveform |
+| Authorized local TV socket, staff mode | **yes** — plus the client-side 4-channel engineering view |
+
+Engineering-view visibility (staff mode) and raw-stream authorization are **independent**: both must
+hold before four-channel engineering data is displayed; staff mode is never the network credential.
+
+Tests: `tests/eeg-raw-auth.test.js` (30 checks — live WS routing + loopback/rotation/rate-limit/
+fail-closed). Manual before/after exploit reproduction confirmed the old path leaked and the new path
+does not, with the authorized TV waveform preserved and the iPad unaffected.
+
+**Status: RESOLVED in code + tests. Real-hardware validation still pending; branch still not merged.**
 
 ## Hardware-blocked status (honest)
 
