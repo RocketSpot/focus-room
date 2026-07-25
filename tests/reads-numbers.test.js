@@ -86,20 +86,25 @@ const allText = (r) => r.reads.map((x) =>
 
 console.log('\n-- reveal numbers: the honesty guards --');
 
-ok('a real dip reports a recovery time', () => {
+ok('a real dip keeps recovery INTERNAL + provisional (Phase 2A safety patch)', () => {
   const r = run(dippy());
   assert.strictEqual(r.stats.realDip, true, 'expected a measurable dip');
-  assert.ok(r.stats.recoverSec > 0, 'recoverSec should be positive');
-  assert.ok(/to get back to where you were/.test(r.reads[2].stat.label), r.reads[2].stat.label);
+  assert.ok(r.stats.recoverSec > 0, 'recoverSec still computed internally');
+  // guest headline must NOT show an exact recovery time any more
+  assert.strictEqual(r.reads[2].stat, null, 'interruption interpretation is HIDDEN from guests (no stat)');
+  // the exact figure is retained internally, flagged provisional/not-validated
+  const p = r.reads[2].provisional;
+  assert.ok(p && p.notValidated && p.metric === 'betaAlphaThetaRatio', JSON.stringify(p));
+  assert.ok(p.recoverSec > 0 && p.dipPctOwnRange != null, 'internal figures retained: ' + JSON.stringify(p));
+  assert.strictEqual(r.timing.confidence, 'low', 'timing confidence flagged');
 });
 
 ok('no dip means NO invented recovery time', () => {
   const r = run(flatline());
   assert.strictEqual(r.stats.realDip, false, 'flat session should not register a dip');
   assert.strictEqual(r.stats.recoverSec, null, 'recoverSec must be null, not 0 or the 5s rounding floor');
-  // truly-flat interruption: no focus dip AND no band shift → "Held", never a number
-  assert.strictEqual(r.reads[2].stat.value, 'Held', r.reads[2].stat.value);
-  // the old copy read "fell 0% of its own range and needed 5 sec to return"
+  // interruption interpretation is hidden from guests → no stat, no number
+  assert.strictEqual(r.reads[2].stat, null, r.reads[2].stat);
   const t = allText(r);
   assert.ok(!/fell 0%/.test(t), 'must not report a 0% fall as a finding: ' + t);
   assert.ok(!/needed 5 sec|back inside 5 sec/.test(t), 'must not invent a recovery: ' + t);
@@ -134,6 +139,7 @@ ok('steadiness figures agree with the sentence around them', () => {
 ok('every read carries a measured figure when there is data', () => {
   const r = run(dippy());
   r.reads.forEach((rd) => {
+    if (rd.k === 'Interruption') { assert.strictEqual(rd.stat, null, 'interruption stat is intentionally hidden'); return; }
     assert.ok(rd.stat && rd.stat.value, `read ${rd.no} has no stat`);
     assert.ok(rd.stat.label, `read ${rd.no} has no stat label`);
   });
@@ -167,11 +173,11 @@ ok('a dead engagement line with live bands still reads', () => {
   }
   const deadLine = bands.map((b) => ({ t: b.t, v: 0.04, vr: 0 }));   // the collapsed focusLine
   const r = computeReads({ samples: deadLine, bands, answers: { intake: {} }, interruptEegT: 60 });
-  const t = r.reads.map((x) => [x.stat.value, x.sentence].join(' ')).join(' ');
+  const t = r.reads.map((x) => [(x.stat && x.stat.value) || '', x.sentence].join(' ')).join(' ');
   assert.ok(r.stats.settleSec < r.stats.totalSec, 'settle must not be the whole session: ' + r.stats.settleSec);
   assert.ok(!/\b0%\b/.test(t), 'no "0%" degeneracy off a dead line: ' + t);
   assert.ok(!(/stayed in/.test(t) && r.stats.insideBand < 50), 'no stayed-in contradiction');
-  assert.ok(r.reads.every((rd) => rd.stat && rd.stat.value), 'every read still carries a figure');
+  assert.ok(r.reads.filter((rd) => rd.k !== 'Interruption').every((rd) => rd.stat && rd.stat.value), 'every non-interruption read still carries a figure');
 });
 
 // THE second wall bug: three honest-but-independent roundings that contradict
@@ -252,13 +258,18 @@ ok('a read window highlights what its copy claims', () => {
   });
 });
 
-ok('the notification clock is exact, matching the marker on the chart', () => {
-  // an EVENT timestamp is known to the second — gridding it to 5s drifted the
-  // copy ("at 1:15") visibly off the marker the chart draws at the true time
+ok('notification copy is associative, exact clock suppressed (Phase 2A safety patch)', () => {
+  // the JS-fire event time is unvalidated (no firmware onset marker), so the exact
+  // "at 1:13" clock is SUPPRESSED from guest copy; the position is retained internally.
   const fx = dippy();
   const r = computeReads({ samples: fx.samples, bands: fx.bands, answers: {}, interruptEegT: 73 });
-  assert.ok(/at 1:13\./.test(r.reads[2].sentence), r.reads[2].sentence);
-  assert.strictEqual(r.stats.interruptSec, 73, 'stats.interruptSec: ' + r.stats.interruptSec);
+  const sen = r.reads[2].sentence;
+  assert.ok(!/at \d+:\d\d/.test(sen), 'exact clock should be gone: ' + sen);
+  assert.ok(!/caused|made your brain|reduced by|focus (dropped|fell|indicator|recovered)|interruption cost|recovery time/i.test(sen), 'no interpretive/causal language: ' + sen);
+  assert.ok(/One notification arrived/.test(sen), 'neutral acknowledgement: ' + sen);
+  assert.strictEqual(r.reads[2].stat, null, 'interpretation hidden (no stat)');
+  assert.strictEqual(r.stats.interruptSec, 73, 'interruptSec retained internally: ' + r.stats.interruptSec);
+  assert.strictEqual(r.reads[2].provisional.timingConfidence, 'low', 'timing confidence flagged');
 });
 
 console.log(`\n${pass} checks passed`);
