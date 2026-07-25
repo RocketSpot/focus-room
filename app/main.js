@@ -68,7 +68,20 @@ function tvUrlFor(surface) {
     : surface === 'live' ? 'tv-live.html'
     : surface === 'reveal' ? 'tv-reveal.html'
     : 'tv-constellation.html';
-  return `http://127.0.0.1:${config.net.LAN_PORT}/${file}`;
+  // Pre-merge hardening (item 2): the engineering view's staff unlock is enabled ONLY in a
+  // dev/staff build. In a packaged production guest build config.isDev is false, so no staff
+  // param is appended and the surface stays locked (the preload also reports staffUiEnabled).
+  const q = (config.isDev && surface === 'signal') ? '?staff=1' : '';
+  return `http://127.0.0.1:${config.net.LAN_PORT}/${file}${q}`;
+}
+
+// Per-window staff config handed to the preload via additionalArguments (base64 JSON, so
+// arg parsing is robust). Item 1: the PIN/credential is LOCALLY CONFIGURED (FOCUSROOM_STAFF_TOKEN),
+// never a hardcoded default — empty here disables PIN unlock entirely. Item 2: uiEnabled is
+// false in production guest builds, so ?staff=1 / ?dev=1 cannot activate staff mode there.
+function staffConfigArg() {
+  const cfg = { uiEnabled: !!config.isDev, pin: process.env.FOCUSROOM_STAFF_TOKEN || '' };
+  return '--focusroom-staff=' + Buffer.from(JSON.stringify(cfg)).toString('base64');
 }
 function navigateTv(surface) {
   if (!surface || surface === tvSurface) return;
@@ -95,6 +108,7 @@ function createTvWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      additionalArguments: [staffConfigArg()],   // build-gated staff/engineering access config
     },
   });
   // Load the served TV surface for the current beat (idle → constellation). The

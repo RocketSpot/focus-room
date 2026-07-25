@@ -8,6 +8,22 @@
 // ============================================================
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Pre-merge hardening: the launcher hands each window a build-gated staff/engineering config
+// via additionalArguments (base64 JSON). uiEnabled is false in production guest builds; pin is a
+// locally configured credential (FOCUSROOM_STAFF_TOKEN), empty ⇒ PIN unlock disabled. A page with
+// no launcher (a plain browser hitting the LAN surface) gets the locked default {uiEnabled:false}.
+function staffConfig() {
+  try {
+    const arg = (process.argv || []).find((a) => a.indexOf('--focusroom-staff=') === 0);
+    if (!arg) return { uiEnabled: false, pin: '' };
+    const c = JSON.parse(Buffer.from(arg.slice('--focusroom-staff='.length), 'base64').toString('utf8'));
+    return { uiEnabled: c.uiEnabled === true, pin: typeof c.pin === 'string' ? c.pin : '' };
+  } catch (e) {
+    return { uiEnabled: false, pin: '' };
+  }
+}
+contextBridge.exposeInMainWorld('__FOCUSROOM__', { staff: staffConfig() });
+
 const IN_CHANNELS = new Set([
   'sidecar:message',
   'sidecar:status',

@@ -25,6 +25,11 @@ data/sessions/
 data/outputs/
 data/constellation.json
 
+# --- engineering validation captures (raw ADC data): LOCAL-ONLY, never committed. The
+#     recorder defaults to a per-user app-data dir; this guards the case where an operator
+#     points FOCUSROOM_VALIDATION_DIR back into the repo. ---
+validation-captures/
+
 # --- licensed font: keep PP Neue Montreal out of the repo (OFL fonts stay) ---
 assets/fonts/files/PPNeueMontreal-*.woff2
 

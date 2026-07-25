@@ -12,6 +12,7 @@ import glob
 import json
 import os
 import shutil
+import stat
 import sys
 import tempfile
 
@@ -103,6 +104,45 @@ finally:
 # 3) confirm the env is off again → recorder OFF (no leakage into other suites)
 s = EegStream(CaptureTx(), lambda *_: None, simulation=False, expected_rate_hz=FS)
 ok("recorder OFF again after the run (no env leakage)", s._recorder is None)
+
+print("\n-- pre-merge hardening: dir location + perms + non-identifying labels --")
+from validation_recorder import ValidationRecorder, _default_dir  # noqa: E402
+
+# item 3: default dir is a LOCAL app-data, NON-synced location — never the repo / cwd / synced folders
+dd = _default_dir()
+repo = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ok("default dir is under the app-data area (zone-focus-room/validation-captures)",
+   "zone-focus-room" in dd and dd.endswith(os.path.join("zone-focus-room", "validation-captures")), dd)
+ok("default dir is OUTSIDE the repo and cwd", not os.path.abspath(dd).startswith(repo) and os.path.abspath(dd) != os.getcwd(), dd)
+ok("default dir avoids common synced folders",
+   all(s not in dd for s in ("Dropbox", "OneDrive", "com~apple~CloudDocs", "/Documents/", "/Desktop/")), dd)
+
+# item 3 + 4: created capture dir is access-restricted (0700); a name-like label is dropped
+tmp2 = tempfile.mkdtemp(prefix="focusroom-validation-")
+capdir = os.path.join(tmp2, "caps")             # non-existent → recorder creates + chmods it
+os.environ["FOCUSROOM_VALIDATION"] = "1"
+os.environ["FOCUSROOM_VALIDATION_DIR"] = capdir
+try:
+    r = ValidationRecorder("Jane Doe participant #42", simulation=False, log=lambda *_: None)  # hostile label
+    r.close("test")
+    names = os.listdir(capdir)
+    ok("item 4: a name-like label is NOT written into filenames",
+       all(("jane" not in n.lower() and "doe" not in n.lower() and "42" not in n and "#" not in n) for n in names), names)
+    ok("item 4: label reduced to a fixed non-identifying token",
+       any(("_session." in n or "_real." in n or "_sim." in n) for n in names), names)
+    meta = json.load(open(glob.glob(os.path.join(capdir, "*.meta.json"))[0], encoding="utf-8"))
+    ok("item 4: meta flags no participant identifiers", meta.get("containsParticipantIdentifiers") is False, meta.get("containsParticipantIdentifiers"))
+    ok("item 3: meta carries a retention/deletion policy",
+       "retentionPolicy" in meta and "delete" in meta["retentionPolicy"].lower(), meta.get("retentionPolicy"))
+    if os.name == "posix":
+        mode = stat.S_IMODE(os.stat(capdir).st_mode)
+        ok("item 3: capture dir is access-restricted (0700) on posix", mode == 0o700, oct(mode))
+    else:
+        ok("item 3: capture dir created (perms best-effort on this OS)", os.path.isdir(capdir))
+finally:
+    os.environ.pop("FOCUSROOM_VALIDATION", None)
+    os.environ.pop("FOCUSROOM_VALIDATION_DIR", None)
+    shutil.rmtree(tmp2, ignore_errors=True)
 
 print("\n" + ("all %d checks passed" % _pass if _fail == 0 else "%d FAILURE(S)" % _fail))
 sys.exit(0 if _fail == 0 else 1)

@@ -9,11 +9,14 @@ continuity metadata and staff event annotations, and writes them to LOCAL files 
   * ``<ts>_<label>.meta.json``  — capture metadata + counters + staff annotations.
   * ``<ts>_<label>.log.txt``    — a human-readable validation log.
 
-DISCIPLINE (matches the user's section-4 requirements):
+DISCIPLINE (matches the user's section-4 + pre-merge-hardening requirements):
   * Records ONLY because validation mode was explicitly enabled (env FOCUSROOM_VALIDATION=1).
   * NEVER uploads raw EEG to analytics or any cloud service — local files only.
   * Does NOT change normal production retention (this is a separate, opt-in path).
-  * Clearly labels the capture as engineering validation data.
+  * Writes to a LOCAL, access-restricted (0700), NON-synchronized app-data directory by default
+    (never the repo/cwd/Documents/Desktop/iCloud/Dropbox); FOCUSROOM_VALIDATION_DIR overrides.
+  * NO participant names or unnecessary identifiers in filenames or metadata (fixed label set).
+  * Clearly labels the capture as engineering validation data; carries a retention/deletion policy.
   * Closes/flushes the files cleanly on stop, disconnect, or application exit.
 
 Pure stdlib; time.* is fine here (this is the app sidecar, not a restricted sandbox).
@@ -21,11 +24,32 @@ Pure stdlib; time.* is fine here (this is the app sidecar, not a restricted sand
 
 import json
 import os
+import sys
 import time
 
 
 def enabled():
     return os.environ.get("FOCUSROOM_VALIDATION") == "1"
+
+
+def _default_dir():
+    """A LOCAL, access-restricted, NON-synchronized default location for captures.
+
+    Never the repo, the cwd, or a cloud-synced folder (Documents / Desktop / iCloud /
+    Dropbox / OneDrive). Uses the OS's per-user application-data area (matches the app's
+    ``zone-focus-room`` support name). The launcher may override with FOCUSROOM_VALIDATION_DIR
+    (e.g. an operator-vetted encrypted volume).
+    """
+    home = os.path.expanduser("~")
+    if sys.platform == "darwin":
+        base = os.path.join(home, "Library", "Application Support", "zone-focus-room")
+    elif os.name == "nt":
+        base = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.join(home, "AppData", "Local"),
+                            "zone-focus-room")
+    else:
+        base = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(home, ".local", "share"),
+                            "zone-focus-room")
+    return os.path.join(base, "validation-captures")
 
 
 class ValidationRecorder:
@@ -36,11 +60,18 @@ class ValidationRecorder:
         self.counts = {"config": 0, "raw": 0, "quality": 0, "samples": 0, "gaps": 0}
         self.annotations = []
         self._raw_f = self._log_f = None
-        base = os.environ.get("FOCUSROOM_VALIDATION_DIR") or os.path.join(os.getcwd(), "validation-captures")
+        base = os.environ.get("FOCUSROOM_VALIDATION_DIR") or _default_dir()
         stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime())
-        label = "".join(c if (c.isalnum() or c in "-_") else "_" for c in str(session_label or "session"))[:40]
+        # item 4: filenames + metadata must NEVER carry a participant name or any unnecessary
+        # identifier. The label is restricted to a fixed, non-identifying set.
+        safe = str(session_label or "").strip().lower()
+        label = safe if safe in ("sim", "real") else "session"
         try:
             os.makedirs(base, exist_ok=True)
+            try:
+                os.chmod(base, 0o700)          # item 3: access-restricted (best-effort; Windows ACLs differ)
+            except Exception:
+                pass
             self.stem = os.path.join(base, f"{stamp}_{label}")
             self.raw_path = self.stem + ".raw.ndjson"
             self.meta_path = self.stem + ".meta.json"
@@ -121,6 +152,11 @@ class ValidationRecorder:
             "durationSec": round(time.monotonic() - self.started_mono, 1),
             "counts": self.counts, "annotations": self.annotations,
             "files": {"raw": os.path.basename(self.raw_path), "log": os.path.basename(self.log_path)},
+            "containsParticipantIdentifiers": False,   # item 4: no names / identifiers recorded
+            "retentionPolicy": ("Engineering validation data. Retain only as long as needed for the "
+                                "validation review, then delete. Stored LOCAL + access-restricted "
+                                "(0700), never synced or uploaded. No participant identifiers are "
+                                "recorded; the filename label is a fixed non-identifying token."),
             "note": ("ORIGINAL raw ADC counts preserved (not filtered/decimated). Local only; "
                      "never uploaded; production retention unchanged. Annotations are staff "
                      "event marks for inspection, NOT a validated classifier."),

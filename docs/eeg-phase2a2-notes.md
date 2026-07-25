@@ -109,6 +109,34 @@ To run a real capture (when Zone buds are paired):
 FOCUSROOM_VALIDATION=1 FOCUSROOM_VALIDATION_DIR=./validation-captures npm run dev:real
 ```
 
+## Pre-merge operational hardening (done — small config changes, no scope expansion)
+
+Completed on top of the frozen approved point (tag `phase-2a.2-approved` = `2012288`); these are
+configuration/access-control changes only — no DSP, visualization, focus-model, or post-session
+methodology was touched.
+
+1. **No hardcoded staff PIN.** The old page-side default (`2468`) is gone. The staff credential is
+   **locally configured** (`FOCUSROOM_STAFF_TOKEN`) and handed to the page by the launcher via the
+   preload (`app/main.js` `staffConfigArg()` → `app/preload.js` `window.__FOCUSROOM__.staff`). Empty
+   credential ⇒ the PIN unlock is disabled entirely.
+2. **`?staff=1` / `?dev=1` disabled in production guest builds.** The preload reports
+   `staffUiEnabled` = `config.isDev` — **false in a packaged production build** — and `tv-signal.html`
+   activates the bare params only when `STAFF_UI` is true. A plain browser hitting the LAN surface
+   (no launcher/preload) gets the locked default. In dev, the launcher appends `?staff=1` to the
+   signal surface so staff still get the engineering view.
+3. **Validation directory hardened.** Default is a **local, access-restricted (`0700`), non-synced**
+   per-user app-data dir (`…/zone-focus-room/validation-captures`) — never the repo, cwd, Documents,
+   Desktop, iCloud, Dropbox, or OneDrive; `FOCUSROOM_VALIDATION_DIR` overrides. `validation-captures/`
+   is git-ignored (defense-in-depth). Metadata carries an explicit **retention/deletion policy**
+   (retain only for the review, then delete).
+4. **No participant identifiers.** Capture filenames use a **fixed non-identifying label** (`sim` /
+   `real` / `session` only); a name-like label is dropped. Metadata carries
+   `containsParticipantIdentifiers: false` and no name/email/guest-id fields.
+
+Tests: `tests/eeg-display.test.js` (no hardcoded PIN; launcher-gated activation; guest-build params
+inert; launcher-issued credential unlocks) and `tests/eeg-validation-recorder.test.py` (app-data
+non-synced default dir; `0700`; label whitelist; retention policy; no identifiers).
+
 ## Hardware-blocked status (honest)
 
 The physical protocol (record ≥8 min; blink/swallow/jaw/head events; L/R ear failure + recovery;

@@ -460,20 +460,29 @@
     }
 
     // ============================================================
-    // Engineering-view ACCESS CONTROL (Phase 2A.2 correction 3)
+    // Engineering-view ACCESS CONTROL (Phase 2A.2 correction 3 + pre-merge hardening)
     // ------------------------------------------------------------
-    // The engineering view exposes all four raw channels + detailed quality. An
-    // ordinary guest must NOT be able to open it with a stray 'E' keypress. It is
-    // gated behind STAFF / DEV mode, unlocked one of two documented ways:
-    //   • a protected URL parameter set by the launcher/ops   (?staff=1  or  ?dev=1)
-    //   • a local staff PIN entered on the TV                 (press 'S', then the PIN)
-    // Access is logged locally (timestamp + action ONLY — never raw samples). Leaving
-    // staff mode clears the engineering view + text and returns to the consumer view.
-    // NOTE: this is an operational gate to stop casual guest access on a kiosk TV, not a
-    // cryptographic control — the PIN lives in the page. Documented as such.
+    // The engineering view exposes all four raw channels + detailed quality. An ordinary
+    // guest must NOT be able to open it. It is gated behind a build-level STAFF flag the
+    // LAUNCHER provides (never a bare URL param a guest could type):
+    //   • the launcher's preload reports staffUiEnabled — FALSE in production guest builds,
+    //     so ?staff=1 / ?dev=1 do NOTHING there; TRUE only in a dev/staff build;
+    //   • a LOCALLY CONFIGURED credential (FOCUSROOM_STAFF_TOKEN → the launcher-issued PIN)
+    //     unlocks via 'S' + the credential. There is NO hardcoded PIN, and no launcher (a
+    //     plain browser on the LAN) is LOCKED by default.
+    // Access is logged locally (timestamp + action ONLY — never raw samples). Leaving staff
+    // mode clears the engineering view + text and returns to the consumer view. This is an
+    // operational gate, not a cryptographic control (a dev build's page-side flag) — the real
+    // production lock is the launcher withholding staffUiEnabled + the credential.
     var Q = new URLSearchParams(location.search);
-    var STAFF_PIN = Q.get('pin') || '2468';          // launcher may override via ?pin=…
-    var staffMode = (Q.get('staff') === '1') || Q.has('dev');   // launcher-established access
+    var STAFF_CFG = (window.__FOCUSROOM__ && window.__FOCUSROOM__.staff) || {};
+    var STAFF_UI = STAFF_CFG.uiEnabled === true;      // launcher-gated; false in production guest builds
+    var STAFF_PIN = String(STAFF_CFG.pin || '');      // locally configured credential; empty ⇒ PIN disabled
+    // bare ?staff=1 / ?dev=1 activate ONLY when the build permits staff UI (never in guest builds);
+    // a launcher-issued token (?staff=<credential>) unlocks when it matches the configured credential.
+    var paramUnlock = STAFF_UI && (Q.get('staff') === '1' || Q.has('dev'));
+    var tokenUnlock = STAFF_PIN !== '' && String(Q.get('staff') || '') === STAFF_PIN;
+    var staffMode = paramUnlock || tokenUnlock;
     function engToggleAllowed() { return staffMode === true; }   // the single gate the 'E' key honours
 
     function logEngAccess(action, how) {
@@ -515,10 +524,13 @@
         logEngAccess(engOn ? 'eng-view-open' : 'eng-view-close', 'keypress');
         return;
       }
-      // 'S' opens the staff-PIN prompt (unlock). A wrong/blank PIN does nothing.
+      // 'S' opens the staff-credential prompt — ONLY in a staff build with a configured
+      // credential. In production guest builds (STAFF_UI false) or when no credential is
+      // configured (STAFF_PIN empty), it does nothing. A wrong/blank entry does nothing.
       if ((e.key === 's' || e.key === 'S') && !staffMode) {
+        if (!STAFF_UI || STAFF_PIN === '') return;
         var pin = null;
-        try { pin = window.prompt('Staff PIN (engineering view):'); } catch (err) { pin = null; }
+        try { pin = window.prompt('Staff credential (engineering view):'); } catch (err) { pin = null; }
         if (pin != null && pin === STAFF_PIN) setStaffMode(true, 'pin');
         else if (pin != null) logEngAccess('staff-unlock-denied', 'pin');
         return;
