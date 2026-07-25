@@ -174,17 +174,42 @@ never upgrade an unauthenticated socket; a role change never grants raw.
 
 **Token lifecycle:** a **256-bit** `crypto.randomBytes(32)` token, generated **once per launcher
 process** (`app/main.js`) and **rotated every restart**. **Distinct from `FOCUSROOM_STAFF_TOKEN`.**
-Passed to the server in-process (`server.configureRawAuth`) and to the authorized TV renderer via the
-preload's private `additionalArguments` channel; the preload exposes it **only through a function**
-(`window.__FOCUSROOM__.rawStreamToken()`), never a readable string. It travels only inside the WS
-hello frame — **never** a URL, query param, `localStorage`/`sessionStorage`, console, application log,
-capture file, or the iPad. Disconnect drops the socket's authorization; reconnect re-authenticates;
-a previous-launcher token is rejected.
+The server verifies it in-process (`server.configureRawAuth`). Disconnect drops the socket's
+authorization; reconnect re-authenticates; a previous-launcher token is rejected.
 
-**Loopback (packaged):** `requireLoopback = config.isPackaged`. Accepts `127.0.0.1`, `::1`,
-`::ffff:127.0.0.1` from the socket's actual `remoteAddress` (never `X-Forwarded-For`, a client IP, or
-a JS-declared location). A separate-device TV is **not** approved this phase; it would need explicit
-secure pairing + encrypted transport.
+**Credential containment (corrected — the token never reaches page JavaScript).** The FIRST cut of
+this fix passed the token to the renderer via the preload `additionalArguments` (visible in
+`process.argv` / the OS command line) and exposed it to the page as `window.__FOCUSROOM__.rawStreamToken()`
+— a function that returns the token still exposes the token. **That is fixed:**
+- The token now stays in the **main process**. It is **never** in `additionalArguments`, `process.argv`,
+  the OS command line, a URL, `localStorage`/`sessionStorage`, cookies, DOM attributes, logs, capture
+  files, or any page-level JavaScript.
+- Raw EEG reaches the authorized TV **renderer over Electron IPC** (`app/main.js` `onRawEeg` hook →
+  `tvWindow.webContents.send('rawEeg:msg', …)`, gated to the signal surface). The renderer is
+  authorized by **process boundary** (main chooses the recipient) — no token is presented from the
+  renderer at all.
+- The **preload** relays via `ipcRenderer.on('rawEeg:msg', …)` and exposes **subscription-only**
+  `window.__FOCUSROOM__.subscribeRawEeg(cb)` — **no token accessor, no raw WebSocket in the renderer**
+  (sandbox-safe; the browser `WebSocket` global is never used for raw, so nothing appears in the page's
+  DevTools network). A freshly-loaded signal surface replays the last config/quality via a
+  **sender-gated** `ipcMain.handle('rawEeg:last')`.
+- `tv-signal.html`'s own WebSocket carries only NON-raw surface state (`session/state`); its hello has
+  no capability and no token. A plain browser has no preload → no subscription → **no raw**.
+The server-side WS `eeg-raw` authorization (token in the hello) remains as **fail-closed defense** for
+any future launcher-authenticated WebSocket client; in the approved deployment the authorized TV uses
+IPC, so no legitimate client presents the token over the wire.
+
+**Loopback (§3, stricter):** `requireLoopback = config.RAW_REQUIRE_LOOPBACK` — **loopback-only by
+default**, including packaged, guest, normal launcher, and **`FOCUSROOM_VALIDATION=1`** modes. A
+non-loopback raw connection needs the explicit dev opt-in `FOCUSROOM_ALLOW_REMOTE_RAW=1`, which is
+**ignored when packaged or validating** and logged without the token. Loopback accepts `127.0.0.1`,
+`::1`, `::ffff:127.0.0.1` from the socket's actual `remoteAddress` (never `X-Forwarded-For`, a client
+IP, or a JS location). A separate-device TV is **not** approved this phase.
+
+**Renderer containment (§4):** the TV window keeps `contextIsolation:true`, `nodeIntegration:false`;
+adds `devTools:false` in packaged mode, denies `window.open` and remote `will-navigate`, and the
+tv-*.html responses carry a restrictive first-party **CSP** (`default-src 'self'`, no remote script/
+object, `frame-ancestors 'none'`). These are containment controls; they do not replace the server gate.
 
 **Fail-closed:** no server token, no supplied token, invalid token, non-loopback (packaged), or a
 rotated-away token ⇒ **no raw**. Failed attempts emit a minimal event (remote category + count only —

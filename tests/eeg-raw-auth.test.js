@@ -145,6 +145,39 @@ const mock = (addr) => ({ remoteAddress: addr, role: 'tv', readyState: 1, OPEN: 
     check('repeated invalid attempts close the socket (policy violation)', rl._closed === true);
     check('the failure rate-limit state stays bounded', s._rawFailWindow.size <= 1000); }
 
+  console.log('\n-- credential containment (token out of the renderer) --');
+  const fs = require('fs');
+  const read = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
+  const mainSrc = read('app/main.js'), preloadSrc = read('app/preload.js'), tvSrc = read('tv-signal.html');
+  const { rawLoopbackRequired } = require(path.join(__dirname, '..', 'app', 'config.js'));
+  const wca = mainSrc.slice(mainSrc.indexOf('function windowConfigArg'), mainSrc.indexOf('function windowConfigArg') + 320);
+
+  // token is generated in main and never placed in additionalArguments / process.argv
+  check('the raw token is generated in the main process (256-bit)', /crypto\.randomBytes\(32\)/.test(mainSrc));
+  check('token is NOT in windowConfigArg / additionalArguments', !/rawStreamToken/.test(wca) && /additionalArguments: \[windowConfigArg\(\)\]/.test(mainSrc));
+  check('main never sends the token to a renderer (no token in webContents.send)', !/webContents\.send\([^)]*[Tt]oken/.test(mainSrc));
+  // preload exposes NO token accessor; no raw WebSocket in the renderer; subscription-only
+  check('preload exposes NO token accessor to the page', !/rawStreamToken/.test(preloadSrc) && !/getRawToken|rawToken\s*\(/.test(preloadSrc));
+  check('preload opens NO raw WebSocket in the renderer (ipcRenderer relay only)',
+    !/require\('ws'\)/.test(preloadSrc) && !/new WebSocket/.test(preloadSrc) && /ipcRenderer\.on\('rawEeg:msg'/.test(preloadSrc));
+  check('preload exposes subscription-only raw access (subscribeRawEeg)', /subscribeRawEeg/.test(preloadSrc));
+  // the page cannot read the token: tv-signal never references one, and gets raw via the relay
+  check('tv-signal never references a raw token', !/rawStreamToken/.test(tvSrc) && !/rawToken/.test(tvSrc));
+  check('tv-signal receives raw via subscribeRawEeg, not a tokened WS hello',
+    /subscribeRawEeg/.test(tvSrc) && !/capabilities:\s*\['eeg-raw'\]/.test(tvSrc));
+  check('no raw token in localStorage/sessionStorage/URL (tv-signal + preload)',
+    !/(local|session)Storage[^\n]*(token|rawStream)/i.test(tvSrc + preloadSrc) && !/location\.[^\n]*rawStream/i.test(tvSrc + preloadSrc));
+  // §3 loopback policy (validation requires loopback even unpackaged; override ignored)
+  check('validation requires loopback even when unpackaged', rawLoopbackRequired({ isPackaged: false, validation: true, allowRemote: true }) === true);
+  check('FOCUSROOM_ALLOW_REMOTE_RAW is ignored during validation', rawLoopbackRequired({ isPackaged: false, validation: true, allowRemote: true }) === true);
+  check('FOCUSROOM_ALLOW_REMOTE_RAW is ignored in packaged production', rawLoopbackRequired({ isPackaged: true, allowRemote: true }) === true);
+  check('the dev opt-in (unpackaged, no validation) is honored', rawLoopbackRequired({ isPackaged: false, validation: false, allowRemote: true }) === false);
+  check('secure default is loopback-only', rawLoopbackRequired({}) === true);
+  check('main configures server auth with the loopback policy', /configureRawAuth\(\{ token: rawStreamToken, requireLoopback: config\.RAW_REQUIRE_LOOPBACK \}\)/.test(mainSrc));
+  // §4 renderer containment
+  check('main disables DevTools in packaged mode + denies remote navigation & window.open',
+    /devTools: !config\.isPackaged/.test(mainSrc) && /setWindowOpenHandler/.test(mainSrc) && /will-navigate/.test(mainSrc));
+
   console.log(`\n${failures === 0 ? 'ALL GREEN' : `${failures} FAILURE(S)`}`);
   process.exit(failures === 0 ? 0 : 1);
 })().catch((e) => { console.error('FATAL', e); process.exit(1); });
