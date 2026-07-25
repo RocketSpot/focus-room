@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base href="/">
+<script>window.__DEMO_HOST__ = "";</script>
+<style>#controls{display:none !important}</style>
+<meta charset="UTF-8">
+<!-- viewport-fit=cover + no user-scaling = a real app surface, not a zoomable web page -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>The Focus Room — iPad · Guest Flow</title>
+<!-- Add-to-Home-Screen → launches standalone (no Safari chrome), portrait, full-bleed.
+     navigator.standalone then flips on body.device below to drop the preview bezel. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Focus Room">
+<meta name="theme-color" content="#060605">
+<link rel="manifest" href="assets/focusroom.webmanifest">
+<link rel="apple-touch-icon" href="assets/app-icon-180.png">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #060605; overflow: hidden; font-family: var(--font-sans); }
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+           background: radial-gradient(120% 90% at 50% 40%, #121110 0%, #070706 70%, #040403 100%); }
+  #room { transform-origin: center center; }
+
+  /* iPad bezel */
+  .ipad { position: relative; width: 860px; height: 1216px; border-radius: 62px; padding: 22px;
+          background: linear-gradient(150deg, #1a1a1a, #0a0a0a);
+          box-shadow: 0 2px 2px rgba(255,255,255,0.05) inset, 0 60px 120px rgba(0,0,0,0.6), 0 10px 40px rgba(0,0,0,0.5);
+          border: 1px solid rgba(255,255,255,0.05); }
+  .screen { position: relative; width: 816px; height: 1172px; border-radius: 44px; overflow: hidden;
+            background: #141414; box-shadow: 0 0 0 2px #000 inset; }
+  .camera { position: absolute; top: 33px; left: 50%; transform: translateX(-50%); width: 9px; height: 9px;
+            border-radius: 50%; background: #050505; box-shadow: 0 0 0 2px rgba(255,255,255,0.04); z-index: 60; }
+
+  .screenwrap { position: absolute; inset: 0; }
+  @keyframes pulse { 0%,100% { transform: scale(1); opacity: 0.45; } 50% { transform: scale(1.04); opacity: 0.8; } }
+  @keyframes breathe { 0%,100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 1; transform: scale(1.12); } }
+  @keyframes cardDrop { from { transform: translateY(-18px); } to { transform: none; } }
+  @keyframes introFade { from { opacity: 0; } to { opacity: 1; } }
+
+  /* review controls (outside the iPad) — auto-hidden with ?kiosk=1 */
+  #controls { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center;
+    gap: 9px; z-index: 80; background: rgba(20,20,20,0.85); border: 1px solid var(--hair-strong); backdrop-filter: blur(12px);
+    border-radius: var(--r-pill); padding: 7px 9px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--fg-muted); transition: opacity var(--dur-base); }
+  #controls.hide { opacity: 0; pointer-events: none; }
+  #controls button, #controls select { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--fg); background: transparent; border: 1px solid var(--hair-strong); border-radius: var(--r-pill); padding: 6px 12px;
+    cursor: pointer; transition: all var(--dur-fast); }
+  #controls button:hover, #controls select:hover { color: var(--fg-strong); border-color: var(--fg-muted); }
+  #controls .sep { width: 1px; height: 16px; background: var(--hair-strong); }
+  #controls .now { color: var(--c-signal); }
+
+  /* DEVICE / KIOSK MODE — launched standalone from the iPad home screen, or ?kiosk=1.
+     Strip the desktop-preview iPad bezel and let the real 816×1172 guest canvas
+     fill the whole screen (the controller cover-scales #room to the viewport). */
+  body.device #stage { background: #060605; }
+  body.device .ipad { width: 816px; height: 1172px; padding: 0; border: 0; border-radius: 0;
+                      background: none; box-shadow: none; }
+  body.device .camera { display: none; }
+  body.device .screen { border-radius: 0; box-shadow: none; }
+  body.device #controls { display: none !important; }
+
+  ::-webkit-scrollbar { width: 0; height: 0; }
+</style>
+</head>
+<body>
+  <div id="stage"><div id="room"><div class="ipad"><span class="camera"></span><div class="screen" id="screen"></div></div></div></div>
+
+  <div id="controls">
+    <button id="btnPrev">‹ Prev</button>
+    <span class="now" id="nowStep">welcome</span>
+    <button id="btnNext">Next ›</button>
+    <span class="sep"></span>
+    <select id="jump"></select>
+    <span class="sep"></span>
+    <button id="btnRestart">Restart</button>
+    <button id="btnHide">Hide</button>
+  </div>
+
+  <!-- LOCAL-FIRST: the focus-line lib + the esbuild-bundled React app. No CDN,
+       no in-browser Babel (Document.pdf change #4). When served inside the app
+       the bundle's controller drives the flow from the master clock; opened as a
+       file it falls back to manual stepping via the controls above. -->
+  <script src="lib/focusline.js"></script>
+  <script src="/docs/report/before/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Focus Room — Shareable Focus Profile</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { min-height: 100%; background: #1c1b1a; font-family: var(--font-sans); }
+  #page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 40px 20px; }
+  .frame { box-shadow: 0 30px 90px rgba(0,0,0,0.5); border-radius: 14px; overflow: hidden; }
+  svg.profile { display: block; width: 540px; height: 540px; }
+  .controls { display: flex; gap: 8px; align-items: center; background: rgba(0,0,0,0.3); border: 1px solid var(--hair-strong);
+    border-radius: var(--r-pill); padding: 7px 9px; }
+  .controls select, .controls button { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--fg); background: transparent; border: 1px solid var(--hair-strong); border-radius: var(--r-pill); padding: 6px 12px; cursor: pointer; }
+  .hint { color: var(--fg-faint); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+  <div id="page">
+    <div class="hint">Shareable Focus Profile · 1080 × 1080 · built to post</div>
+    <div class="frame">
+      <svg class="profile" id="profile" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="bgGrad" cx="50%" cy="118%" r="80%">
+            <stop offset="0%" stop-color="#26241F"/><stop offset="42%" stop-color="#151413"/><stop offset="100%" stop-color="#0C0B0A"/>
+          </radialGradient>
+          <linearGradient id="sig" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#DDCA8E" stop-opacity="0.55"/>
+            <stop offset="60%" stop-color="#DDCA8E" stop-opacity="1"/>
+            <stop offset="100%" stop-color="#DDCA8E" stop-opacity="0.85"/>
+          </linearGradient>
+          <filter id="glow" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="9"/></filter>
+        </defs>
+        <rect width="1080" height="1080" fill="url(#bgGrad)"/>
+
+        <!-- header -->
+        <circle cx="74" cy="80" r="7" fill="#DDCA8E"/>
+        <text x="92" y="86" fill="#7A7873" font-family="IBM Plex Mono, Courier New, monospace" font-size="19" letter-spacing="3">ZONE — THE FOCUS ROOM</text>
+        <text x="1006" y="86" text-anchor="end" fill="#7A7873" font-family="IBM Plex Mono, Courier New, monospace" font-size="19" letter-spacing="3">FOCUS PROFILE</text>
+
+        <!-- the signature line -->
+        <g id="focus-line"></g>
+
+        <!-- archetype identity -->
+        <text x="70" y="560" fill="#7A7873" font-family="IBM Plex Mono, Courier New, monospace" font-size="20" letter-spacing="4">MY FOCUS, IN ONE READING</text>
+        <text x="64" y="700" id="slot-archetype" fill="#F3F2EE" font-family="PP Neue Montreal, Space Grotesk, Helvetica Neue, Arial, sans-serif" font-weight="500" font-size="132" letter-spacing="-4">Deep Diver</text>
+        <text x="70" y="770" id="slot-desc" fill="#D6D4C9" font-family="Inter, Helvetica Neue, Arial, sans-serif" font-weight="300" font-size="34">Slow to settle, then long and deep.</text>
+
+        <!-- mini quadrant map -->
+        <g id="quad" transform="translate(70, 880)"></g>
+
+        <!-- footer -->
+        <text x="1010" y="1010" text-anchor="end" fill="#7A7873" font-family="IBM Plex Mono, Courier New, monospace" font-size="18" letter-spacing="2.4">READ YOUR OWN AT THE FOCUS ROOM</text>
+      </svg>
+    </div>
+    <div class="controls">
+      <select id="selArch">
+        <option value="deep">Deep Diver</option>
+        <option value="igniter">Quick Igniter</option>
+        <option value="steady">Steady Burner</option>
+        <option value="sprint">Sprinter</option>
+      </select>
+    </div>
+  </div>
+
+  <script src="lib/focusline.js"></script>
+  <script>
+  (function () {
+    var NS = 'http://www.w3.org/2000/svg';
+    var BOX = { x: 70, y: 200, w: 940, h: 230 };
+    var COPY = {
+      deep:    { name: 'Deep Diver', desc: 'Slow to settle, then long and deep.', q: 'deep' },
+      igniter: { name: 'Quick Igniter', desc: 'Settles fast, then runs in short waves.', q: 'igniter' },
+      steady:  { name: 'Steady Burner', desc: 'Even focus, gentle waves, very little drift.', q: 'steady' },
+      sprint:  { name: 'Sprinter', desc: 'Intense short peaks — restless and sharp.', q: 'sprint' }
+    };
+    // 2×2 quadrant positions (x: slow→quick, y: variable→steady)
+    var QPOS = { sprint: [0, 0], igniter: [1, 0], deep: [0, 1], steady: [1, 1] };
+
+    function el(t, a) { var e = document.createElementNS(NS, t); for (var k in a) e.setAttribute(k, a[k]); return e; }
+
+    function render(arch, data) {
+      // real session data (injected via ?d=) feeds FocusLine; else synthetic preview
+      var lineKey = arch;
+      if (data && data.samples && data.samples.length) {
+        FocusLine.setSamples('session', data.samples, data.troughT != null ? { interruptT: data.troughT } : null);
+        lineKey = 'session';
+      }
+      var name = (data && data.name) || COPY[arch].name;
+      var desc = (data && data.desc) || COPY[arch].desc;
+
+      // signature line
+      var g = document.getElementById('focus-line'); g.innerHTML = '';
+      var d = FocusLine.linePath(lineKey, BOX, { samples: 160 });
+      g.appendChild(el('path', { d: d, fill: 'none', stroke: '#DDCA8E', 'stroke-opacity': 0.3, 'stroke-width': 16, 'stroke-linecap': 'round', filter: 'url(#glow)' }));
+      g.appendChild(el('path', { d: d, fill: 'none', stroke: 'url(#sig)', 'stroke-width': 5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+      // subtle dip dot (no number, just the story)
+      var trough = (data && data.troughT != null) ? data.troughT : FocusLine.interruptInfo(lineKey).trough;
+      var pt = FocusLine.pointAt(lineKey, trough, BOX);
+      g.appendChild(el('circle', { cx: pt.x, cy: pt.y, r: 9, fill: '#DDCA8E' }));
+      g.appendChild(el('circle', { cx: pt.x, cy: pt.y, r: 3.5, fill: '#1A1917' }));
+
+      document.getElementById('slot-archetype').textContent = name;
+      document.getElementById('slot-desc').textContent = desc;
+
+      // quadrant map
+      var q = document.getElementById('quad'); q.innerHTML = '';
+      var size = 120, gap = size;
+      var keys = ['sprint', 'igniter', 'deep', 'steady'];
+      keys.forEach(function (k) {
+        var p = QPOS[k]; var cx = p[0] * gap, cy = p[1] * gap;
+        var on = k === arch;
+        // signal sand for the active archetype — orange (#FF5714) is reserved for
+        // the single interruption mark and nothing else.
+        q.appendChild(el('circle', { cx: cx, cy: cy, r: on ? 11 : 6, fill: on ? '#DDCA8E' : '#42413E' }));
+        if (on) q.appendChild(el('circle', { cx: cx, cy: cy, r: 22, fill: 'none', stroke: '#DDCA8E', 'stroke-opacity': 0.45, 'stroke-width': 1.5 }));
+      });
+      // axis ticks labels
+      q.appendChild(el('line', { x1: -2, y1: gap + 44, x2: gap + 2, y2: gap + 44, stroke: '#42413E', 'stroke-width': 1 }));
+      var t1 = el('text', { x: 0, y: gap + 70, fill: '#7A7873', 'font-family': 'IBM Plex Mono, Courier New, monospace', 'font-size': 14, 'letter-spacing': 1.5 }); t1.textContent = 'SLOW'; q.appendChild(t1);
+      var t2 = el('text', { x: gap, y: gap + 70, fill: '#7A7873', 'font-family': 'IBM Plex Mono, Courier New, monospace', 'font-size': 14, 'letter-spacing': 1.5, 'text-anchor': 'end' }); t2.textContent = 'QUICK'; q.appendChild(t2);
+      // signal readiness only once the webfonts are in — font-display:swap could
+      // otherwise let the PNG capture fallback faces (outputs render waits on this)
+      var fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+      fontsReady.then(function () { document.body.setAttribute('data-rendered', '1'); });
+    }
+
+    // real data arrives via ?d= (small payloads) or is injected after load
+    // through window.__setData (?wait=1 — long sessions outgrow the URL)
+    window.__setData = function (data) { render((data && data.arch) || 'deep', data); };
+    var params = new URLSearchParams(location.search);
+    var q0 = params.get('d');
+    // never fall back to the synthetic preview on a malformed payload — that
+    // ships an invented session as if it were the guest's (see card.html)
+    if (q0) {
+      try { var data = JSON.parse(decodeURIComponent(escape(atob(q0)))); render(data.arch || 'deep', data); }
+      catch (e) { document.body.setAttribute('data-render-error', String(e && e.message || e)); }
+    } else if (!params.get('wait')) {
+      render('deep');   // standalone design preview only
+    }
+    var sel = document.getElementById('selArch'); if (sel) sel.onchange = function (e) { render(e.target.value); };
+  })();
+  </script>
+</body>
+</html>

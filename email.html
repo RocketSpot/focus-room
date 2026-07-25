@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting">
+<title>Your Focus Room read</title>
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+</head>
+<body style="margin:0; padding:0; background:#E7E5DF; -webkit-text-size-adjust:100%;">
+  <!-- preheader (hidden) -->
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:#E7E5DF; font-size:1px; line-height:1px;">
+    Your focus, in one reading — you read as a {{archetype}} today. {{date}}
+  </div>
+
+  <!-- TEMPLATE: filled by app/outputs.js. Slots: {{archetype}} {{caption}} {{date}}
+       {{focus_line_svg}} {{read_1..4}} {{read_3_said}} {{next_step}} {{cta_label}}
+       {{cta_url}}. {{focus_line_svg}} is replaced with an <img src="cid:focusline">
+       at send (Gmail/Outlook strip SVG). All copy is routed through the honesty
+       layer before it lands here. -->
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#E7E5DF;">
+    <tr><td align="center" style="padding:36px 16px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px; max-width:600px; background:#F3F2EE; border-radius:14px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.10);">
+
+        <!-- header strip -->
+        <tr><td style="background:#141414; padding:22px 36px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:12px; letter-spacing:2.2px; color:#D6D4C9;">
+              <span style="display:inline-block; width:9px; height:9px; background:#DDCA8E; border-radius:50%; vertical-align:middle;">&nbsp;</span>
+              <span style="vertical-align:middle; padding-left:9px;">ZONE</span>
+            </td>
+            <td align="right" style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:11px; letter-spacing:2.4px; color:#7A7873;">THE FOCUS ROOM</td>
+          </tr></table>
+        </td></tr>
+
+        <!-- hero -->
+        <tr><td style="padding:44px 36px 8px;">
+          <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:11px; letter-spacing:3px; color:#7A7873; text-transform:uppercase;">Your session · {{date}}</div>
+          <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-size:16px; color:#7A7873; margin-top:22px;">You read as a</div>
+          <div style="font-family:'PP Neue Montreal','Space Grotesk','Helvetica Neue',Arial,sans-serif; font-size:52px; line-height:1; font-weight:500; color:#141414; letter-spacing:-1.5px; margin-top:6px;">{{archetype}}</div>
+          <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:18px; line-height:1.5; color:#1E1D1C; margin-top:20px; max-width:480px;">
+            {{caption}}
+          </div>
+        </td></tr>
+
+        <!-- the annotated focus line (rasterized to PNG at send) -->
+        <tr><td style="padding:26px 36px 6px;">
+          <div style="background:#FFFFFF; border-radius:16px; padding:22px 16px 14px;">
+            {{focus_line_svg}}
+          </div>
+        </td></tr>
+
+        <!-- the four reads -->
+        <tr><td style="padding:26px 36px 8px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:22px;"><tr>
+            <td width="34" valign="top" style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:bold; font-size:13px; color:#141414; padding-top:2px;">1</td>
+            <td valign="top">
+              <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2px; color:#7A7873; text-transform:uppercase;">How you settled</div>
+              <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:17px; line-height:1.5; color:#1E1D1C; margin-top:7px;">{{read_1}}</div>
+            </td>
+          </tr></table>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:22px;"><tr>
+            <td width="34" valign="top" style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:bold; font-size:13px; color:#141414; padding-top:2px;">2</td>
+            <td valign="top">
+              <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2px; color:#7A7873; text-transform:uppercase;">Your attention rhythm</div>
+              <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:17px; line-height:1.5; color:#1E1D1C; margin-top:7px;">{{read_2}}</div>
+            </td>
+          </tr></table>
+          <!-- read 3 — the headline -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:22px; background:#FBF3EC; border-radius:14px;"><tr>
+            <td width="44" valign="top" style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:bold; font-size:13px; color:#FF5714; padding:18px 0 18px 18px;">3</td>
+            <td valign="top" style="padding:18px 18px 18px 0;">
+              <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2px; color:#FF5714; text-transform:uppercase;">Your interruption cost · the headline</div>
+              <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:400; font-size:17px; line-height:1.5; color:#141414; margin-top:7px;">{{read_3}}</div>
+              <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-style:italic; font-size:15px; line-height:1.45; color:#7A7873; margin-top:10px;">{{read_3_said}}</div>
+            </td>
+          </tr></table>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:6px;"><tr>
+            <td width="34" valign="top" style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:bold; font-size:13px; color:#141414; padding-top:2px;">4</td>
+            <td valign="top">
+              <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2px; color:#7A7873; text-transform:uppercase;">Your strongest stretch</div>
+              <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:17px; line-height:1.5; color:#1E1D1C; margin-top:7px;">{{read_4}}</div>
+            </td>
+          </tr></table>
+        </td></tr>
+
+        <!-- honest note -->
+        <tr><td style="padding:18px 36px 8px;">
+          <div style="border-top:1px solid rgba(20,20,20,0.10); padding-top:24px; font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:16px; line-height:1.55; color:#42413E;">
+            One session is a snapshot. The real pattern — how you settle, your rhythm, and the exact moment your focus starts to break — only shows up over many. That is precisely what the earbud does, every workday.
+          </div>
+        </td></tr>
+
+        <!-- matched next step -->
+        <tr><td style="padding:24px 36px 40px;">
+          <div style="background:#141414; border-radius:18px; padding:30px 30px 32px;">
+            <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2.4px; color:#7A7873; text-transform:uppercase;">Where this goes</div>
+            <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:19px; line-height:1.5; color:#F3F2EE; margin-top:12px; max-width:460px;">
+              {{next_step}}
+            </div>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;"><tr><td style="background:#F3F2EE; border-radius:9999px;">
+              <a href="{{cta_url}}" style="display:inline-block; font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:600; font-size:16px; color:#141414; text-decoration:none; padding:16px 30px;">{{cta_label}}</a>
+            </td></tr></table>
+          </div>
+        </td></tr>
+
+        <!-- footer -->
+        <tr><td style="background:#EDEBE5; padding:26px 36px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:11px; letter-spacing:1.6px; color:#7A7873;">
+              <span style="display:inline-block; width:8px; height:8px; background:#141414; border-radius:50%; vertical-align:middle;">&nbsp;</span>
+              <span style="vertical-align:middle; padding-left:8px;">ZONE · THE FOCUS ROOM</span>
+            </td>
+            <td align="right" style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-size:12px; color:#A6A49C;">Sent from the room</td>
+          </tr></table>
+          <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:1.5; color:#A6A49C; margin-top:14px;">
+            This read is relative to your own session today — not a clinical score. Reply to this note if you’d like to come back.
+          </div>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

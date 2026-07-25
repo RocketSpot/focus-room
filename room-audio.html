@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Focus Room — Room Audio</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #0B0B0A; overflow: hidden; font-family: var(--font-mono, ui-monospace, monospace); }
+  /* This surface is normally an invisible audio host (a hidden Electron window).
+     The visible bits only matter when it's opened standalone for a listen. */
+  #hud { position: fixed; left: 18px; bottom: 15px; font-size: 11px; letter-spacing: 0.13em;
+    text-transform: uppercase; color: #7A7873; }
+  #hud .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #DDCA8E;
+    box-shadow: 0 0 12px 1px rgba(221,202,142,0.5); margin-right: 9px; vertical-align: middle;
+    animation: breathe 5.4s ease-in-out infinite; }
+  @keyframes breathe { 0%,100% { opacity: 0.92; } 50% { opacity: 0.38; } }
+  #meter { position: fixed; left: 18px; bottom: 40px; width: 190px; height: 3px; background: rgba(221,202,142,0.14); }
+  #meter > i { display: block; height: 100%; width: 50%; background: #DDCA8E; opacity: 0.7; transition: width 0.3s linear; }
+  #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: #0B0B0A; cursor: pointer; color: #DDCA8E; font-size: 13px; letter-spacing: 0.16em;
+    text-transform: uppercase; z-index: 5; }
+  #start.hide { display: none; }
+</style>
+</head>
+<body>
+  <div id="start">▶&nbsp;&nbsp;tap to begin the room sound</div>
+  <div id="meter"><i id="meterFill"></i></div>
+  <div id="hud"><span class="dot"></span><span id="stat">room audio</span></div>
+
+<script>
+/* =============================================================================
+   room-audio.html — the room's sound, v2 (research-based rebuild).
+
+   Two distinct generative scenes in ONE key (F major — warm, tonally clear),
+   crossfaded by beat, all synthesized in Web Audio (no files, offline, never
+   repeats). Design follows the sleep/relaxation-music literature + analyses of
+   Endel, NextSense, and console home-menu music:
+     • MENU scene (idle constellation, welcome, intake, picker, reveal, close):
+       a welcoming lobby — a slow 4-chord loop of open added-tone voicings
+       (Fadd9 → Csus2 → Dm7 → B♭maj7, ~10s each, crossfaded, never re-triggered)
+       with a sparse felt-piano note every few bars so it feels alive, never
+       thumpy (no percussion at all).
+     • SESSION scene (fit, reading, strongest): very calm — one sustained
+       Dm(add9) bed that only changes TIMBRE with the smoothed brain-state
+       scalar: the low-pass opens and the upper third/ninth fade in as
+       engagement rises; a warm steady sub rises as they drift. A ~0.1 Hz
+       amplitude breath keeps it alive. No pulse, no note changes, no jumps.
+   What the research killed from v1: rootless open-fifth voicings (read as
+   hollow/ominous), detuned unisons in the bass (slow beating = throb of
+   unease — chorus detune now only ≥ A3), the 2.8 s cavern reverb (now 1.0 s,
+   low-passed = intimate room), the band-passed noise "whistle" (now soft
+   low-passed room tone), and the interruption's sharp-detuned tone (now a
+   consonant swell + duck).
+   HONESTY: this layer is aesthetic only. It follows the measured signal so the
+   room never feels dead; it does not claim to steer anyone's nervous system,
+   and it never shows a number.
+   ========================================================================== */
+(function () {
+  'use strict';
+  var SERVED = !!location.host && location.search.indexOf('preview') === -1;
+  var AC = window.AudioContext || window.webkitAudioContext;
+
+  // ---- live state -----------------------------------------------------------
+  var beat = SERVED ? 'idle' : 'reading';       // standalone preview starts in the session scene
+  var sTarget = 0.5, s = 0.5, lastGood = 0.5;   // EEG state scalar (0 drift ↔ 1 engaged), heavily smoothed
+  var engHist = [];                             // relative-normalization window for engagementRel
+  var duck = 1;                                 // interruption duck multiplier (1 = open)
+  var duckUntil = 0;
+  var lastFrameAt = -1e9, nowMs = 0, running = false;
+  var lastRevealIndex = 0;
+
+  // ---- scene levels per beat (menu lobby vs session bed) ---------------------
+  var MENU_LVL = { idle: 0.32, welcome: 0.46, intake: 0.44, picker: 0.44,
+                   standby: 0.34, email: 0.42, close: 0.34 };
+  var SESS_LVL = { fit: 0.55, reading: 0.85, strongest: 0.62 };
+  // beginning/end beats: moving INTO one of these plays the screen-transition
+  // breath. The session itself (reading/strongest) changes with the music alone.
+  var CUE_BEATS = { welcome: 1, fit: 1, intake: 1, picker: 1, standby: 1, email: 1, close: 1 };
+
+  // ---- F-major material (equal temperament) ----------------------------------
+  var N = { D2: 73.42, F2: 87.31, Bb2: 116.54, C3: 130.81, D3: 146.83, F3: 174.61,
+    G3: 196.00, A3: 220.00, C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23,
+    G4: 392.00, A4: 440.00, C5: 523.25, D5: 587.33, F5: 698.46 };
+  // the menu loop: open voicings, root+fifth low, third/ninth high — every chord
+  // states a clear third or a floating sus color; nothing hollow, nothing dark
+  var CHORDS = [
+    { name: 'Fadd9',  notes: [N.F2, N.C3, N.A3, N.G4, N.C5] },
+    { name: 'Csus2',  notes: [N.C3, N.G3, N.D4, N.G4, N.D5] },
+    { name: 'Dm7',    notes: [N.D3, N.A3, N.C4, N.F4, N.A4] },
+    { name: 'Bbmaj7', notes: [N.Bb2, N.F3, N.A3, N.D4, N.A4] },
+  ];
+  var CHORD_S = 10;        // seconds per chord (~40s loop)
+  var MALLET_NOTES = { Fadd9: [N.C4, N.F4, N.A4, N.G4], Csus2: [N.D4, N.G4, N.C5, N.D5],
+    Dm7: [N.D4, N.F4, N.A4, N.C5], Bbmaj7: [N.D4, N.F4, N.A4, N.C4] };
+
+  // ---- graph ----------------------------------------------------------------
+  var ctx, master, rev, revLong, menuBus, sessBus, sessLP, bright, drift, chordBuses = [];
+  var bedCore, air, breath;
+  var chordIdx = 0;
+  var cueCount = { select: 0, transition: 0, scroll: 0, join: 0 };
+  // produced beds (Suno, bundled locally): when present they carry each scene and
+  // the synth layers drop to a supporting role; missing files → full synth. The
+  // adaptive brain-following layers and every cue always stay live either way.
+  var BED_URL = { menu: 'assets/audio/lobby.ogg', session: 'assets/audio/session.ogg' };
+  var bedOn = { menu: false, session: false }, bedLoop = { menu: null, session: null };
+
+  function makeIR(seconds, decay) {          // generated reverb impulse — no file
+    var rate = ctx.sampleRate, len = Math.floor(rate * seconds);
+    var buf = ctx.createBuffer(2, len, rate);
+    for (var c = 0; c < 2; c++) {
+      var d = buf.getChannelData(c);
+      for (var i = 0; i < len; i++) {
+        var t = i / len;
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay);
+      }
+    }
+    return buf;
+  }
+  function osc(type, freq, detune) {
+    var o = ctx.createOscillator(); o.type = type; o.frequency.value = freq;
+    if (detune) o.detune.value = detune;
+    o.start(); return o;
+  }
+  function gain(v) { var g = ctx.createGain(); g.gain.value = v; return g; }
+  function lfo(freq, depth, target) {
+    var o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
+    var g = gain(depth); o.connect(g); g.connect(target); o.start(); return o;
+  }
+  function noiseSrc(seconds) {
+    var b = ctx.createBuffer(1, ctx.sampleRate * (seconds || 2), ctx.sampleRate);
+    var d = b.getChannelData(0);
+    for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    var src = ctx.createBufferSource(); src.buffer = b; src.loop = true; src.start();
+    return src;
+  }
+  // a pad voice: triangle fundamental; chorus twin (+7 cents, half gain) ONLY on
+  // mid/high notes — bass stays unison so nothing beats slowly (the v1 mistake)
+  function padVoice(freq, dest) {
+    var lvl = freq < 150 ? 0.85 : freq < 300 ? 0.6 : 0.4;
+    var g = gain(lvl); g.connect(dest);
+    osc('triangle', freq, 0).connect(g);
+    if (freq >= 219) { var tw = gain(lvl * 0.5); tw.connect(dest); osc('sine', freq, 7).connect(tw); }
+  }
+
+  function build() {
+    ctx = new AC();
+    master = gain(0.9);
+    var lim = ctx.createDynamicsCompressor();
+    lim.threshold.value = -12; lim.knee.value = 18; lim.ratio.value = 6;
+    lim.attack.value = 0.006; lim.release.value = 0.32;
+    master.connect(lim); lim.connect(ctx.destination);
+
+    // intimate-room reverb: short IR, low-passed for warmth (v1's 2.8s = cavern)
+    rev = ctx.createConvolver(); rev.buffer = makeIR(1.0, 2.2);
+    var revLP = ctx.createBiquadFilter(); revLP.type = 'lowpass'; revLP.frequency.value = 5000;
+    var revRet = gain(0.30); rev.connect(revLP); revLP.connect(revRet); revRet.connect(master);
+    // a slightly longer bloom, reserved for the reward chime
+    revLong = ctx.createConvolver(); revLong.buffer = makeIR(1.6, 2.0);
+    var rlLP = ctx.createBiquadFilter(); rlLP.type = 'lowpass'; rlLP.frequency.value = 4500;
+    var rlRet = gain(0.32); revLong.connect(rlLP); rlLP.connect(rlRet); rlRet.connect(master);
+
+    // ---------------- MENU scene: the lobby ----------------
+    menuBus = gain(0.0001); menuBus.connect(master); menuBus.connect(rev);
+    var menuLP = ctx.createBiquadFilter(); menuLP.type = 'lowpass';
+    menuLP.frequency.value = 900; menuLP.Q.value = 0.7; menuLP.connect(menuBus);
+    lfo(0.04, 180, menuLP.frequency);                      // slow life in the filter
+    CHORDS.forEach(function (ch) {
+      var bus = gain(0.0001); bus.connect(menuLP);
+      ch.notes.forEach(function (f) { padVoice(f, bus); });
+      chordBuses.push(bus);
+    });
+
+    // ---------------- SESSION scene: the reading bed ----------------
+    // Dm(add9): D3 A3 low; C4(7th)+E4(9th) fade in with engagement; D2 sub +
+    // F3 warmth fade in with drift; one low-pass breathes open/closed with s.
+    sessBus = gain(0.0001); sessBus.connect(master); sessBus.connect(rev);
+    breath = gain(1); breath.connect(sessBus);
+    lfo(0.1, 0.07, breath.gain);                           // ~6 breaths/min, ±0.6 dB
+    sessLP = ctx.createBiquadFilter(); sessLP.type = 'lowpass';
+    sessLP.frequency.value = 900; sessLP.Q.value = 0.7; sessLP.connect(breath);
+    lfo(0.03, 120, sessLP.frequency);
+    bedCore = gain(0.5); bedCore.connect(sessLP);          // always-on core: root+fifth with a clear home
+    padVoice(N.D3, bedCore); padVoice(N.A3, bedCore);
+    bright = gain(0.0001); bright.connect(sessLP);         // 7th+9th open up as they settle in
+    padVoice(N.C4, bright); padVoice(N.E4, bright);
+    drift = gain(0.0001); drift.connect(sessLP);           // warm steady floor when they drift (no detune, ≥40Hz)
+    padVoice(N.D2, drift); padVoice(N.F3, drift);
+    var airLP = ctx.createBiquadFilter(); airLP.type = 'lowpass';
+    airLP.frequency.value = 1500; airLP.Q.value = 0.5;
+    air = gain(0.018); noiseSrc(2).connect(airLP); airLP.connect(air); air.connect(sessBus); // soft room tone, not hiss
+
+    scheduleMallets();
+    loadBeds();
+  }
+
+  // ---- produced beds: load, find steady loop region, play under the layers ----
+  function loopPoints(buf) {
+    // scan RMS in 0.25s windows; loop between the first and last steady windows
+    // so the track's fade-in/out never plays — the loop stays mid-ambience.
+    var d = buf.getChannelData(0), rate = buf.sampleRate, hop = Math.floor(rate * 0.25);
+    var rms = [];
+    for (var i = 0; i + hop <= d.length; i += hop) {
+      var s = 0;
+      for (var j = i; j < i + hop; j += 4) s += d[j] * d[j];
+      rms.push(Math.sqrt(s / (hop / 4)));
+    }
+    var sorted = rms.slice().sort(function (a, b) { return a - b; });
+    var thr = (sorted[Math.floor(sorted.length / 2)] || 0) * 0.5;
+    var first = 0, last = rms.length - 1;
+    while (first < rms.length && rms[first] < thr) first++;
+    while (last > 0 && rms[last] < thr) last--;
+    var start = (first * hop) / rate + 0.5, end = (last * hop) / rate - 0.5;
+    if (!(end - start >= 20)) { start = 0; end = buf.duration; } // too short/quiet → loop whole file
+    return [Math.max(0, start), Math.min(buf.duration, end)];
+  }
+  function loadBeds() {
+    Object.keys(BED_URL).forEach(function (scene) {
+      fetch(BED_URL[scene]).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.arrayBuffer();
+      }).then(function (ab) {
+        return new Promise(function (res, rej) { ctx.decodeAudioData(ab, res, rej); });
+      }).then(function (buf) {
+        var lp = loopPoints(buf);
+        var src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+        src.loopStart = lp[0]; src.loopEnd = lp[1];
+        var g = gain(0.9);
+        if (scene === 'menu') { g.connect(menuBus); } else { g.connect(breath); }
+        src.connect(g); src.start(0, lp[0]);
+        bedOn[scene] = true; bedLoop[scene] = [+lp[0].toFixed(1), +lp[1].toFixed(1)];
+        // the synth steps back into a supporting role under the produced bed
+        if (scene === 'menu') {
+          chordBuses.forEach(function (b) { b.gain.setTargetAtTime(0.0001, ctx.currentTime, 1.5); });
+        } else {
+          bedCore.gain.setTargetAtTime(0.15, ctx.currentTime, 1.5);
+          air.gain.setTargetAtTime(0.006, ctx.currentTime, 1.5);
+        }
+      }).catch(function () { /* no bed file → the full synth scene carries it */ });
+    });
+  }
+
+  // ---- the sparse felt-piano note that keeps the lobby alive ------------------
+  function felt(freq, when, peak, decayS, dest) {
+    var t = (when || ctx.currentTime);
+    var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2500; lp.Q.value = 0.5;
+    lp.connect(dest || master); lp.connect(rev);
+    [[freq, 1], [freq * 2, 0.3]].forEach(function (p, i) {   // octave-up "knock" decays 2× faster
+      var o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = p[0];
+      var e = gain(0);
+      o.connect(e); e.connect(lp);
+      e.gain.setValueAtTime(0, t);
+      e.gain.linearRampToValueAtTime(peak * p[1], t + 0.006);
+      e.gain.exponentialRampToValueAtTime(0.0004, t + decayS / (i ? 2 : 1));
+      o.start(t); o.stop(t + decayS + 0.1);
+    });
+  }
+  function scheduleMallets() {
+    function ring() {
+      if (!ctx) return;
+      var lvl = menuBus.gain.value;
+      if (!bedOn.menu && lvl > 0.02 && duck > 0.5) {        // the produced lobby has its own piano
+        var pool = MALLET_NOTES[CHORDS[chordIdx].name];
+        felt(pool[Math.floor(Math.random() * pool.length)], ctx.currentTime, 0.06 * Math.min(1, lvl * 2.4), 1.1);
+      }
+      setTimeout(ring, 3800 + Math.random() * 1400);       // one gentle note every ~2 bars
+    }
+    setTimeout(ring, 2500);
+    (function cycle() {                                     // the chord loop: crossfade, never re-trigger
+      if (!ctx) return;
+      chordIdx = (chordIdx + 1) % CHORDS.length;
+      chordBuses.forEach(function (b, i) {
+        b.gain.setTargetAtTime(i === chordIdx && !bedOn.menu ? 0.055 : 0.0001, ctx.currentTime, 2.5);
+      });
+      setTimeout(cycle, CHORD_S * 1000);
+    })();
+    chordBuses[0].gain.setTargetAtTime(0.055, ctx.currentTime, 2.5);
+  }
+
+  // ---- helpers ----------------------------------------------------------------
+  function sstep(a, b, x) { x = Math.max(0, Math.min(1, (x - a) / (b - a))); return x * x * (3 - 2 * x); }
+  function set(param, v, tc) { try { param.setTargetAtTime(v, ctx.currentTime, tc || 1.2); } catch (e) {} }
+
+  // ---- the control loop --------------------------------------------------------
+  function control() {
+    if (!ctx) return;
+    nowMs = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+    var stale = (nowMs - lastFrameAt) > 4000;
+    if (stale && SERVED) sTarget += (0.5 - sTarget) * 0.02; // no fresh signal → drift to neutral
+    s += (sTarget - s) * 0.03;                              // heavy smoothing — never flutters
+    duck += ((nowMs < duckUntil ? 0.4 : 1) - duck) * 0.05;  // interruption duck, smooth recovery
+
+    var menuT = (MENU_LVL[beat] || 0) * duck;
+    var sessT = (SESS_LVL[beat] || 0) * duck;
+    set(menuBus.gain, Math.max(0.0001, menuT), 2.2);        // long ramps = seamless scene handoffs
+    set(sessBus.gain, Math.max(0.0001, sessT), 2.2);
+
+    // session timbre follows the smoothed scalar — brightness, never new notes.
+    // Over a produced bed the adaptive layers ride at a supporting level.
+    var sv = sessT > 0.01 ? s : 0.45;
+    var lift = bedOn.session ? 0.62 : 1;
+    set(bright.gain, 0.55 * lift * sstep(0.30, 0.75, sv), 1.6);
+    set(drift.gain, 0.5 * lift * sstep(0.40, 0.08, sv), 1.6);
+    set(sessLP.frequency, 620 + 880 * sv, 1.8);
+
+    var fill = document.getElementById('meterFill'); if (fill) fill.style.width = (sv * 100).toFixed(0) + '%';
+    var stat = document.getElementById('stat');
+    if (stat) stat.textContent = 'room audio · ' + beat + ' · ' + (sessT > 0.01 ? 'session' : 'menu') + (SERVED ? '' : ' · preview');
+  }
+
+  // ---- UI cues (all in F major, so every sound is part of the music) -----------
+  function cueSelect() { // soft tap: A4+C5 (third+fifth of F — warm, not glassy)
+    if (!ctx) return; cueCount.select++;
+    var t = ctx.currentTime;
+    [[N.A4, 0.045], [N.C5, 0.03]].forEach(function (p, i) {
+      var o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = p[0];
+      var e = gain(0); o.connect(e); e.connect(master); e.connect(rev);
+      e.gain.setValueAtTime(0, t);
+      e.gain.linearRampToValueAtTime(p[1] * duck, t + 0.008 + i * 0.01);
+      e.gain.exponentialRampToValueAtTime(0.0004, t + 0.5);
+      o.start(t); o.stop(t + 0.55);
+    });
+  }
+
+  function cueTransition() { // the menu gliding forward: a soft settling breath + a quiet major-third dyad
+    if (!ctx) return; cueCount.transition++;
+    var t = ctx.currentTime;
+    var src = noiseSrc(1);
+    var bp = ctx.createBiquadFilter(); bp.type = 'lowpass'; bp.frequency.value = 1400; bp.Q.value = 0.8;
+    var g = gain(0);
+    src.connect(bp); bp.connect(g); g.connect(master); g.connect(rev);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.04 * duck, t + 0.14);
+    g.gain.exponentialRampToValueAtTime(0.0004, t + 0.65);
+    bp.frequency.setValueAtTime(1400, t); bp.frequency.exponentialRampToValueAtTime(850, t + 0.55); // settles DOWN — a rise reads as alarm
+    src.stop(t + 0.8);
+    [[N.A3, 0.02], [N.F4, 0.015]].forEach(function (p) {
+      var o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = p[0];
+      var e = gain(0); o.connect(e); e.connect(master); e.connect(rev);
+      e.gain.setValueAtTime(0, t);
+      e.gain.linearRampToValueAtTime(p[1] * duck, t + 0.2);
+      e.gain.exponentialRampToValueAtTime(0.0004, t + 0.9);
+      o.start(t); o.stop(t + 1);
+    });
+  }
+
+  function cueScroll(index) { // console-menu move: warm PS4/Xbox-style tone + a soft airy swell, stepping up per slide
+    if (!ctx) return; cueCount.scroll++;
+    var steps = [N.F4, N.G4, N.A4, N.C5];
+    var f = steps[Math.max(0, Math.min(steps.length - 1, (index || 1) - 1))];
+    var t = ctx.currentTime;
+    // a soft breath of air underneath (the console "move" whoosh), low and gentle
+    var src = noiseSrc(0.4);
+    var bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.6;
+    var ng = gain(0); src.connect(bp); bp.connect(ng); ng.connect(master); ng.connect(rev);
+    ng.gain.setValueAtTime(0, t);
+    ng.gain.linearRampToValueAtTime(0.018 * duck, t + 0.03);
+    ng.gain.exponentialRampToValueAtTime(0.0004, t + 0.28);
+    bp.frequency.setValueAtTime(700, t); bp.frequency.linearRampToValueAtTime(1150, t + 0.18);
+    src.stop(t + 0.4);
+    // a warm rounded tone (root + a soft octave below), gentle attack, medium decay
+    var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1600; lp.Q.value = 0.4;
+    [[f, 0.045, 'sine'], [f / 2, 0.03, 'triangle']].forEach(function (p) {
+      var o = ctx.createOscillator(); o.type = p[2]; o.frequency.value = p[0];
+      var e = gain(0); o.connect(e); e.connect(lp);
+      e.gain.setValueAtTime(0, t);
+      e.gain.linearRampToValueAtTime(p[1] * duck, t + 0.02);   // soft attack, not a click
+      e.gain.exponentialRampToValueAtTime(0.0004, t + 0.32);   // warmer, longer than the old 90ms tick
+      o.start(t); o.stop(t + 0.36);
+    });
+    lp.connect(master); var wet = gain(0.14); lp.connect(wet); wet.connect(rev);
+  }
+
+  function cueJoin() { // a star lands on the constellation: the Duolingo "correct!" bloom
+    if (!ctx) return; cueCount.join++;
+    var t = ctx.currentTime;
+    // A brighter, rewarding ascent — C4 → F4 → A4 → C5 (the achievement arc),
+    // landing open, then a high add9 sparkle a beat later. Warm felt/celesta with
+    // a long bloom reverb, and a shimmer on top so it reads as a little win.
+    felt(N.C4, t,        0.11, 0.9,  revLong);
+    felt(N.F4, t + 0.08, 0.11, 0.9,  revLong);
+    felt(N.A4, t + 0.16, 0.12, 1.2,  revLong);
+    felt(N.C5, t + 0.26, 0.13, 1.5,  revLong);   // lands UP an octave — the reward peak
+    felt(N.G4, t + 0.30, 0.05, 1.1,  revLong);   // add9 warmth under the peak
+    // a bright sparkle a moment after the landing (the Duolingo shimmer)
+    felt(N.C5 * 2, t + 0.42, 0.05, 1.6, revLong);
+    felt(N.G4 * 2, t + 0.50, 0.035, 1.4, revLong);
+  }
+
+  // ---- interruption: a phone notification, on purpose --------------------------
+  // This is the one sound that is SUPPOSED to break the spell — it's the whole
+  // experiment. A message-app "ding": two quick bright bell tones rising a
+  // fourth, struck (fast attack, short decay) with a slightly inharmonic upper
+  // partial so it reads as a device, not as the room's music. The bed ducks
+  // underneath so the ding cuts through the way a real notification does.
+  function fireInterruption() {
+    duckUntil = nowMs + 1900;
+    if (!ctx) return;
+    var t = ctx.currentTime;
+    function ding(freq, at, peak) {
+      var o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
+      var p = ctx.createOscillator(); p.type = 'sine'; p.frequency.value = freq * 2.74; // bell-ish partial
+      var eo = gain(0), ep = gain(0);
+      var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6000;
+      o.connect(eo); p.connect(ep); eo.connect(lp); ep.connect(lp);
+      lp.connect(master); lp.connect(rev);
+      eo.gain.setValueAtTime(0, at); ep.gain.setValueAtTime(0, at);
+      eo.gain.linearRampToValueAtTime(peak, at + 0.004);
+      ep.gain.linearRampToValueAtTime(peak * 0.30, at + 0.003);
+      eo.gain.exponentialRampToValueAtTime(0.0004, at + 0.42);
+      ep.gain.exponentialRampToValueAtTime(0.0004, at + 0.16); // partial dies first — a struck bell
+      o.start(at); o.stop(at + 0.5); p.start(at); p.stop(at + 0.5);
+    }
+    ding(N.C5 * 2, t, 0.16);            // C6
+    ding(N.F5 * 2, t + 0.085, 0.15);    // F6 — the rising fourth of a message alert
+  }
+
+  // ---- inputs -----------------------------------------------------------------
+  function relEng(v) {
+    if (v == null || !isFinite(v)) return null;
+    engHist.push(v); if (engHist.length > 120) engHist.shift();
+    var lo = Infinity, hi = -Infinity;
+    for (var i = 0; i < engHist.length; i++) { if (engHist[i] < lo) lo = engHist[i]; if (engHist[i] > hi) hi = engHist[i]; }
+    return (hi - lo) > 1e-9 ? (v - lo) / (hi - lo) : 0.5;
+  }
+
+  function onMsg(m) {
+    if (m.type === 'eeg/frame') {
+      lastFrameAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      var sq = typeof m.signalQuality === 'number' ? m.signalQuality : 1;
+      if (sq >= 0.3) { var r = relEng(m.engagementRel); if (r != null) { sTarget = r; lastGood = r; } }
+      // low signal quality → freeze at lastGood: never lurch on a dropped bud
+    } else if (m.type === 'eeg/brainwaves') {
+      if ((nowMs - lastFrameAt) > 2000 && typeof m.beta === 'number') {
+        var ei = m.beta / ((m.alpha || 0) + (m.theta || 0) + 1e-6);
+        var r2 = relEng(ei); if (r2 != null) sTarget = r2;
+      }
+    } else if (m.type === 'interruption/fire') {
+      fireInterruption();
+    } else if (m.type === 'ui/cue') {
+      cueSelect(); // orchestrator gates this to non-session beats
+    } else if (m.type === 'reveal/step') {
+      if (typeof m.index === 'number' && m.index !== lastRevealIndex) {
+        lastRevealIndex = m.index; cueScroll(m.index);
+      }
+    } else if (m.type === 'constellation/join') {
+      setTimeout(cueJoin, 2400); // the dot's flight is 2400ms — ring at the landing
+    } else if (m.type === 'session/state') {
+      if (m.beat && m.beat !== beat && CUE_BEATS[m.beat] && running) cueTransition();
+      if (m.beat && m.beat !== 'standby') lastRevealIndex = 0; // fresh reveal next session
+      if (m.beat) beat = m.beat;
+      if (m.beat === 'idle' || m.beat === 'welcome') { engHist = []; sTarget = 0.5; }
+    }
+  }
+
+  function connect() {
+    if (!location.host) return;
+    var ws; try { ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'); } catch (e) { return; }
+    // role 'audio', not 'tv': hello-ing as a TV made every audio (re)connect
+    // trigger the room's TV re-sends (tv-reveal re-ran its draw-in on the real
+    // wall) and let the audio host satisfy any "is a TV connected" check. All
+    // the messages this page consumes are broadcast role-free.
+    ws.onopen = function () { ws.send(JSON.stringify({ type: 'client/hello', role: 'audio', t: Date.now() })); connect._n = 0; };
+    ws.onmessage = function (ev) { var m; try { m = JSON.parse(ev.data); } catch (e) { return; } onMsg(m); };
+    ws.onerror = function () { try { ws.close(); } catch (e) {} };
+    // Reconnect forever, with capped jittered backoff. A fixed retry tick meant
+    // every surface in the room hammered a flapping access point in lockstep;
+    // the jitter spreads them out. This never gives up and never shows an error:
+    // a Wi-Fi drop is a pause, not a failure.
+    ws.onclose = function () {
+      connect._n = (connect._n || 0) + 1;
+      var b = Math.min(8000, 500 * Math.pow(2, Math.min(connect._n, 4)));
+      setTimeout(connect, b + Math.random() * b * 0.4);
+    };
+  }
+
+  // ---- boot -------------------------------------------------------------------
+  function begin() {
+    if (running) return; running = true;
+    build();
+    document.getElementById('start').classList.add('hide');
+    setInterval(control, 60);
+    // standalone preview: alternate the scenes + drive a synthetic breath so a
+    // listener hears both the lobby and the session. ?static disables for tests.
+    if (!SERVED && location.search.indexOf('static') === -1) {
+      setInterval(function () {
+        var sec = ((typeof performance !== 'undefined' ? performance.now() : Date.now())) / 1000;
+        sTarget = 0.5 + 0.42 * Math.sin(sec * 0.05);
+        lastFrameAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        var cyc = sec % 55;
+        beat = cyc < 35 ? 'reading' : 'idle';
+        if (Math.floor(sec) % 30 === 0 && (sec % 1) < 0.06 && beat === 'reading') fireInterruption();
+      }, 250);
+    }
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+  }
+
+  // Auto-start ONLY where the room intends sound: the app's OWN hidden audio
+  // window over http://127.0.0.1 (where Electron grants gesture-free audio) or
+  // an explicit ?autoplay (test harness). A design preview / editor pane stays
+  // SILENT behind the tap overlay — surprise audio on a dev box is the audio
+  // version of surprise printing. And on a real web host (https), the browser
+  // keeps the AudioContext suspended until a genuine tap anyway — auto-hiding
+  // the overlay there produced silence with no way in, so the overlay stays
+  // until the visitor taps.
+  var LOCAL_HOST = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+  window.addEventListener('load', function () {
+    connect();
+    if ((SERVED && LOCAL_HOST) || location.search.indexOf('autoplay') !== -1) begin();
+    var kick = function () { begin(); if (ctx && ctx.state === 'suspended') ctx.resume(); document.getElementById('start').classList.add('hide'); };
+    document.getElementById('start').addEventListener('click', kick);
+    document.addEventListener('keydown', kick, { once: true });
+  });
+
+  // debug hook (harmless in production) — lets a test harness inject messages and
+  // read the graph state without a WebSocket or a listening ear.
+  window.__audio = {
+    info: function () {
+      return {
+        served: SERVED, running: running, state: ctx ? ctx.state : 'none',
+        beat: beat, s: +s.toFixed(3), sTarget: +sTarget.toFixed(3), duck: +duck.toFixed(2),
+        chord: CHORDS[chordIdx].name,
+        beds: { menu: bedOn.menu, session: bedOn.session, menuLoop: bedLoop.menu, sessionLoop: bedLoop.session },
+        cues: { select: cueCount.select, transition: cueCount.transition,
+                scroll: cueCount.scroll, join: cueCount.join },
+        gains: ctx ? {
+          master: +master.gain.value.toFixed(4),
+          menu: +menuBus.gain.value.toFixed(4), session: +sessBus.gain.value.toFixed(4),
+          bright: +bright.gain.value.toFixed(3), drift: +drift.gain.value.toFixed(3),
+          cutoff: Math.round(sessLP.frequency.value)
+        } : null
+      };
+    },
+    feed: function (m) { onMsg(m); },
+    set: function (v) { sTarget = v; lastFrameAt = (typeof performance !== 'undefined' ? performance.now() : Date.now()); }
+  };
+})();
+</script>
+</body>
+</html>

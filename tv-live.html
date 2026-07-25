@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Focus Room — TV · Live Session</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #000; overflow: hidden; }
+  body { font-family: var(--font-sans); }
+
+  /* full-viewport stage letterboxes the fixed TV canvas on black */
+  #stage {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #000;
+  }
+  #tv {
+    position: relative;
+    width: 1920px; height: 1080px;
+    transform-origin: center center;
+    background:
+      radial-gradient(120% 90% at 50% 118%, rgba(221,202,142,0.05), transparent 60%),
+      radial-gradient(140% 120% at 50% 50%, #141414 0%, #0B0B0A 70%, #060605 100%);
+    overflow: hidden;
+  }
+
+  /* ambient warm light, bottom-weighted, drifting */
+  .glow {
+    position: absolute; border-radius: 50%;
+    filter: var(--blur-glow); pointer-events: none;
+    will-change: transform;
+  }
+  .glow.a { width: 1100px; height: 700px; left: 50%; bottom: -340px; transform: translateX(-50%);
+            background: rgba(221,202,142,0.10); }
+  .glow.b { width: 720px; height: 520px; left: 12%; top: 36%;
+            background: var(--c-signal-faint); }
+
+  /* faint screen-edge bracket dots */
+  .corner { position: absolute; width: 4px; height: 4px; border-radius: 50%;
+            background: var(--dot); opacity: 0.18; }
+
+  /* header chrome — quiet, top-left */
+  .head { position: absolute; top: 76px; left: 120px; right: 120px;
+          display: flex; justify-content: space-between; align-items: flex-start; }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand .mark { width: 13px; height: 13px; border-radius: 50%;
+                 background: var(--c-signal); box-shadow: 0 0 22px 2px rgba(221,202,142,0.5); }
+  .brand .label { color: var(--fg-muted); font-size: 17px; letter-spacing: var(--tr-mono); }
+  .live { display: flex; align-items: center; gap: 14px; color: var(--fg-muted);
+          font-size: 17px; letter-spacing: var(--tr-mono); }
+  .live .pip { width: 10px; height: 10px; border-radius: 50%; background: var(--c-signal);
+               box-shadow: 0 0 16px 2px var(--c-signal-glow); animation: breathe 5.6s var(--ease-in-out) infinite; }
+  @keyframes breathe { 0%,100% { opacity: 0.95; } 50% { opacity: 0.5; } }
+
+  /* the big soft state word */
+  .state { position: absolute; left: 120px; top: 168px; }
+  .state .word {
+    font-family: var(--font-display); font-weight: 400; font-size: 132px;
+    line-height: 1; letter-spacing: -0.03em; color: var(--fg);
+    transition: opacity 620ms var(--ease-in-out), transform 620ms var(--ease-in-out);
+  }
+  .state.swap .word { opacity: 0; transform: translateY(14px); }
+
+  /* instrument caption, bottom-left — keeps the honesty frame visible */
+  .caption { position: absolute; left: 120px; bottom: 84px;
+             color: var(--fg-muted); font-size: 19px; letter-spacing: var(--tr-mono);
+             font-family: var(--font-mono); text-transform: uppercase; }
+  /* the relative axis hint, far right — "high / low for you", no numbers */
+  .axis { position: absolute; right: 120px; top: 300px; height: 480px;
+          display: flex; flex-direction: column; justify-content: space-between;
+          align-items: flex-end; text-align: right; }
+  .axis span { color: var(--fg-faint); font-family: var(--font-mono);
+               font-size: 18px; letter-spacing: var(--tr-mono-sm); text-transform: uppercase; }
+
+  svg.plot { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+  /* preview controls — OUTSIDE the scaled canvas, hidden in kiosk */
+  #controls {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 10px; z-index: 50;
+    background: rgba(20,20,20,0.82); border: 1px solid var(--hair-strong);
+    backdrop-filter: blur(12px); border-radius: var(--r-pill);
+    padding: 8px 10px; font-family: var(--font-mono); font-size: 11px;
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-muted);
+    transition: opacity var(--dur-base); 
+  }
+  #controls.hide { opacity: 0; pointer-events: none; }
+  #controls button, #controls select {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--fg); background: transparent;
+    border: 1px solid var(--hair-strong); border-radius: var(--r-pill);
+    padding: 7px 13px; cursor: pointer; transition: all var(--dur-fast);
+  }
+  #controls button:hover, #controls select:hover { color: var(--fg-strong); border-color: var(--fg-muted); }
+  #controls .sep { width: 1px; height: 18px; background: var(--hair-strong); }
+  #controls .hint { color: var(--fg-faint); padding: 0 4px; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div id="tv">
+      <div class="glow a" id="glowA"></div>
+      <div class="glow b" id="glowB"></div>
+
+      <div class="head">
+        <div class="brand">
+          <span class="mark"></span>
+          <span class="label">ZONE — THE FOCUS ROOM</span>
+        </div>
+        <div class="live"><span class="pip"></span><span>READING SESSION · LIVE</span></div>
+      </div>
+
+      <div class="state" id="stateWrap"><div class="word" id="stateWord">settling</div></div>
+
+      <div class="axis">
+        <span>High&nbsp;·&nbsp;for&nbsp;you</span>
+        <span>Low&nbsp;·&nbsp;for&nbsp;you</span>
+      </div>
+
+      <svg class="plot" id="plot" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="lineFade" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%"  stop-color="var(--c-signal)" stop-opacity="0.25"/>
+            <stop offset="55%" stop-color="var(--c-signal)" stop-opacity="0.85"/>
+            <stop offset="100%" stop-color="var(--c-signal)" stop-opacity="1"/>
+          </linearGradient>
+          <linearGradient id="areaFade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"  stop-color="var(--c-signal)" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="var(--c-signal)" stop-opacity="0"/>
+          </linearGradient>
+          <filter id="soft" x="-30%" y="-60%" width="160%" height="220%">
+            <feGaussianBlur stdDeviation="6"/>
+          </filter>
+        </defs>
+
+        <!-- faint running baseline (the session's low reference) -->
+        <line id="baseline" x1="120" y1="0" x2="1800" y2="0" stroke="var(--hair)" stroke-width="1.5" stroke-dasharray="2 10"/>
+
+        <path id="area" d="" fill="url(#areaFade)"/>
+        <path id="lineGlow" d="" fill="none" stroke="var(--c-signal)" stroke-opacity="0.28"
+              stroke-width="9" stroke-linecap="round" stroke-linejoin="round" filter="url(#soft)"/>
+        <path id="line" d="" fill="none" stroke="url(#lineFade)" stroke-width="4.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+
+        <!-- playhead -->
+        <circle id="headHalo" r="26" fill="var(--c-signal)" opacity="0.16"/>
+        <circle id="head" r="8" fill="var(--c-signal)"/>
+        <circle id="headCore" r="3.5" fill="#fff"/>
+      </svg>
+
+      <div class="caption">Your focus — relative to your own session today</div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button id="btnPlay">Pause</button>
+    <button id="btnRestart">Restart</button>
+    <span class="sep"></span>
+    <span class="hint">Archetype</span>
+    <select id="selArch">
+      <option value="deep">Deep Diver</option>
+      <option value="igniter">Quick Igniter</option>
+      <option value="steady">Steady Burner</option>
+      <option value="sprint">Sprinter</option>
+    </select>
+    <span class="sep"></span>
+    <span class="hint">Pace</span>
+    <select id="selSpeed">
+      <option value="90">Real-ish (90s)</option>
+      <option value="60" selected>60s</option>
+      <option value="30">30s</option>
+      <option value="15">Fast (15s)</option>
+    </select>
+    <button id="btnJump">→ Interruption</button>
+    <span class="sep"></span>
+    <span class="hint">Seek</span>
+    <input id="scrub" type="range" min="0" max="1000" value="0" style="width:120px;accent-color:var(--c-signal);">
+    <span class="sep"></span>
+    <button id="btnHide">Hide</button>
+  </div>
+
+  <script src="lib/focusline.js"></script>
+  <script>
+  (function () {
+    // ---- scale the fixed TV canvas to fit the viewport ----
+    var tv = document.getElementById('tv');
+    function fit() {
+      var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+      tv.style.transform = 'scale(' + s + ')';
+    }
+    window.addEventListener('resize', fit); fit();
+
+    // served in the room (truthy host) vs opened as a file for design preview
+    var SERVED = !!location.host;
+
+    // ---- plot geometry ----
+    var BOX = { x: 150, y: 320, w: 1620, h: 470 };
+    var line = document.getElementById('line');
+    var lineGlow = document.getElementById('lineGlow');
+    var area = document.getElementById('area');
+    var head = document.getElementById('head');
+    var headHalo = document.getElementById('headHalo');
+    var headCore = document.getElementById('headCore');
+    var baseline = document.getElementById('baseline');
+    var stateWord = document.getElementById('stateWord');
+    var stateWrap = document.getElementById('stateWrap');
+
+    // baseline sits at the low reference (v ≈ 0.30) — a synthetic prop, so it is
+    // preview-only; in the room nothing fabricated is drawn
+    if (SERVED) {
+      baseline.setAttribute('display', 'none');
+    } else {
+      baseline.setAttribute('y1', (BOX.y + (1 - 0.30) * BOX.h).toFixed(1));
+      baseline.setAttribute('y2', (BOX.y + (1 - 0.30) * BOX.h).toFixed(1));
+    }
+
+    var arch = 'deep';
+    var DURATION = 60000;     // ms for full session
+    var playing = true;
+    var p = 0;                // session fraction 0..1
+    var last = performance.now();
+    var curWord = 'settling';
+    var scrub = document.getElementById('scrub');
+
+    // ---- LIVE MODE ----
+    // When this surface is served inside the app it drives the line from the
+    // real eeg/frame stream (Document.pdf change #1). The synthetic ARCH draw
+    // above stays as a standalone-preview fallback when opened as a file.
+    var liveMode = false;
+    var liveSamples = [];     // {t: seconds-from-session-start, v: relative 0..1}
+    var SPAN = 420;           // seconds across the plot width (the ~7-min Live beat)
+
+    var wordTimer = null;
+    function setWord(w) {
+      if (w === curWord) return;
+      curWord = w;
+      stateWrap.classList.add('swap');
+      // swap the text only after the 620ms fade-out completes, then fade back in.
+      // one timer at a time — a rapid second word must not hard-cut mid-fade.
+      clearTimeout(wordTimer);
+      wordTimer = setTimeout(function () { stateWord.textContent = w; stateWrap.classList.remove('swap'); wordTimer = null; }, 620);
+    }
+    function clearWord() {
+      // cancel any pending swap so a stale timer can't ghost a word onto a cleared wall
+      clearTimeout(wordTimer); wordTimer = null;
+      curWord = ''; stateWord.textContent = ''; stateWrap.classList.remove('swap');
+    }
+
+    function render() {
+      var res = FocusLine.linePathTo(arch, BOX, Math.max(0.0001, p), { samples: 200 });
+      line.setAttribute('d', res.d);
+      lineGlow.setAttribute('d', res.d);
+      // area only under the drawn portion
+      var ad = res.d + ' L ' + res.head.x.toFixed(1) + ' ' + (BOX.y + BOX.h) +
+               ' L ' + BOX.x + ' ' + (BOX.y + BOX.h) + ' Z';
+      area.setAttribute('d', ad);
+      head.setAttribute('cx', res.head.x); head.setAttribute('cy', res.head.y);
+      headHalo.setAttribute('cx', res.head.x); headHalo.setAttribute('cy', res.head.y);
+      headCore.setAttribute('cx', res.head.x); headCore.setAttribute('cy', res.head.y);
+      setWord(FocusLine.stateWord(arch, p));
+    }
+
+    // render the live line from accumulated real samples, through the kept
+    // FocusLine rendering primitives (project + smooth) — calm, one color, no numbers.
+    function renderLive() {
+      if (!liveSamples.length) return;
+      // reading length is guest-controlled — widen the window once the session
+      // outgrows the ~7-min span so the head never pins to the right edge
+      var span = Math.max(SPAN, liveSamples[liveSamples.length - 1].t);
+      var pix = liveSamples.map(function (s) {
+        var frac = Math.min(1, s.t / span);
+        return FocusLine.project({ t: frac, v: s.v }, BOX);
+      });
+      var d = FocusLine.smooth(pix, 1);
+      line.setAttribute('d', d);
+      lineGlow.setAttribute('d', d);
+      var hd = pix[pix.length - 1];
+      var ad = d + ' L ' + hd.x.toFixed(1) + ' ' + (BOX.y + BOX.h) +
+               ' L ' + pix[0].x.toFixed(1) + ' ' + (BOX.y + BOX.h) + ' Z';
+      area.setAttribute('d', ad);
+      head.setAttribute('cx', hd.x); head.setAttribute('cy', hd.y);
+      headHalo.setAttribute('cx', hd.x); headHalo.setAttribute('cy', hd.y);
+      headCore.setAttribute('cx', hd.x); headCore.setAttribute('cy', hd.y);
+    }
+
+    function clearPlot() {
+      line.setAttribute('d', ''); lineGlow.setAttribute('d', ''); area.setAttribute('d', '');
+      head.setAttribute('cx', -100); head.setAttribute('cy', -100);
+      headHalo.setAttribute('cx', -100); headHalo.setAttribute('cy', -100);
+      headCore.setAttribute('cx', -100); headCore.setAttribute('cy', -100);
+    }
+
+    function enterLive() {
+      liveMode = true; playing = false;
+      liveSamples = [];
+      controls.classList.add('hide');           // kiosk: no preview controls
+      clearWord();                              // no fabricated state word
+      clearPlot();
+    }
+
+    function connectLive() {
+      if (!location.host) return;                // opened as a file → synthetic preview
+      var ws;
+      try { ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'); }
+      catch (e) { return; }
+      ws.onopen = function () {
+        connectLive._n = 0;   // a clean open resets the backoff ladder
+        ws.send(JSON.stringify({ type: 'client/hello', role: 'tv', t: Date.now() }));
+      };
+      ws.onmessage = function (ev) {
+        var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (m.type === 'eeg/frame') {
+          if (!liveMode) enterLive();
+          liveSamples.push({ t: (m.tRel != null ? m.tRel : m.t / 1000),
+                             v: (m.engagementRel != null ? m.engagementRel : 0.5) });
+          if (liveSamples.length > 3000) liveSamples.shift();
+          renderLive();
+          if (m.stateWord) setWord(m.stateWord);
+        } else if (m.type === 'session/state' && (m.beat === 'idle' || m.beat === 'welcome')) {
+          // a fresh session is starting — clear the prior guest's line and word
+          if (liveMode) {
+            liveSamples = [];
+            clearPlot();
+            clearWord();
+          }
+        }
+      };
+      ws.onerror = function () { try { ws.close(); } catch (e) {} };
+      // Reconnect forever, with capped jittered backoff. A fixed retry tick meant
+      // every surface in the room hammered a flapping access point in lockstep;
+      // the jitter spreads them out. This never gives up and never shows an error:
+      // a Wi-Fi drop is a pause, not a failure.
+      ws.onclose = function () {
+        connectLive._n = (connectLive._n || 0) + 1;
+        var b = Math.min(8000, 500 * Math.pow(2, Math.min(connectLive._n, 4)));
+        setTimeout(connectLive, b + Math.random() * b * 0.4);
+      };
+    }
+
+    function tick(now) {
+      var dt = now - last; last = now;
+      if (playing && !liveMode) {
+        p += dt / DURATION;
+        if (p >= 1) { p = 1; playing = false; document.getElementById('btnPlay').textContent = 'Replay'; }
+        render();
+        scrub.value = Math.round(p * 1000);
+      }
+      // drift the ambient lights
+      var t = now / 1000;
+      document.getElementById('glowA').style.transform =
+        'translateX(-50%) translate(' + (Math.sin(t/9)*16).toFixed(1) + 'px,' + (Math.cos(t/11)*10).toFixed(1) + 'px)';
+      document.getElementById('glowB').style.transform =
+        'translate(' + (Math.cos(t/13)*18).toFixed(1) + 'px,' + (Math.sin(t/10)*12).toFixed(1) + 'px)';
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+    if (!SERVED) render();       // synthetic first paint is preview-only
+
+    // ---- controls ----
+    var btnPlay = document.getElementById('btnPlay');
+    btnPlay.onclick = function () {
+      if (p >= 1) { p = 0; playing = true; btnPlay.textContent = 'Pause'; last = performance.now(); return; }
+      playing = !playing; btnPlay.textContent = playing ? 'Pause' : 'Play';
+    };
+    document.getElementById('btnRestart').onclick = function () {
+      p = 0; playing = true; btnPlay.textContent = 'Pause'; last = performance.now(); render();
+    };
+    document.getElementById('selArch').onchange = function (e) {
+      arch = e.target.value; curWord = ''; render();
+    };
+    document.getElementById('selSpeed').onchange = function (e) {
+      DURATION = parseInt(e.target.value, 10) * 1000;
+    };
+    document.getElementById('btnJump').onclick = function () {
+      var info = FocusLine.interruptInfo(arch);
+      p = Math.max(0, info.start - 0.04); playing = true; btnPlay.textContent = 'Pause'; last = performance.now();
+    };
+    scrub.oninput = function () {
+      playing = false; btnPlay.textContent = 'Play';
+      p = parseInt(scrub.value, 10) / 1000; render();
+    };
+    var controls = document.getElementById('controls');
+    document.getElementById('btnHide').onclick = function () { controls.classList.add('hide'); };
+    // !SERVED, same as tv-signal: the preview controls draw synthetic data
+    // (archetype curve, scrubber, state word) over the live plot — never one
+    // keypress away from a guest-facing wall.
+    document.addEventListener('keydown', function (e) { if (e.key === 'c' && !SERVED) controls.classList.toggle('hide'); });
+
+    // corner dots
+    var positions = [[60,60],[1860,60],[60,1020],[1860,1020]];
+    positions.forEach(function (pos) {
+      var d = document.createElement('div'); d.className = 'corner';
+      d.style.left = pos[0] + 'px'; d.style.top = pos[1] + 'px'; tv.appendChild(d);
+    });
+
+    // go live if we're being served inside the app — boot blank/live-idle and
+    // draw only what real eeg/frame samples put on screen
+    if (SERVED) enterLive();
+    connectLive();
+  })();
+  </script>
+</body>
+</html>

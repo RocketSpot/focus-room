@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Focus Room — TV · Signal</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #000; overflow: hidden; }
+  body { font-family: var(--font-sans); }
+
+  /* the five brainwave-band line colours — muted, warm, on-brand; NOT the alarm
+     orange (#FF5714), which stays reserved for interruption. Beta = signal gold. */
+  /* band colours live in tokens.css (shared with tv-reveal + the iPad key) */
+
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; }
+  #tv {
+    position: relative; width: 1920px; height: 1080px; transform-origin: center center;
+    background:
+      radial-gradient(120% 90% at 50% 118%, rgba(221,202,142,0.05), transparent 60%),
+      radial-gradient(140% 120% at 50% 50%, #141414 0%, #0B0B0A 70%, #060605 100%);
+    overflow: hidden;
+  }
+
+  .glow { position: absolute; border-radius: 50%; filter: var(--blur-glow); pointer-events: none; will-change: transform; }
+  .glow.a { width: 1100px; height: 700px; left: 50%; bottom: -360px; transform: translateX(-50%); background: rgba(221,202,142,0.08); }
+  .glow.b { width: 700px; height: 500px; left: 10%; top: 30%; background: var(--c-signal-faint); }
+
+  .corner { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: var(--dot); opacity: 0.18; }
+
+  .head { position: absolute; top: 72px; left: 120px; right: 120px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand .mark { width: 13px; height: 13px; border-radius: 50%; background: var(--c-signal); box-shadow: 0 0 22px 2px rgba(221,202,142,0.5); }
+  .brand .label { color: var(--fg-muted); font-size: 17px; letter-spacing: var(--tr-mono); }
+  .live { display: flex; align-items: center; gap: 14px; color: var(--fg-muted); font-size: 17px; letter-spacing: var(--tr-mono); }
+  .live .pip { width: 10px; height: 10px; border-radius: 50%; background: var(--c-signal); box-shadow: 0 0 16px 2px var(--c-signal-glow); animation: breathe 5.6s var(--ease-in-out) infinite; }
+  @keyframes breathe { 0%,100% { opacity: 0.95; } 50% { opacity: 0.5; } }
+
+  /* the soft state word — the meaning anchor above the waves */
+  .state { position: absolute; left: 120px; top: 146px; }
+  .state .word { font-family: var(--font-display); font-weight: 400; font-size: 76px; line-height: 1; letter-spacing: -0.03em; color: var(--fg);
+    transition: opacity 620ms var(--ease-in-out), transform 620ms var(--ease-in-out); }
+  .state.swap .word { opacity: 0; transform: translateY(14px); }
+
+  svg.plot { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+  /* legend — the five rhythms, colour + glyph + name + plain descriptor */
+  .legend { position: absolute; left: 120px; right: 120px; bottom: 132px; display: flex; gap: 46px; align-items: center; flex-wrap: wrap; }
+  .lg { display: flex; align-items: baseline; gap: 12px; }
+  .lg .sw { width: 26px; height: 4px; border-radius: 2px; align-self: center; }
+  .lg .gl { font-family: var(--font-display); font-size: 26px; line-height: 1; }
+  .lg .nm { color: var(--fg-muted); font-family: var(--font-mono); font-size: 15px; letter-spacing: var(--tr-mono-sm); text-transform: uppercase; }
+  .lg .ds { color: var(--fg-faint); font-family: var(--font-mono); font-size: 14px; letter-spacing: var(--tr-mono-sm); text-transform: uppercase; }
+
+  .caption { position: absolute; left: 120px; bottom: 60px; color: var(--fg-muted); font-size: 16px; letter-spacing: var(--tr-mono); font-family: var(--font-mono); text-transform: uppercase; }
+
+  /* preview controls — outside the scaled canvas, hidden in kiosk */
+  #controls { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; z-index: 50;
+    background: rgba(20,20,20,0.82); border: 1px solid var(--hair-strong); backdrop-filter: blur(12px); border-radius: var(--r-pill);
+    padding: 8px 10px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-muted); transition: opacity var(--dur-base); }
+  #controls.hide { opacity: 0; pointer-events: none; }
+  #controls button, #controls select { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg);
+    background: transparent; border: 1px solid var(--hair-strong); border-radius: var(--r-pill); padding: 7px 13px; cursor: pointer; transition: all var(--dur-fast); }
+  #controls button:hover, #controls select:hover { color: var(--fg-strong); border-color: var(--fg-muted); }
+  #controls .sep { width: 1px; height: 18px; background: var(--hair-strong); }
+  #controls .hint { color: var(--fg-faint); padding: 0 4px; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div id="tv">
+      <div class="glow a" id="glowA"></div>
+      <div class="glow b" id="glowB"></div>
+
+      <div class="head">
+        <div class="brand"><span class="mark"></span><span class="label">ZONE — THE FOCUS ROOM</span></div>
+        <div class="live"><span class="pip"></span><span>SIGNAL CHECK · LIVE</span></div>
+      </div>
+
+      <div class="state" id="stateWrap"><div class="word" id="stateWord">settling</div></div>
+
+      <svg class="plot" id="plot" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+        <defs>
+          <filter id="soft" x="-8%" y="-40%" width="116%" height="180%"><feGaussianBlur stdDeviation="5"/></filter>
+        </defs>
+        <g id="grid" stroke="var(--hair)" stroke-width="1.2" stroke-dasharray="2 12"></g>
+        <!-- one soft glow line + one crisp line per band (filled in by JS) -->
+        <g id="waveGlows"></g>
+        <g id="waveLines"></g>
+      </svg>
+
+      <div class="legend" id="legend"></div>
+
+      <div class="caption">Your five rhythms, live from the earbud · relative to your own session · no scores</div>
+    </div>
+  </div>
+
+  <!-- hidden by default: this panel drives SYNTHETIC data and must never be a
+       keypress away from the guest wall. The script keeps it hidden when SERVED. -->
+  <div id="controls" class="hide">
+    <button id="btnPlay">Pause</button>
+    <button id="btnRestart">Restart</button>
+    <span class="sep"></span>
+    <span class="hint">Archetype</span>
+    <select id="selArch">
+      <option value="deep">Deep Diver</option>
+      <option value="igniter">Quick Igniter</option>
+      <option value="steady">Steady Burner</option>
+      <option value="sprint">Sprinter</option>
+    </select>
+    <span class="sep"></span>
+    <span class="hint">Pace</span>
+    <select id="selSpeed">
+      <option value="90">90s</option>
+      <option value="60" selected>60s</option>
+      <option value="30">30s</option>
+      <option value="15">15s</option>
+    </select>
+    <span class="sep"></span>
+    <button id="btnHide">Hide</button>
+  </div>
+
+  <script src="lib/focusline.js"></script>
+  <script>
+  (function () {
+    // ---- scale the fixed TV canvas to fit the viewport ----
+    var tv = document.getElementById('tv');
+    function fit() { var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080); tv.style.transform = 'scale(' + s + ')'; }
+    window.addEventListener('resize', fit); fit();
+
+    // served in the room = live; opened as a file (or ?preview over LAN for QA) = synthetic design preview
+    var SERVED = !!location.host && location.search.indexOf('preview') === -1;
+    // HONESTY: ?preview on the SERVED host runs the synthetic driver on a real
+    // TV — that fabricated motion must carry a label (sim is always labeled).
+    if (location.host && !SERVED) {
+      var _pv = document.createElement('div');
+      _pv.textContent = 'PREVIEW \u00b7 SYNTHETIC DATA';
+      _pv.style.cssText = 'position:fixed;top:14px;right:16px;z-index:999;font-family:var(--font-mono),monospace;'
+        + 'font-size:11px;letter-spacing:0.14em;color:#E0A657;border:1px solid rgba(224,166,87,0.5);'
+        + 'padding:5px 9px;border-radius:4px;background:rgba(0,0,0,0.35);pointer-events:none;';
+      document.body.appendChild(_pv);
+    }
+
+    // the waves are REAL signal — like the old hero line, they stay dark on the room
+    // wall until the guest's own data arrives (never a fabricated resting state).
+    var instrOn = !SERVED;
+
+    // ---- chart geometry ----
+    var CHART = { x: 120, y: 300, w: 1680, h: 500 };
+    var WINDOW_S = 30;                 // seconds of history shown (a calm scrolling scope)
+    var NORM_S = 90;                   // longer baseline each band is scaled against, so a genuinely-flat rhythm reads flat (no amplified noise)
+    var AMP = 0.24;                    // vertical swing around a band's lane
+    var FLAT_K = 0.40;                 // a band only "moves" once its range exceeds 40% of its own level — below that it's noise → reads flat
+
+    // ---- the five bands ----
+    // lane = resting vertical position (0 bottom .. 1 top): slow rhythms sit low,
+    // fast rhythms high — the standard frequency stack, so the chart reads intuitively.
+    var BANDS = [
+      { k: 'delta', gl: 'δ', nm: 'Delta', ds: 'slow waves',        col: 'var(--w-delta)', lane: 0.20 },
+      { k: 'theta', gl: 'θ', nm: 'Theta', ds: 'internal thinking', col: 'var(--w-theta)', lane: 0.38 },
+      { k: 'alpha', gl: 'α', nm: 'Alpha', ds: 'relaxed alertness', col: 'var(--w-alpha)', lane: 0.53 },
+      { k: 'beta',  gl: 'β', nm: 'Beta',  ds: 'focused thinking',  col: 'var(--w-beta)',  lane: 0.70 },
+      { k: 'gamma', gl: 'γ', nm: 'Gamma', ds: 'peak processing',   col: 'var(--w-gamma)', lane: 0.85 }
+    ];
+    var buf = {}; BANDS.forEach(function (b) { buf[b.k] = []; });   // per band: [{t, raw}]
+
+    // build the SVG line pairs (soft glow + crisp) and the legend
+    var glowEl = {}, lineEl = {};
+    (function build() {
+      var svgns = 'http://www.w3.org/2000/svg';
+      var gG = document.getElementById('waveGlows'), gL = document.getElementById('waveLines'), grid = document.getElementById('grid');
+      // faint gridlines (structure only, no labels/numbers)
+      [0.2, 0.4, 0.6, 0.8].forEach(function (f) {
+        var y = CHART.y + CHART.h * f;
+        var ln = document.createElementNS(svgns, 'line');
+        ln.setAttribute('x1', CHART.x); ln.setAttribute('x2', CHART.x + CHART.w);
+        ln.setAttribute('y1', y); ln.setAttribute('y2', y);
+        grid.appendChild(ln);
+      });
+      BANDS.forEach(function (b) {
+        var isBeta = b.k === 'beta';
+        var g = document.createElementNS(svgns, 'path');
+        g.setAttribute('fill', 'none'); g.setAttribute('stroke', b.col); g.setAttribute('stroke-opacity', '0.22');
+        g.setAttribute('stroke-width', isBeta ? '12' : '9'); g.setAttribute('stroke-linecap', 'round');
+        g.setAttribute('stroke-linejoin', 'round'); g.setAttribute('filter', 'url(#soft)');
+        gG.appendChild(g); glowEl[b.k] = g;
+        var l = document.createElementNS(svgns, 'path');
+        l.setAttribute('fill', 'none'); l.setAttribute('stroke', b.col);
+        l.setAttribute('stroke-opacity', isBeta ? '1' : '0.94');
+        l.setAttribute('stroke-width', isBeta ? '4.5' : '3.3'); l.setAttribute('stroke-linecap', 'round'); l.setAttribute('stroke-linejoin', 'round');
+        gL.appendChild(l); lineEl[b.k] = l;
+      });
+      var leg = document.getElementById('legend');
+      BANDS.forEach(function (b) {
+        var d = document.createElement('div'); d.className = 'lg';
+        d.innerHTML = '<span class="sw" style="background:' + b.col + '"></span>' +
+          '<span class="gl" style="color:' + b.col + '">' + b.gl + '</span>' +
+          '<span class="nm">' + b.nm + '</span><span class="ds">' + b.ds + '</span>';
+        leg.appendChild(d);
+      });
+    })();
+
+    // ---- clock: seconds since the session's first sample (live) or synthetic (preview) ----
+    var nowSec = 0, liveStart = null;
+
+    function pushSample(k, raw) {
+      if (raw == null || !isFinite(raw)) return;
+      var a = buf[k]; a.push({ t: nowSec, raw: raw });
+      while (a.length && a[0].t < nowSec - NORM_S - 2) a.shift();
+    }
+
+    // draw one band: normalise its visible window to its OWN min/max (each rhythm
+    // relative to itself — honest, since absolute band powers differ hugely in scale)
+    function drawBand(b) {
+      var a = buf[b.k], xLeft = nowSec - WINDOW_S;
+      if (a.length < 2) { glowEl[b.k].setAttribute('d', ''); lineEl[b.k].setAttribute('d', ''); return; }
+      // baseline over the full ~90s buffer: mean + a MEANINGFUL scale. A band only
+      // swings once its real range beats FLAT_K of its own level; below that the
+      // range is noise, the scale dominates, and the line stays flat in its lane.
+      var sum = 0, lo = Infinity, hi = -Infinity;
+      for (var j = 0; j < a.length; j++) { var r = a[j].raw; sum += r; if (r < lo) lo = r; if (r > hi) hi = r; }
+      var mean = sum / a.length;
+      var scale = Math.max(hi - lo, FLAT_K * Math.abs(mean), 1e-6);
+      var vis = []; for (var i = 0; i < a.length; i++) if (a[i].t >= xLeft - 1) vis.push(a[i]);
+      if (vis.length < 2) { glowEl[b.k].setAttribute('d', ''); lineEl[b.k].setAttribute('d', ''); return; }
+      var pix = vis.map(function (s) {
+        var x = CHART.x + CHART.w * Math.max(0, Math.min(1, (s.t - xLeft) / WINDOW_S));
+        var dev = Math.max(-1, Math.min(1, (s.raw - mean) / scale));   // ~0 for a flat band, ±0.5 for an active one
+        var vv = Math.max(0.06, Math.min(0.94, b.lane + dev * AMP));   // wiggle around the band's frequency lane
+        return { x: x, y: CHART.y + CHART.h * (1 - vv) };
+      });
+      var d = FocusLine.smooth(pix, 1);
+      glowEl[b.k].setAttribute('d', d); lineEl[b.k].setAttribute('d', d);
+    }
+    function clearWaves() { BANDS.forEach(function (b) { glowEl[b.k].setAttribute('d', ''); lineEl[b.k].setAttribute('d', ''); }); }
+    function renderWaves() {
+      if (!instrOn) { clearWaves(); return; }
+      BANDS.forEach(drawBand);
+    }
+
+    // ---- state word ----
+    var curWord = 'settling', wordTimer = null;
+    function setWord(w) {
+      if (!w || w === curWord) return; curWord = w; document.getElementById('stateWrap').classList.add('swap');
+      clearTimeout(wordTimer);
+      wordTimer = setTimeout(function () { document.getElementById('stateWord').textContent = w; document.getElementById('stateWrap').classList.remove('swap'); wordTimer = null; }, 620);
+    }
+    function clearWord() { clearTimeout(wordTimer); wordTimer = null; curWord = ''; document.getElementById('stateWord').textContent = ''; document.getElementById('stateWrap').classList.remove('swap'); }
+
+    // ---- preview (synthetic) vs live ----
+    var arch = 'deep', DURATION = 60000, playing = true, p = 0, last = performance.now();
+    var liveMode = false, synthAcc = 0;
+    var curBeat = '', fitWord = '';   // signal-check narration state
+
+    function synthPush() {   // preview only — mirrors sim_source band relationships
+      var e = FocusLine.valueAt(arch, p), n = Math.sin(nowSec * 6.3) * 0.03;
+      pushSample('delta', 0.60 + 0.10 * Math.sin(nowSec * 0.7) + n);
+      pushSample('theta', 0.85 - e * 0.25 + 0.06 * Math.sin(nowSec * 1.1) + n);
+      pushSample('alpha', 1.25 - e * 0.55 + 0.06 * Math.sin(nowSec * 0.9) + n);
+      pushSample('beta',  0.50 + e * 1.60 + n);
+      pushSample('gamma', 0.25 + e * 0.40 + n);
+    }
+
+    function enterLive() { liveMode = true; playing = false; instrOn = false; liveStart = null; nowSec = 0; BANDS.forEach(function (b) { buf[b.k] = []; }); controls.classList.add('hide'); clearWord(); clearWaves(); }
+    function resetGuest() { instrOn = false; liveStart = null; nowSec = 0; BANDS.forEach(function (b) { buf[b.k] = []; }); clearWaves(); clearWord(); }
+
+    function connectLive() {
+      if (!location.host) return;
+      var ws; try { ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'); } catch (e) { return; }
+      ws.onopen = function () { ws.send(JSON.stringify({ type: 'client/hello', role: 'tv', t: Date.now() })); connectLive._n = 0; };
+      ws.onmessage = function (ev) {
+        var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (m.type === 'eeg/frame') {
+          if (!liveMode) enterLive();
+          // during the signal check the word narrates the CHECK, not the brain
+          // state — "finding a clean read" → "signal is clear" (synced with the
+          // iPad's copy); engagement words belong to the reading surfaces.
+          if (curBeat === 'fit') { if (fitWord) setWord(fitWord); }
+          else if (m.stateWord) setWord(m.stateWord);
+          instrOn = true;                                  // real data → wake the waves
+        } else if (m.type === 'eeg/brainwaves') {
+          if (!liveMode) enterLive();
+          instrOn = true;
+          pushSample('delta', m.delta); pushSample('theta', m.theta); pushSample('alpha', m.alpha);
+          pushSample('beta', m.beta); pushSample('gamma', m.gamma);
+        } else if (m.type === 'session/state') {
+          if (m.beat) curBeat = m.beat;
+          if (m.beat === 'idle' || m.beat === 'welcome') { if (liveMode) resetGuest(); }
+          else if (curBeat === 'fit') {
+            fitWord = m.fitAllGood ? 'signal is clear' : 'finding a clean read';
+            setWord(fitWord);
+          }
+        }
+      };
+      ws.onerror = function () { try { ws.close(); } catch (e) {} };
+      // Reconnect forever, with capped jittered backoff. A fixed retry tick meant
+      // every surface in the room hammered a flapping access point in lockstep;
+      // the jitter spreads them out. This never gives up and never shows an error:
+      // a Wi-Fi drop is a pause, not a failure.
+      ws.onclose = function () {
+        connectLive._n = (connectLive._n || 0) + 1;
+        var b = Math.min(8000, 500 * Math.pow(2, Math.min(connectLive._n, 4)));
+        setTimeout(connectLive, b + Math.random() * b * 0.4);
+      };
+    }
+
+    function tick(now) {
+      var dt = now - last; last = now;
+      if (liveMode) {
+        if (liveStart == null) liveStart = now;
+        nowSec = (now - liveStart) / 1000;                 // real elapsed clock
+      } else if (playing) {
+        nowSec += dt / 1000;
+        p += dt / DURATION; if (p >= 1) { p = 1; playing = false; document.getElementById('btnPlay').textContent = 'Replay'; }
+        setWord(FocusLine.stateWord(arch, p));
+        synthAcc += dt; if (synthAcc >= 220) { synthAcc = 0; synthPush(); }   // ~4.5 Hz synthetic samples
+      }
+      renderWaves();
+      var t = now / 1000;
+      document.getElementById('glowA').style.transform = 'translateX(-50%) translate(' + (Math.sin(t/9)*16).toFixed(1) + 'px,' + (Math.cos(t/11)*10).toFixed(1) + 'px)';
+      document.getElementById('glowB').style.transform = 'translate(' + (Math.cos(t/13)*18).toFixed(1) + 'px,' + (Math.sin(t/10)*12).toFixed(1) + 'px)';
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    // ---- preview controls ----
+    var controls = document.getElementById('controls');
+    var btnPlay = document.getElementById('btnPlay');
+    function restart() { p = 0; nowSec = 0; playing = true; btnPlay.textContent = 'Pause'; last = performance.now(); BANDS.forEach(function (b) { buf[b.k] = []; }); }
+    btnPlay.onclick = function () {
+      if (p >= 1) { restart(); return; }
+      playing = !playing; btnPlay.textContent = playing ? 'Pause' : 'Play';
+    };
+    document.getElementById('btnRestart').onclick = restart;
+    document.getElementById('selArch').onchange = function (e) { arch = e.target.value; curWord = ''; };
+    document.getElementById('selSpeed').onchange = function (e) { DURATION = parseInt(e.target.value, 10) * 1000; };
+    document.getElementById('btnHide').onclick = function () { controls.classList.add('hide'); };
+    // 'c' reveals the synthetic-data driver — dev only. On the served room wall
+    // it stays locked away so a stray keypress can't put fake waves on screen.
+    document.addEventListener('keydown', function (e) { if (e.key === 'c' && !SERVED) controls.classList.toggle('hide'); });
+
+    var positions = [[60,60],[1860,60],[60,1020],[1860,1020]];
+    positions.forEach(function (pos) { var d = document.createElement('div'); d.className = 'corner'; d.style.left = pos[0] + 'px'; d.style.top = pos[1] + 'px'; tv.appendChild(d); });
+
+    if (SERVED) enterLive();
+    connectLive();
+  })();
+  </script>
+</body>
+</html>

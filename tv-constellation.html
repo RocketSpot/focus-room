@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Focus Room — TV · Constellation</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #000; overflow: hidden; font-family: var(--font-sans); }
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; }
+  #tv { position: relative; width: 1920px; height: 1080px; transform-origin: center center; overflow: hidden; background: #060605; color: var(--fg); }
+  canvas { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+
+  .head { position: absolute; top: 76px; left: 120px; right: 120px; display: flex; justify-content: space-between; align-items: flex-start; z-index: 3; }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand .mark { width: 13px; height: 13px; border-radius: 50%; background: var(--c-signal); box-shadow: 0 0 22px 2px rgba(221,202,142,0.5); }
+  .brand .label { color: var(--fg-muted); font-size: 17px; letter-spacing: var(--tr-mono); }
+  .head .right { color: var(--fg-muted); font-size: 17px; letter-spacing: var(--tr-mono); font-family: var(--font-mono); text-transform: uppercase; }
+
+  .titleblock { position: absolute; top: 150px; left: 120px; z-index: 3; }
+  .titleblock h1 { font-family: var(--font-display); font-weight: 400; font-size: 78px; line-height: 1;
+                   letter-spacing: -0.03em; color: var(--fg-strong); }
+  .titleblock .sub { margin-top: 18px; max-width: 640px; font-family: var(--font-sans); font-weight: 300;
+                     font-size: 22px; line-height: 1.35; color: var(--fg-muted); }
+  .count { position: absolute; top: 156px; right: 120px; text-align: right; z-index: 3; }
+  .count .n { font-family: var(--font-sans); font-weight: 500; font-size: 56px; color: var(--fg-strong); letter-spacing: -0.02em; }
+  .count .k { font-family: var(--font-mono); font-size: 15px; letter-spacing: var(--tr-mono); text-transform: uppercase; color: var(--fg-muted); margin-top: 8px; }
+
+  /* cluster labels */
+  .clabel { position: absolute; z-index: 3; pointer-events: none; }
+  .clabel .name { font-family: var(--font-display); font-weight: 500; font-size: 30px; color: var(--fg); letter-spacing: -0.02em; opacity: 0.9; transition: opacity var(--dur-slow); }
+  .clabel .meta { font-family: var(--font-mono); font-size: 15px; letter-spacing: var(--tr-mono); text-transform: uppercase; color: var(--fg-faint); margin-top: 7px; }
+  .clabel.hot .name { opacity: 1; color: var(--fg-strong); }
+
+  /* faint axis hints at the extreme edges */
+  .axislab { position: absolute; z-index: 2; font-family: var(--font-mono); font-size: 16px;
+             letter-spacing: var(--tr-mono-sm); text-transform: uppercase; color: var(--fg-faint); }
+
+  #controls { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center;
+    gap: 10px; z-index: 50; background: rgba(20,20,20,0.82); border: 1px solid var(--hair-strong); backdrop-filter: blur(12px);
+    border-radius: var(--r-pill); padding: 8px 10px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--fg-muted); transition: opacity var(--dur-base); }
+  #controls.hide { opacity: 0; pointer-events: none; }
+  #controls button, #controls select { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--fg); background: transparent; border: 1px solid var(--hair-strong); border-radius: var(--r-pill); padding: 7px 13px;
+    cursor: pointer; transition: all var(--dur-fast); }
+  #controls button:hover, #controls select:hover { color: var(--fg-strong); border-color: var(--fg-muted); }
+  #controls .sep { width: 1px; height: 18px; background: var(--hair-strong); }
+  #controls .hint { color: var(--fg-faint); padding: 0 4px; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div id="tv">
+      <canvas id="sky" width="1920" height="1080"></canvas>
+
+      <div class="head">
+        <div class="brand"><span class="mark"></span><span class="label">ZONE — THE FOCUS ROOM</span></div>
+        <div class="right" id="mode">Idle</div>
+      </div>
+      <div class="titleblock">
+        <h1>The Focus Constellation</h1>
+        <div class="sub">Every mind that has passed through this room — one dot each, placed by how their focus moved. No names. No ranking.</div>
+      </div>
+      <div class="count"><div class="n num" id="countN">—</div><div class="k">minds, and counting</div></div>
+
+      <!-- axis hints -->
+      <div class="axislab" style="left:120px; top:540px;">Settles slowly →</div>
+      <div class="axislab" style="right:120px; top:540px; text-align:right;">← Settles quickly</div>
+      <div class="axislab" style="left:50%; top:300px; transform:translateX(-50%);">Variable once engaged</div>
+      <div class="axislab" style="left:50%; bottom:150px; transform:translateX(-50%);">Steady once engaged</div>
+
+      <!-- cluster labels positioned beside each quadrant cluster -->
+      <div class="clabel" id="lab-sprint" style="left:230px; top:420px;"><div class="name">Sprinter</div><div class="meta">— intense short peaks</div></div>
+      <div class="clabel" id="lab-deep"   style="left:230px; top:880px;"><div class="name">Deep Diver</div><div class="meta">— long deep stretches</div></div>
+      <div class="clabel" id="lab-igniter" style="left:1500px; top:420px;"><div class="name">Quick Igniter</div><div class="meta">shorter waves —</div></div>
+      <div class="clabel" id="lab-steady" style="left:1500px; top:880px;"><div class="name">Steady Burner</div><div class="meta">even, gentle waves —</div></div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button id="btnJoin">Join a dot</button>
+    <span class="hint">Lands as</span>
+    <select id="selArch">
+      <option value="deep">Deep Diver</option>
+      <option value="igniter">Quick Igniter</option>
+      <option value="steady">Steady Burner</option>
+      <option value="sprint">Sprinter</option>
+    </select>
+    <span class="sep"></span>
+    <button id="btnHide">Hide</button>
+  </div>
+
+  <script>
+  (function () {
+    var tv = document.getElementById('tv');
+    var cv = document.getElementById('sky'), ctx = cv.getContext('2d');
+    var W = 1920, H = 1080;
+    var SERVED = !!location.host;   // served in the room vs file:// design preview
+    function fit() {
+      var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+      tv.style.transform = 'scale(' + s + ')';
+      // back the canvas with real device pixels (crisp on a 4K panel); the CSS
+      // size stays 1920×1080 so every draw call below remains in 1920-space
+      var px = s * (window.devicePixelRatio || 1);
+      cv.width = Math.round(W * px); cv.height = Math.round(H * px);
+      // derive the transform from the ROUNDED store so fillRect(0,0,W,H) covers
+      // every device pixel — an unrounded px leaves an uncleared edge sliver that
+      // 'lighter' dots would accumulate into permanently.
+      ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+    }
+    window.addEventListener('resize', fit); fit();
+
+    // 2×2 map: x = settle speed (left slow / right quick), y = variability (top var / bottom steady)
+    var clusters = {
+      sprint:  { name: 'Sprinter',      cx: 480,  cy: 540, sx: 150, sy: 120, n: 120, color: [233,178,126], lab: 'lab-sprint' },
+      deep:    { name: 'Deep Diver',    cx: 500,  cy: 790, sx: 120, sy: 120, n: 210, color: [221,202,142], lab: 'lab-deep' },
+      igniter: { name: 'Quick Igniter', cx: 1420, cy: 540, sx: 185, sy: 130, n: 320, color: [232,192,137], lab: 'lab-igniter' },
+      steady:  { name: 'Steady Burner', cx: 1430, cy: 790, sx: 165, sy: 115, n: 290, color: [203,201,188], lab: 'lab-steady' }
+    };
+
+    function gauss() { // Box–Muller
+      var u = 0, v = 0; while (u === 0) u = Math.random(); while (v === 0) v = Math.random();
+      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    }
+
+    var dots = [];
+    // synthetic scatter is preview-only — served in the room the wall starts
+    // empty and fills from constellation/data (the real persisted dots)
+    if (!SERVED) Object.keys(clusters).forEach(function (k) {
+      var c = clusters[k];
+      for (var i = 0; i < c.n; i++) {
+        var dx = gauss() * c.sx, dy = gauss() * c.sy;
+        // keep within a soft radius
+        dots.push({
+          x: c.cx + dx, y: c.cy + dy, key: k, color: c.color,
+          r: 1.6 + Math.random() * 2.6,
+          a: 0.28 + Math.random() * 0.5,
+          ph: Math.random() * Math.PI * 2,
+          tw: 0.6 + Math.random() * 0.8,
+          born: 1   // 1 = already there
+        });
+      }
+    });
+
+    // soft dot sprite per color
+    var sprites = {};
+    function sprite(color) {
+      var key = color.join(',');
+      if (sprites[key]) return sprites[key];
+      var s = document.createElement('canvas'); s.width = s.height = 64;
+      var sc = s.getContext('2d');
+      var g = sc.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, 'rgba(' + color[0] + ',' + color[1] + ',' + color[2] + ',1)');
+      g.addColorStop(0.35, 'rgba(' + color[0] + ',' + color[1] + ',' + color[2] + ',0.5)');
+      g.addColorStop(1, 'rgba(' + color[0] + ',' + color[1] + ',' + color[2] + ',0)');
+      sc.fillStyle = g; sc.fillRect(0, 0, 64, 64);
+      sprites[key] = s; return s;
+    }
+
+    var ripples = [], joiner = null;
+
+    function drawBg() {
+      var g = ctx.createRadialGradient(W / 2, H * 0.52, 120, W / 2, H * 0.52, 1200);
+      g.addColorStop(0, '#0E0D0C'); g.addColorStop(0.55, '#090807'); g.addColorStop(1, '#050504');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+
+    function frame(now) {
+      var t = now / 1000;
+      drawBg();
+      ctx.globalCompositeOperation = 'lighter';
+      for (var i = 0; i < dots.length; i++) {
+        var d = dots[i];
+        var tw = 0.65 + 0.35 * Math.sin(d.ph + t * d.tw);
+        var a = d.a * tw * (d.born < 1 ? d.born : 1);
+        var size = (d.r + (d.born < 1 ? (1 - d.born) * 10 : 0)) * 6;
+        ctx.globalAlpha = Math.min(1, a);
+        var sp = sprite(d.color);
+        ctx.drawImage(sp, d.x - size / 2, d.y - size / 2, size, size);
+        if (d.born < 1) { d.born = Math.min(1, d.born + 0.012); }
+      }
+
+      // ripples
+      for (var r = ripples.length - 1; r >= 0; r--) {
+        var rp = ripples[r], age = (now - rp.t0) / 1400;
+        if (age >= 1) { ripples.splice(r, 1); continue; }
+        ctx.globalAlpha = (1 - age) * 0.5;
+        ctx.strokeStyle = 'rgba(' + rp.color.join(',') + ',1)';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(rp.x, rp.y, 8 + age * 90, 0, Math.PI * 2); ctx.stroke();
+      }
+
+      // joiner travelling dot
+      if (joiner) {
+        var jt = Math.min(1, (now - joiner.t0) / joiner.dur);
+        var e = 1 - Math.pow(1 - jt, 3);
+        var x = joiner.fx + (joiner.tx - joiner.fx) * e;
+        var y = joiner.fy + (joiner.ty - joiner.fy) * e - Math.sin(e * Math.PI) * 120; // arc
+        ctx.globalAlpha = 1;
+        var sp2 = sprite([255, 255, 255]);
+        ctx.drawImage(sp2, x - 18, y - 18, 36, 36);
+        ctx.globalAlpha = 0.9;
+        var sp3 = sprite(joiner.color);
+        ctx.drawImage(sp3, x - 30, y - 30, 60, 60);
+        if (jt >= 1) {
+          ripples.push({ x: joiner.tx, y: joiner.ty, t0: now, color: joiner.color });
+          dots.push({ x: joiner.tx, y: joiner.ty, key: joiner.key, color: joiner.color,
+            r: 3.4, a: 0.95, ph: Math.random() * 6, tw: 0.7, born: 0.01, id: joiner.id });
+          if (joiner.id != null) landed[joiner.id] = 1; // this dot is ON THE WALL now — no rebuild may strip or re-fly it
+          var cl = document.getElementById(clusters[joiner.key].lab);
+          if (cl) { cl.classList.add('hot'); setTimeout(function () { cl.classList.remove('hot'); }, 2600); }
+          var cn = document.getElementById('countN');
+          var cur = parseInt(cn.textContent.replace(/,/g, ''), 10);
+          if (!isNaN(cur)) cn.textContent = (cur + 1).toLocaleString();
+          joiner = null;
+        }
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+      requestAnimationFrame(frame);
+    }
+    frame(performance.now());   // immediate first paint, then self-schedules
+
+    function joinDot(key) {
+      var c = clusters[key];
+      var dx = gauss() * c.sx * 0.6, dy = gauss() * c.sy * 0.6;
+      joiner = { fx: W / 2, fy: H + 80, tx: c.cx + dx, ty: c.cy + dy, t0: performance.now(), dur: 2400, color: c.color, key: key };
+    }
+
+    document.getElementById('btnJoin').onclick = function () { joinDot(document.getElementById('selArch').value); };
+    var controls = document.getElementById('controls');
+    document.getElementById('btnHide').onclick = function () { controls.classList.add('hide'); };
+    // !SERVED, same as tv-signal: the synthetic driver ("Join a dot" — a
+    // fabricated dot on the real persisted wall) must never be one keypress
+    // away from the guest-facing wall.
+    document.addEventListener('keydown', function (e) { if (e.key === 'c' && !SERVED) controls.classList.toggle('hide'); });
+
+    // ---- LIVE: the real, persisted wall (build change). The synthetic scatter
+    // above is the standalone-preview fallback; in the app the wall starts sparse
+    // and fills as real guests pass through, and a guest's dot lands in the moment.
+    // `landed` outlives every rebuild: constellation/data is re-broadcast to ALL
+    // TVs whenever ANY tv client hellos (a reload, a Wi-Fi blip, a second
+    // screen), and each arrival rebuilt the wall WITHOUT the pending-join dot
+    // and re-flew it — so a dot that had already landed vanished from the wall
+    // and the counter disagreed with the sky. A landed dot stays landed.
+    var liveMode = false, liveIds = {}, landed = {};
+    function placeDot(d) { var c = clusters[d.archetype] || clusters.deep; return { x: c.cx + (d.sx || 0) * c.sx, y: c.cy + (d.sy || 0) * c.sy }; }
+    function buildLiveDots(real, skipId) {
+      dots = []; liveIds = {};
+      (real || []).forEach(function (d) {
+        if (d.id === skipId && !landed[d.id]) return;   // hold it out ONLY while it still needs its flight
+        var c = clusters[d.archetype]; if (!c) return;
+        var p = placeDot(d);
+        dots.push({ x: p.x, y: p.y, key: d.archetype, color: c.color, r: 1.8 + Math.random() * 2.4, a: 0.55, ph: Math.random() * 6.28, tw: 0.7, born: 1, id: d.id });
+        liveIds[d.id] = 1;
+      });
+    }
+    function joinReal(dot) {
+      // never re-fly a dot that is already on the wall or already in the air
+      if (!dot || liveIds[dot.id] || landed[dot.id] || (joiner && joiner.id === dot.id)) return;
+      var c = clusters[dot.archetype]; if (!c) return;
+      var p = placeDot(dot);
+      joiner = { fx: W / 2, fy: H + 80, tx: p.x, ty: p.y, t0: performance.now(), dur: 2400, color: c.color, key: dot.archetype, id: dot.id };
+    }
+    function setCount(n) {
+      var cn = document.getElementById('countN'); if (!cn || typeof n !== 'number') return;
+      cn.textContent = n.toLocaleString();
+      // "1 minds, and counting" is not English — the label follows the number
+      var k = cn.parentNode && cn.parentNode.querySelector('.k');
+      if (k) k.textContent = (n === 1 ? 'mind, and counting' : 'minds, and counting');
+    }
+    function connectLive() {
+      if (!location.host) { setTimeout(function () { joinDot('deep'); }, 2200); return; } // standalone preview demo
+      var ws; try { ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'); } catch (e) { return; }
+      ws.onopen = function () { ws.send(JSON.stringify({ type: 'client/hello', role: 'tv', t: Date.now() })); connectLive._n = 0; };
+      ws.onmessage = function (ev) {
+        var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (m.type === 'constellation/data') {
+          liveMode = true; controls.classList.add('hide');
+          buildLiveDots(m.dots, m.joinId);
+          // Hold one back from the count until that dot has LANDED (the landing
+          // bumps it to the full count). Mid-flight counts as still pending: a
+          // re-broadcast during the 2.4s flight (a second TV switching to the
+          // wall) used to paint the full count and then the landing bumped it
+          // again — the counter read one high until the next rebuild.
+          var pendingFlight = m.joinId != null && !landed[m.joinId];
+          setCount((m.count || 0) - (pendingFlight ? 1 : 0));
+          if (m.joinId != null) { var jd = (m.dots || []).filter(function (d) { return d.id === m.joinId; })[0]; if (jd) joinReal(jd); }
+        } else if (m.type === 'constellation/join' && m.dot) {
+          joinReal(m.dot);
+        } else if (m.type === 'session/state' && m.beat) {
+          // quiet header word from the beat — never 'Idle' while a guest is in
+          document.getElementById('mode').textContent = m.beat === 'idle' ? 'Idle' : 'In session';
+        }
+      };
+      ws.onerror = function () { try { ws.close(); } catch (e) {} };
+      // Reconnect forever, with capped jittered backoff. A fixed retry tick meant
+      // every surface in the room hammered a flapping access point in lockstep;
+      // the jitter spreads them out. This never gives up and never shows an error:
+      // a Wi-Fi drop is a pause, not a failure.
+      ws.onclose = function () {
+        connectLive._n = (connectLive._n || 0) + 1;
+        var b = Math.min(8000, 500 * Math.pow(2, Math.min(connectLive._n, 4)));
+        setTimeout(connectLive, b + Math.random() * b * 0.4);
+      };
+    }
+
+    // Served in the room: no synthetic dots, no fabricated count, no preview
+    // pill — the real wall arrives with constellation/data (re-sent on hello)
+    if (SERVED) {
+      controls.classList.add('hide');
+      document.getElementById('countN').textContent = '—';
+    }
+    connectLive();
+  })();
+  </script>
+</body>
+</html>

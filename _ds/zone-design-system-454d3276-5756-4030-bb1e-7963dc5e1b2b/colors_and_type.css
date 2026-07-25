@@ -1,0 +1,39 @@
+/* ============================================================
+   ZONE DESIGN SYSTEM — colors_and_type (bound token sheet)
+   --------------------------------------------------------------
+   RECONSTRUCTED 2026-07-24: the original DS export was missing from
+   the source hand-off zip, which left every alias in tokens.css
+   resolving to nothing (invalid at computed-value time) — dim TV
+   labels, transparent cards, and a grey interruption marker.
+   Every value below is corroborated inside this repo:
+     warm-gray-100  #F3F2EE  tokens.css:27 comment; email.html; card.html
+     warm-gray-200  #D6D4C9  tokens.css hairlines rgba(214,212,201,…); profile.html
+     warm-gray-300  #7A7873  card/profile/email muted copy (fg-light-muted alias)
+     warm-gray-700  #141414  email.html near-black text; TV ground radial in
+                             docs/report/after/tv-reveal-demo.html
+     orange         #FF5714  the interruption accent (honesty rule; email/card)
+     state-flow     #DDCA8E  tokens.css:44 comment; profile.html; ops.html accent
+   The Google-font @imports of the original DS sheet were disabled by
+   the room build (fonts are bundled locally — see tokens.css). Do not
+   re-add remote imports here.
+   ============================================================ */
+:root {
+  /* ---- warm-gray scale ---- */
+  --color-warm-gray-100: #F3F2EE;
+  --color-warm-gray-200: #D6D4C9;
+  --color-warm-gray-300: #7A7873;
+  --color-warm-gray-400: #55534E;
+  --color-warm-gray-500: #42413E;
+  --color-warm-gray-600: #2A2926;
+  --color-warm-gray-700: #141414;
+
+  /* ---- absolutes ---- */
+  --color-white: #FFFFFF;
+  --color-black: #000000;
+
+  /* ---- brand accent (the interruption — used nowhere else) ---- */
+  --color-orange: #FF5714;
+
+  /* ---- state tones ---- */
+  --color-state-flow: #DDCA8E;
+}

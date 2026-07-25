@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base href="/">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Focus Room — TV · The Reveal</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #000; overflow: hidden; font-family: var(--font-sans); }
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; }
+  #tv {
+    position: relative; width: 1920px; height: 1080px; transform-origin: center center;
+    background:
+      radial-gradient(120% 90% at 50% 118%, rgba(221,202,142,0.05), transparent 60%),
+      radial-gradient(140% 120% at 50% 50%, #141414 0%, #0B0B0A 70%, #060605 100%);
+    overflow: hidden; color: var(--fg);
+  }
+  .glow { position: absolute; border-radius: 50%; filter: var(--blur-glow); pointer-events: none; }
+  .glow.a { width: 1100px; height: 700px; left: 50%; bottom: -360px; transform: translateX(-50%); background: rgba(221,202,142,0.09); }
+
+  .head { position: absolute; top: 76px; left: 120px; right: 120px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand .mark { width: 13px; height: 13px; border-radius: 50%; background: var(--c-signal); box-shadow: 0 0 22px 2px rgba(221,202,142,0.5); }
+  .brand .label { color: var(--fg-muted); font-size: 17px; letter-spacing: var(--tr-mono); }
+  .head .right { color: var(--fg-muted); font-size: 17px; letter-spacing: var(--tr-mono); font-family: var(--font-mono); text-transform: uppercase; }
+
+  .readno { position: absolute; left: 120px; top: 150px; color: var(--c-signal); font-family: var(--font-mono);
+            font-size: 18px; letter-spacing: var(--tr-mono); text-transform: uppercase;
+            opacity: 1; }
+  .title { position: absolute; left: 120px; top: 184px; font-family: var(--font-display); font-weight: 400;
+           font-size: 92px; line-height: 1; letter-spacing: -0.03em; color: var(--fg-strong); max-width: 1000px;
+           opacity: 1; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  @keyframes revealIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+  svg.plot { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+  /* prose block bottom-left */
+  .prose { position: absolute; left: 120px; bottom: 96px; max-width: 820px;
+           opacity: 1; }
+  .prose .sentence { font-family: var(--font-sans); font-weight: 300; font-size: 30px; line-height: 1.32;
+                     color: var(--fg); letter-spacing: -0.01em; }
+
+  /* committed-vs-actual ledger (read 3) */
+  .ledger { margin-top: 30px; display: grid; gap: 16px; opacity: 0; max-height: 0; overflow: hidden;
+            transition: opacity 600ms var(--ease-in-out); }
+  .ledger.on { opacity: 1; max-height: 240px; }
+  .ledger .row { display: grid; grid-template-columns: 168px 1fr; gap: 28px; align-items: baseline; }
+  .ledger .k { font-family: var(--font-mono); font-size: 15px; letter-spacing: var(--tr-mono);
+               text-transform: uppercase; color: var(--fg-muted); padding-top: 4px; }
+  .ledger .said { font-family: var(--font-sans); font-weight: 300; font-size: 22px; color: var(--fg-muted); font-style: italic; }
+  .ledger .did { font-family: var(--font-sans); font-weight: 400; font-size: 22px; color: var(--fg-strong); }
+
+  /* read progress dots, bottom-right inside canvas */
+  .readdots { position: absolute; right: 120px; bottom: 104px; display: flex; gap: 14px; align-items: center; }
+  .readdots .d { width: 10px; height: 10px; border-radius: 50%; background: var(--hair-strong); transition: all var(--dur-base); }
+  .readdots .d.on { background: var(--c-signal); box-shadow: 0 0 14px 1px rgba(221,202,142,0.5); transform: scale(1.15); }
+  .readdots .d.done { background: var(--fg-muted); }
+  .readdots .ring { width: 30px; height: 30px; margin-right: 6px; }
+
+  .caption { position: absolute; right: 120px; top: 162px; color: var(--fg-faint); font-size: 15px;
+             letter-spacing: var(--tr-mono-sm); font-family: var(--font-mono); text-transform: uppercase; }
+
+  /* controls */
+  #controls { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center;
+    gap: 10px; z-index: 50; background: rgba(20,20,20,0.82); border: 1px solid var(--hair-strong);
+    backdrop-filter: blur(12px); border-radius: var(--r-pill); padding: 8px 10px; font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-muted); transition: opacity var(--dur-base); }
+  #controls.hide { opacity: 0; pointer-events: none; }
+  #controls button, #controls select { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--fg); background: transparent; border: 1px solid var(--hair-strong);
+    border-radius: var(--r-pill); padding: 7px 13px; cursor: pointer; transition: all var(--dur-fast); }
+  #controls button:hover, #controls select:hover { color: var(--fg-strong); border-color: var(--fg-muted); }
+  #controls .sep { width: 1px; height: 18px; background: var(--hair-strong); }
+  #controls .hint { color: var(--fg-faint); padding: 0 4px; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div id="tv">
+      <div class="glow a"></div>
+      <div class="head">
+        <div class="brand"><span class="mark"></span><span class="label">ZONE — THE FOCUS ROOM</span></div>
+        <div class="right">The Reveal</div>
+      </div>
+      <div class="caption">In your session today</div>
+
+      <div class="readno" id="readno">READ 01 / 04</div>
+      <h1 class="title" id="title">How you settled</h1>
+
+      <svg class="plot" id="plot" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+        <defs>
+          <filter id="soft" x="-30%" y="-60%" width="160%" height="220%"><feGaussianBlur stdDeviation="6"/></filter>
+          <linearGradient id="areaFade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--c-signal)" stop-opacity="0.10"/>
+            <stop offset="100%" stop-color="var(--c-signal)" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <line id="baseline" x1="150" y1="0" x2="1770" y2="0" stroke="var(--hair)" stroke-width="1.5" stroke-dasharray="2 10"/>
+        <path id="areaDim" d="" fill="url(#areaFade)"/>
+        <path id="lineDim" d="" fill="none" stroke="var(--c-signal-dim)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+        <g id="anno"></g>
+      </svg>
+
+      <div class="prose" id="prose">
+        <div class="sentence" id="sentence">You came in cold and climbed in slowly.</div>
+        <div class="ledger" id="ledger">
+          <div class="row"><div class="k">You said</div><div class="said" id="said">—</div></div>
+          <div class="row"><div class="k">Your focus</div><div class="did" id="did">—</div></div>
+        </div>
+      </div>
+
+      <div class="readdots" id="readdots"></div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button id="btnAuto">Pause auto</button>
+    <button id="btnPrev">Prev</button>
+    <button id="btnNext">Next</button>
+    <span class="sep"></span>
+    <span class="hint">Archetype</span>
+    <select id="selArch">
+      <option value="deep">Deep Diver</option>
+      <option value="igniter">Quick Igniter</option>
+      <option value="steady">Steady Burner</option>
+      <option value="sprint">Sprinter</option>
+    </select>
+    <span class="sep"></span>
+    <span class="hint">Beat</span>
+    <select id="selBeat">
+      <option value="8">8s (demo)</option>
+      <option value="60" selected>60s (real)</option>
+      <option value="4">4s (fast)</option>
+    </select>
+    <span class="sep"></span>
+    <button id="btnHide">Hide</button>
+  </div>
+
+  <script src="lib/focusline.js"></script>
+  <script>
+  (function () {
+    var tv = document.getElementById('tv');
+    function fit() { var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080); tv.style.transform = 'scale(' + s + ')'; }
+    window.addEventListener('resize', fit); fit();
+
+    var BOX = { x: 150, y: 330, w: 1620, h: 430 };
+    var NS = 'http://www.w3.org/2000/svg';
+    var FL = window.FocusLine;
+    var arch = 'deep';
+
+    document.getElementById('baseline').setAttribute('y1', (BOX.y + (1 - 0.30) * BOX.h).toFixed(1));
+    document.getElementById('baseline').setAttribute('y2', (BOX.y + (1 - 0.30) * BOX.h).toFixed(1));
+
+    // per-archetype copy for reads 1 & 2
+    var COPY = {
+      deep:    { settle: "a slow burn",        rhythm: "long, steady stretches",
+                 s1: "You came in cold and climbed in slowly — a deliberate settle, not a fast switch-on.",
+                 s2: "Once you were in, you stayed in. Long, even stretches of focus rather than short waves." },
+      igniter: { settle: "quick to settle",    rhythm: "short, quick waves",
+                 s1: "You dropped into focus fast, almost from a cold start.",
+                 s2: "You held focus in shorter waves — quick to engage, quick to flicker, quick to return." },
+      steady:  { settle: "an easy settle",     rhythm: "even, gentle waves",
+                 s1: "You settled in at an even pace, no sharp switch, no long warm-up.",
+                 s2: "Your focus ran level the whole way — gentle waves, very little drift." },
+      sprint:  { settle: "a fast, restless start", rhythm: "intense short peaks",
+                 s1: "You engaged fast but restlessly, reaching for focus in bursts.",
+                 s2: "Your attention ran in sharp peaks and troughs — intense, short, repeating." }
+    };
+
+    function reads() {
+      var info = FL.interruptInfo(arch);
+      var ss = FL.strongestStretch(arch);
+      var settled = FL.ARCH[arch].settledAt;
+      var c = COPY[arch];
+      return [
+        { no: "01", title: "How you settled", type: "span", r0: 0, r1: Math.max(0.30, settled),
+          anchorT: Math.max(0.30, settled) * 0.55, k: "Settle", v: c.settle, color: "var(--c-signal)",
+          sentence: c.s1 },
+        { no: "02", title: "Your attention rhythm", type: "span", r0: Math.max(0.30, settled), r1: info.start - 0.01,
+          anchorT: (Math.max(0.30, settled) + info.start) / 2, k: "Rhythm", v: c.rhythm, color: "var(--c-signal)",
+          sentence: c.s2 },
+        { no: "03", title: "Your interruption cost", type: "point", r0: info.start, r1: info.recovered,
+          anchorT: info.trough, k: "Interruption", v: "sharp drop · long climb back", color: "var(--c-orange)",
+          sentence: "This is the headline. One interruption hit while you were deep, and your line dropped.",
+          ledger: { said: "“A notification barely breaks me.”", did: "Your focus dropped sharply and took a real stretch to climb back." } },
+        { no: "04", title: "Your strongest stretch", type: "span", r0: ss.start, r1: ss.end,
+          anchorT: ss.mid, k: "Strongest", v: "your best run today", color: "var(--c-signal)",
+          sentence: "This stretch ran highest, relative to the rest of your reading. Your best run today." }
+      ];
+    }
+
+    var R = reads();
+    var idx = 0, auto = true, beat = 60000, rafId, beatStart;
+
+    var lineDim = document.getElementById('lineDim');
+    var areaDim = document.getElementById('areaDim');
+    var anno = document.getElementById('anno');
+
+    function drawBase() {
+      lineDim.setAttribute('d', FL.linePath(arch, BOX, { samples: 220 }));
+      areaDim.setAttribute('d', FL.areaPath(arch, BOX, { samples: 220 }));
+    }
+
+    function el(tag, attrs) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
+
+    function buildAnno(read) {
+      anno.innerHTML = '';
+      // bright region sub-path
+      var bright = el('path', { d: FL.linePathRange(arch, BOX, read.r0, read.r1, { samples: 240 }),
+        fill: 'none', stroke: read.color, 'stroke-width': read.type === 'point' ? 5 : 4.5,
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+      var brightGlow = el('path', { d: bright.getAttribute('d'), fill: 'none', stroke: read.color,
+        'stroke-opacity': 0.3, 'stroke-width': 11, 'stroke-linecap': 'round', filter: 'url(#soft)' });
+      anno.appendChild(brightGlow); anno.appendChild(bright);
+
+      var pt = FL.pointAt(arch, read.anchorT, BOX);
+      // tag anchor in open space above the curve
+      var tagX = Math.min(Math.max(pt.x, 280), 1500);
+      var tagY = Math.max(pt.y - 150, 300);
+      // a high anchor can push the tag label into the title block — drop the
+      // whole cluster below the anchor instead
+      var tagBelow = tagY - 26 < 290;
+      if (tagBelow) {
+        // the dropped cluster must clear the curve across its full 360px rule,
+        // not just the anchor point — sample the curve's local low over the
+        // cluster's x-extent and sit the whole cluster below it
+        var t0 = (tagX - BOX.x) / BOX.w, t1 = (tagX + 360 - BOX.x) / BOX.w;
+        var maxCy = 0;
+        for (var si = 0; si <= 15; si++) {
+          var q = FL.pointAt(arch, Math.min(1, Math.max(0, t0 + (t1 - t0) * si / 15)), BOX);
+          if (q.y > maxCy) maxCy = q.y;
+        }
+        tagY = Math.min(Math.max(pt.y + 170, maxCy + 64), BOX.y + BOX.h - 40);
+      }
+
+      // dotted leader from tag to the curve point
+      anno.appendChild(el('line', { x1: tagX, y1: tagBelow ? tagY - 44 : tagY + 6, x2: pt.x, y2: tagBelow ? pt.y + 14 : pt.y - 14,
+        stroke: 'var(--hair-strong)', 'stroke-width': 1.5, 'stroke-dasharray': '2 7' }));
+      // marker dot on the curve
+      anno.appendChild(el('circle', { cx: pt.x, cy: pt.y, r: 16, fill: read.color, opacity: 0.16 }));
+      anno.appendChild(el('circle', { cx: pt.x, cy: pt.y, r: 6, fill: read.color }));
+      anno.appendChild(el('circle', { cx: pt.x, cy: pt.y, r: 2.4, fill: '#fff' }));
+
+      // for interruption, mark the recovery point too, with a span guide
+      if (read.type === 'point') {
+        var rec = FL.pointAt(arch, read.r1, BOX);
+        anno.appendChild(el('circle', { cx: rec.x, cy: rec.y, r: 5, fill: 'var(--c-signal)', opacity: 0.85 }));
+        // keep the guide on-plot even for a floor-deep trough (a real session's
+        // interruption anchor is the window minimum, so pt.y can reach the base)
+        var guideY = Math.min(Math.max(pt.y, rec.y) + 54, BOX.y + BOX.h - 12);
+        anno.appendChild(el('line', { x1: pt.x, y1: guideY, x2: rec.x, y2: guideY,
+          stroke: 'var(--c-orange-line)', 'stroke-width': 1.5, 'stroke-dasharray': '2 7' }));
+        anno.appendChild(el('line', { x1: pt.x, y1: guideY - 7, x2: pt.x, y2: guideY + 7, stroke: 'var(--c-orange-line)', 'stroke-width': 1.5 }));
+        anno.appendChild(el('line', { x1: rec.x, y1: guideY - 7, x2: rec.x, y2: guideY + 7, stroke: 'var(--c-orange-line)', 'stroke-width': 1.5 }));
+        // a deep trough can push the guide label into the prose block — sit it
+        // above the guide instead when it would cross the prose top
+        var climbY = guideY + 34 > 740 ? guideY - 20 : guideY + 34;
+        var climb = el('text', { x: (pt.x + rec.x) / 2, y: climbY, fill: 'var(--c-orange)', 'text-anchor': 'middle',
+          'font-family': 'var(--font-mono)', 'font-size': 18, 'letter-spacing': '2.4', 'text-transform': 'uppercase' });
+        climb.textContent = 'CLIMB BACK'; anno.appendChild(climb);
+      }
+
+      // instrument tag cluster at the tag anchor: dotted rule + K / V
+      var ruleY = tagY - 10;
+      anno.appendChild(el('line', { x1: tagX, y1: ruleY, x2: tagX + 360, y2: ruleY,
+        stroke: 'var(--hair-strong)', 'stroke-width': 1.5, 'stroke-dasharray': '2 7' }));
+      anno.appendChild(el('circle', { cx: tagX, cy: ruleY, r: 2.5, fill: 'var(--dot)' }));
+      anno.appendChild(el('circle', { cx: tagX + 360, cy: ruleY, r: 2.5, fill: 'var(--dot)' }));
+      var tk = el('text', { x: tagX, y: ruleY - 16, fill: 'var(--fg-muted)', 'font-family': 'var(--font-mono)',
+        'font-size': 18, 'letter-spacing': '2.6' });
+      tk.textContent = read.k.toUpperCase(); anno.appendChild(tk);
+      var tvv = el('text', { x: tagX, y: tagY + 38, fill: read.color, 'font-family': 'var(--font-sans)',
+        'font-weight': 500, 'font-size': 34 });
+      tvv.textContent = read.v; anno.appendChild(tvv);
+    }
+
+    var dotsWrap = document.getElementById('readdots');
+    var ringNS;
+    function buildDots() {
+      dotsWrap.innerHTML = '';
+      var ring = el('svg', { class: 'ring', viewBox: '0 0 36 36' });
+      ring.innerHTML = '<circle cx="18" cy="18" r="15" fill="none" stroke="var(--hair-strong)" stroke-width="2.5"/>' +
+        '<circle id="ringP" cx="18" cy="18" r="15" fill="none" stroke="var(--c-signal)" stroke-width="2.5" ' +
+        'stroke-linecap="round" transform="rotate(-90 18 18)" stroke-dasharray="94.2" stroke-dashoffset="94.2"/>';
+      dotsWrap.appendChild(ring);
+      ringNS = ring.querySelector('#ringP');
+      for (var i = 0; i < R.length; i++) {
+        var d = document.createElement('div'); d.className = 'd'; dotsWrap.appendChild(d);
+      }
+    }
+    function paintDots() {
+      var ds = dotsWrap.querySelectorAll('.d');
+      ds.forEach(function (d, i) { d.className = 'd' + (i === idx ? ' on' : (i < idx ? ' done' : '')); });
+    }
+
+    var prose = document.getElementById('prose');
+    var ledger = document.getElementById('ledger');
+
+    function show(i) {
+      idx = (i + R.length) % R.length;
+      var read = R[idx];
+      document.getElementById('readno').textContent = 'READ ' + read.no + ' / 0' + R.length;
+      document.getElementById('title').textContent = read.title;
+      document.getElementById('sentence').textContent = read.sentence;
+      if (read.ledger) {
+        document.getElementById('said').textContent = read.ledger.said;
+        var did = document.getElementById('did');
+        did.textContent = read.ledger.did;
+        // reads 02 and 04 carry ledgers too — orange stays with the
+        // interruption read only
+        did.style.color = read.color === 'var(--c-orange)' ? 'var(--c-orange)' : '';
+        ledger.classList.add('on');
+      } else { ledger.classList.remove('on'); }
+      buildAnno(read);
+      paintDots();
+      // The reads are the headline content of this surface, so their visibility is NEVER
+      // gated on JS or animation timing — the rest state is the visible state (CSS opacity:1).
+      // Motion on this surface comes from the line draw + annotation, which is enough.
+      beatStart = performance.now();
+    }
+
+    function loop(now) {
+      if (auto) {
+        var prog = Math.min(1, (now - beatStart) / beat);
+        if (ringNS) ringNS.setAttribute('stroke-dashoffset', (94.2 * (1 - prog)).toFixed(1));
+        if (prog >= 1) show(idx + 1);
+      }
+      rafId = requestAnimationFrame(loop);
+    }
+
+    function reset() { R = reads(); drawBase(); buildDots(); show(0); }
+
+    // controls
+    var btnAuto = document.getElementById('btnAuto');
+    btnAuto.onclick = function () { auto = !auto; btnAuto.textContent = auto ? 'Pause auto' : 'Resume auto'; beatStart = performance.now(); };
+    document.getElementById('btnNext').onclick = function () { show(idx + 1); };
+    document.getElementById('btnPrev').onclick = function () { show(idx - 1); };
+    document.getElementById('selArch').onchange = function (e) { arch = e.target.value; reset(); };
+    document.getElementById('selBeat').onchange = function (e) { beat = parseInt(e.target.value, 10) * 1000; beatStart = performance.now(); };
+    var controls = document.getElementById('controls');
+    document.getElementById('btnHide').onclick = function () { controls.classList.add('hide'); };
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'c') controls.classList.toggle('hide');
+      if (e.key === 'ArrowRight') show(idx + 1);
+      if (e.key === 'ArrowLeft') show(idx - 1);
+    });
+
+    // corner dots
+    [[60,60],[1860,60],[60,1020],[1860,1020]].forEach(function (pos) {
+      var d = document.createElement('div'); d.style.cssText =
+        'position:absolute;width:4px;height:4px;border-radius:50%;background:var(--dot);opacity:.18;left:' + pos[0] + 'px;top:' + pos[1] + 'px';
+      tv.appendChild(d);
+    });
+
+    // LIVE: driven by the orchestrator over WS — real recorded samples fed into
+    // FocusLine (build change #1) + the real per-guest reads, paced by reveal/step.
+    // The synthetic ARCH reveal above stays as a standalone-preview fallback.
+    function connectLive() {
+      if (!location.host) return;
+      var ws; try { ws = new WebSocket('ws://' + location.host + '/ws'); } catch (e) { return; }
+      ws.onopen = function () { ws.send(JSON.stringify({ type: 'client/hello', role: 'tv', t: Date.now() })); };
+      ws.onmessage = function (ev) {
+        var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (m.type === 'reveal/data') {
+          auto = false; controls.classList.add('hide');
+          FL.setSamples('session', m.samples || []);
+          arch = 'session';
+          R = (m.reads || []).map(function (r) {
+            return Object.assign({}, r, { color: r.color === 'orange' ? 'var(--c-orange)' : 'var(--c-signal)' });
+          });
+          drawBase(); buildDots(); if (R.length) show(0);
+        } else if (m.type === 'reveal/step' && typeof m.index === 'number') {
+          show(m.index - 1);
+        }
+      };
+      ws.onerror = function () { try { ws.close(); } catch (e) {} };
+      ws.onclose = function () { setTimeout(connectLive, 1000); };
+    }
+
+    // Served in the room: boot as a blank shell (background + header only) and
+    // wait for reveal/data — no synthetic reads, no auto-cycling. Opened as a
+    // file, the full synthetic preview runs.
+    if (location.host) {
+      auto = false;
+      controls.classList.add('hide');
+      document.getElementById('readno').textContent = '';
+      document.getElementById('title').textContent = '';
+      document.getElementById('sentence').textContent = '';
+      document.getElementById('baseline').setAttribute('display', 'none');
+    } else {
+      reset();
+    }
+    rafId = requestAnimationFrame(loop);
+    connectLive();
+  })();
+  </script>
+</body>
+</html>
