@@ -1,0 +1,59 @@
+/* ============================================================
+   ZONE — THE FOCUS ROOM :: LOCAL FONTS (no CDN, ever)
+   ------------------------------------------------------------
+   The design preview pulled Inter, IBM Plex Mono and Space Grotesk from
+   Google Fonts. The Focus Room is local-first — the consumer app's feedback
+   repeatedly hit slow CDN font loads, and that must never happen here. Every
+   face is bundled and served off the room's own machine.
+
+   Drop the real font files into assets/fonts/files/ (see README.md). Until
+   the licensed PP Neue Montreal files are present the display stack falls back
+   gracefully to the system grotesk — the app still builds and runs.
+   ============================================================ */
+
+/* ---- PP Neue Montreal (display) — licensed, drop-in ---- */
+@font-face {
+  font-family: "PP Neue Montreal";
+  font-style: normal; font-weight: 400; font-display: swap;
+  src: url("files/PPNeueMontreal-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "PP Neue Montreal";
+  font-style: normal; font-weight: 500; font-display: swap;
+  src: url("files/PPNeueMontreal-Medium.woff2") format("woff2");
+}
+
+/* ---- Space Grotesk (display fallback) — OFL, bundled ----
+   The display stack is "PP Neue Montreal", "Space Grotesk", … so until the
+   licensed PP Neue Montreal files are dropped in, the headings render in this
+   bundled grotesque (close to Neue Montreal's character) rather than Arial. */
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal; font-weight: 300 700; font-display: swap;
+  src: url("files/SpaceGrotesk.woff2") format("woff2-variations");
+}
+
+/* ---- Inter (body) — OFL, bundle from rsms.me/inter ---- */
+@font-face {
+  font-family: "Inter";
+  font-style: normal; font-weight: 300 700; font-display: swap;
+  src: url("files/Inter-roman.var.woff2") format("woff2-variations"),
+       url("files/Inter-Regular.woff2") format("woff2");
+}
+
+/* ---- IBM Plex Mono (micro-labels) — OFL ---- */
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal; font-weight: 400; font-display: swap;
+  src: url("files/IBMPlexMono-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal; font-weight: 500; font-display: swap;
+  src: url("files/IBMPlexMono-Medium.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal; font-weight: 600; font-display: swap;
+  src: url("files/IBMPlexMono-SemiBold.woff2") format("woff2");
+}

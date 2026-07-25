@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Focus Room — TV · The Reveal</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #000; overflow: hidden; font-family: var(--font-sans); }
+  /* band colours live in tokens.css (shared with tv-signal + the iPad key) */
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; }
+  #tv {
+    position: relative; width: 1920px; height: 1080px; transform-origin: center center;
+    background:
+      radial-gradient(120% 90% at 50% 118%, rgba(221,202,142,0.05), transparent 60%),
+      radial-gradient(140% 120% at 50% 50%, #141414 0%, #0B0B0A 70%, #060605 100%);
+    overflow: hidden; color: var(--fg);
+  }
+  .glow { position: absolute; border-radius: 50%; filter: var(--blur-glow); pointer-events: none; }
+  .glow.a { width: 1100px; height: 700px; left: 50%; bottom: -360px; transform: translateX(-50%); background: rgba(221,202,142,0.08); }
+
+  .head { position: absolute; top: 76px; left: 120px; right: 120px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand .mark { width: 13px; height: 13px; border-radius: 50%; background: var(--c-signal); box-shadow: 0 0 22px 2px rgba(221,202,142,0.5); }
+  .brand .label { color: var(--fg-muted); font-size: 17px; letter-spacing: var(--tr-mono); }
+  .head .right { color: var(--fg-muted); font-size: 17px; letter-spacing: var(--tr-mono); font-family: var(--font-mono); text-transform: uppercase; }
+
+  /* ---- the slide grid ----------------------------------------------------
+     Everything hangs off two rails: text starts at x=120, the stat column is
+     right-aligned to x=1800. Each block owns a FIXED vertical band, so no block
+     can ever grow into another one's space (the old bottom-anchored prose grew
+     upward through the legend and the region label). */
+  .readno { position: absolute; left: 120px; top: 148px; color: var(--c-signal); font-family: var(--font-mono);
+            font-size: 18px; letter-spacing: var(--tr-mono); text-transform: uppercase; }
+  .title { position: absolute; left: 120px; top: 180px; font-family: var(--font-display); font-weight: 400;
+           font-size: 72px; line-height: 1.04; letter-spacing: -0.03em; color: var(--fg-strong); max-width: 1010px; }
+
+  /* the measured figure — the proof, given the weight of a headline */
+  .stat { position: absolute; right: 120px; top: 146px; width: 720px; text-align: right; }
+  .stat .v { font-family: var(--font-display); font-weight: 400; font-size: 78px; line-height: 1;
+             letter-spacing: -0.03em; color: var(--c-signal); white-space: nowrap; }
+  .stat.orange .v { color: var(--c-orange); }
+  .stat .l { margin-top: 12px; color: var(--fg-muted); font-family: var(--font-mono); font-size: 15px;
+             letter-spacing: var(--tr-mono-sm); text-transform: uppercase; }
+
+  svg.plot { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+  /* prose sits in a FIXED band and auto-fits inside it (see fitProse) */
+  .prose { position: absolute; left: 120px; top: 806px; width: 1360px; height: 206px; overflow: hidden; }
+  .prose .sentence { font-family: var(--font-sans); font-weight: 300; font-size: 28px; line-height: 1.32; color: var(--fg); letter-spacing: -0.01em; }
+  .prose .bandnote { margin-top: 12px; font-family: var(--font-sans); font-weight: 300; font-size: 20px; line-height: 1.4; color: var(--fg-muted); }
+  .ledger { margin-top: 18px; display: grid; gap: 9px; }
+  .ledger.off { display: none; }
+  .ledger .row { display: grid; grid-template-columns: 148px 1fr; gap: 24px; align-items: baseline; }
+  .ledger .k { font-family: var(--font-mono); font-size: 14px; letter-spacing: var(--tr-mono); text-transform: uppercase; color: var(--fg-faint); }
+  .ledger .said { font-family: var(--font-sans); font-weight: 300; font-size: 20px; color: var(--fg-muted); font-style: italic; }
+  .ledger .did { font-family: var(--font-sans); font-weight: 400; font-size: 20px; color: var(--fg-strong); }
+
+  /* slide-change motion: the text lifts in, it never just pops */
+  .anim { animation: riseIn 620ms var(--ease-out) both; }
+  @keyframes riseIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+
+  .readdots { position: absolute; right: 120px; bottom: 66px; display: flex; gap: 14px; align-items: center; }
+  .readdots .d { width: 10px; height: 10px; border-radius: 50%; background: var(--hair-strong); transition: all var(--dur-base); }
+  .readdots .d.on { background: var(--c-signal); box-shadow: 0 0 14px 1px rgba(221,202,142,0.5); transform: scale(1.15); }
+  .readdots .d.done { background: var(--fg-muted); }
+  .readdots .ring { width: 30px; height: 30px; margin-right: 6px; }
+
+  #controls { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center;
+    gap: 10px; z-index: 50; background: rgba(20,20,20,0.82); border: 1px solid var(--hair-strong);
+    backdrop-filter: blur(12px); border-radius: var(--r-pill); padding: 8px 10px; font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-muted); }
+  #controls.hide { opacity: 0; pointer-events: none; }
+  #controls button, #controls select { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--fg); background: transparent; border: 1px solid var(--hair-strong);
+    border-radius: var(--r-pill); padding: 7px 13px; cursor: pointer; }
+  #controls .sep { width: 1px; height: 18px; background: var(--hair-strong); }
+  #controls .hint { color: var(--fg-faint); padding: 0 4px; }
+
+  /* the post-scan processing moment */
+  .processing { position: absolute; inset: 0; display: none; flex-direction: column;
+    align-items: center; justify-content: center; gap: 22px; background: radial-gradient(120% 90% at 50% 50%, #141414 0%, #0B0B0A 72%); z-index: 20; }
+  .processing.on { display: flex; animation: fadeIn 500ms var(--ease-out) both; }
+  .processing.out { animation: fadeOut 500ms var(--ease-in-out) both; }
+  .processing .pmark { width: 18px; height: 18px; border-radius: 50%; background: var(--c-signal);
+    box-shadow: 0 0 40px 6px rgba(221,202,142,0.45); animation: pbreathe 2.2s var(--ease-in-out) infinite; }
+  .processing .phead { font-family: var(--font-display); font-weight: 400; font-size: 52px; letter-spacing: -0.02em; color: var(--fg-strong); }
+  .processing .psub { font-family: var(--font-mono); font-size: 17px; letter-spacing: var(--tr-mono-sm); text-transform: uppercase; color: var(--fg-muted); }
+  @keyframes pbreathe { 0%,100% { transform: scale(1); opacity: 0.85; } 50% { transform: scale(1.35); opacity: 1; } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div id="tv">
+      <div class="glow a"></div>
+      <div class="head">
+        <div class="brand"><span class="mark"></span><span class="label">ZONE — THE FOCUS ROOM</span></div>
+        <div class="right">The Reveal</div>
+      </div>
+
+      <div class="readno" id="readno">READ 01 / 04</div>
+      <h1 class="title" id="title">How you settled</h1>
+      <div class="stat" id="stat"><div class="v" id="statV"></div><div class="l" id="statL"></div></div>
+
+      <svg class="plot" id="plot" viewBox="0 0 1920 1080">
+        <defs>
+          <filter id="soft" x="-8%" y="-40%" width="116%" height="180%"><feGaussianBlur stdDeviation="5"/></filter>
+        </defs>
+        <g id="grid"></g>
+        <g id="gaps"></g>
+        <g id="bandGlows"></g>
+        <g id="bandLines"></g>
+        <g id="labels"></g>
+        <g id="spot"></g>
+        <g id="timeline"></g>
+        <g id="anno"></g>
+      </svg>
+
+      <div class="prose" id="prose">
+        <div class="sentence" id="sentence">—</div>
+        <div class="bandnote" id="bandnote"></div>
+        <div class="ledger off" id="ledger">
+          <div class="row"><div class="k">You said</div><div class="said" id="said">—</div></div>
+          <div class="row"><div class="k">Your reading</div><div class="did" id="did">—</div></div>
+        </div>
+      </div>
+
+      <div class="readdots" id="readdots"></div>
+
+      <!-- the post-scan processing moment: shown while the room reads the session -->
+      <div class="processing" id="processing">
+        <div class="pmark"></div>
+        <div class="phead">Reading your session</div>
+        <div class="psub">Cleaning the signal, shaping what your rhythms did</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button id="btnAuto">Pause auto</button>
+    <button id="btnPrev">Prev</button>
+    <button id="btnNext">Next</button>
+    <span class="sep"></span>
+    <span class="hint">Beat</span>
+    <select id="selBeat">
+      <option value="8">8s (demo)</option>
+      <option value="60" selected>60s (real)</option>
+      <option value="4">4s (fast)</option>
+    </select>
+    <span class="sep"></span>
+    <button id="btnHide">Hide</button>
+  </div>
+
+  <script src="lib/focusline.js"></script>
+  <script>
+  (function () {
+    var tv = document.getElementById('tv');
+    function fit() { var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080); tv.style.transform = 'scale(' + s + ')'; }
+    window.addEventListener('resize', fit); fit();
+
+    var NS = 'http://www.w3.org/2000/svg';
+    var FL = window.FocusLine;
+    // plot box, with the right margin reserved for the inline series labels
+    var BOX = { x: 150, y: 316, w: 1330, h: 372 };
+    var LBLX = BOX.x + BOX.w + 26;
+    // the vertical stack below the plot, laid out once so nothing can collide:
+    // time axis → reading ribbon → event timeline → prose (fixed band in CSS)
+    var AXISY = BOX.y + BOX.h + 26;   // 714 · time labels
+    var RIBY  = BOX.y + BOX.h + 56;   // 744 · baseline of the reading-pace ribbon
+    var TLY   = BOX.y + BOX.h + 74;   // 762 · the event timeline
+    var BANDS = [
+      { k: 'delta', gl: 'δ', nm: 'Delta', ds: 'slow waves',        col: 'var(--w-delta)' },
+      { k: 'theta', gl: 'θ', nm: 'Theta', ds: 'internal thinking', col: 'var(--w-theta)' },
+      { k: 'alpha', gl: 'α', nm: 'Alpha', ds: 'relaxed alertness', col: 'var(--w-alpha)' },
+      { k: 'beta',  gl: 'β', nm: 'Beta',  ds: 'focused thinking',  col: 'var(--w-beta)' },
+      { k: 'gamma', gl: 'γ', nm: 'Gamma', ds: 'peak processing',   col: 'var(--w-gamma)' }
+    ];
+    function el(tag, a) { var e = document.createElementNS(NS, tag); for (var k in a) e.setAttribute(k, a[k]); return e; }
+    function mean(a){ var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return a.length? s/a.length : 0; }
+    function pctl(sorted, p) { if(!sorted.length) return 0; var i=Math.min(sorted.length-1,Math.max(0,Math.round((sorted.length-1)*p))); return sorted[i]; }
+    function fmtClock(sec){ var s=Math.round(sec); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+
+    var glowG = document.getElementById('bandGlows'), lineG = document.getElementById('bandLines');
+    var labelG = document.getElementById('labels'), gridG = document.getElementById('grid');
+    var gapG = document.getElementById('gaps');
+    var bandPathEls = {};
+    BANDS.forEach(function(b){
+      var g = el('path', { fill:'none', stroke:b.col, 'stroke-opacity':0.16, 'stroke-width':9, 'stroke-linecap':'round','stroke-linejoin':'round', filter:'url(#soft)' });
+      g.style.transition = 'stroke-opacity 500ms var(--ease-in-out)';
+      glowG.appendChild(g);
+      var l = el('path', { fill:'none', stroke:b.col, 'stroke-opacity':0.92, 'stroke-width':3.2, 'stroke-linecap':'round','stroke-linejoin':'round' });
+      l.style.transition = 'stroke-opacity 500ms var(--ease-in-out), stroke-width 500ms var(--ease-in-out)';
+      lineG.appendChild(l);
+      bandPathEls[b.k] = { glow:g, line:l, lbl:null };
+    });
+
+    var bandStream = [];   // [{t, delta..gamma}]
+    var R = [];            // reads
+    var interruptT = 0.6;
+    var sessionSec = 0;    // reading length in seconds, for the time axis
+    var scrollTrack = [];  // [{t, p}] reading progress 0..1, when the iPad reported it
+    var gaps = [];         // [{from, to}] stream seconds with no signal at all (a dropout)
+
+    // ---------------------------------------------------------------
+    // THE CHART
+    // ---------------------------------------------------------------
+    // Real band power is 1/f: delta carries tens of percent of the signal and
+    // gamma a fraction of one percent, so the five bands span roughly two
+    // decades. The old chart threw that away — it normalised each band to its
+    // own range and parked it in a fixed lane, which made five unrelated
+    // squiggles of identical amplitude and told the guest nothing.
+    //
+    // Now: each sample is converted to each band's SHARE of that moment's total
+    // signal power (which is what the sidecar measures), all five are plotted
+    // against ONE log axis, and the axis is labelled in percent. The 1/f
+    // ordering falls out of the data, the lines separate naturally, and every
+    // gridline is a real quantity the guest can read.
+    //
+    // Band power is an ENVELOPE, not a waveform: computed on ~1s epochs and
+    // conventionally smoothed further, it undulates over tens of seconds. We
+    // apply a centred moving average so the plotted line is the envelope rather
+    // than sample-to-sample jitter, and draw it with monotone curves so it can
+    // never bulge past its own samples.
+    var scale = null;
+    function movAvg(a, w) {
+      if (w < 2) return a.slice();
+      var out = [], half = Math.floor(w / 2);
+      for (var i = 0; i < a.length; i++) {
+        var s = 0, c = 0;
+        for (var j = Math.max(0, i - half); j <= Math.min(a.length - 1, i + half); j++) { s += a[j]; c++; }
+        out.push(s / c);
+      }
+      return out;
+    }
+    var SMOOTH_SEC = 10;          // envelope smoothing window (physical time)
+    var CHART_FLOOR = 0.03;       // bands under 3% session share sit at the axis floor, not magnified
+    function buildScale() {
+      scale = null;
+      if (bandStream.length < 4) return;
+      // A recording can OPEN on a stray pre-anchor row (t≈2.4, then the clock
+      // restarts at 0). The path started at x(2.4s), jumped back to x(0), and
+      // drew over itself — a little fork on every band's left edge. Trim any
+      // leading rows that sit before a clock restart.
+      var rows = bandStream, cut = 0;
+      for (var ci = 1; ci < Math.min(rows.length, 12); ci++) if (rows[ci].t < rows[ci-1].t - 1e-6) cut = ci;
+      if (cut) rows = rows.slice(cut);
+      if (rows.length < 4) return;
+      // MERGE the L/R samples that land at the same instant. They arrive as pairs
+      // (dt≈0 then ≈1-2s), and plotting both created vertical steps — the
+      // staircase. Averaging them into one moment gives a clean ~1Hz envelope.
+      var merged = [];
+      for (var mi = 0; mi < rows.length; mi++) {
+        var s = rows[mi], last = merged[merged.length-1];
+        if (last && isFinite(s.t) && isFinite(last.t) && Math.abs(s.t - last.t) < 0.4) {
+          BANDS.forEach(function(b){ last[b.k] = (last[b.k]*last._n + (+s[b.k]||0)) / (last._n+1); }); last._n++;
+        } else {
+          var o = { t: s.t, _n: 1 }; BANDS.forEach(function(b){ o[b.k] = Math.max(0, +s[b.k]||0); }); merged.push(o);
+        }
+      }
+      var n = merged.length;
+      if (n < 4) return;
+      var lastT = merged[n-1].t;
+      var useT = isFinite(lastT) && lastT > 0;
+      sessionSec = useT ? lastT : 0;
+      // share of each moment's total power
+      var shares = {}, sessMed = {};
+      BANDS.forEach(function(b){ shares[b.k] = []; });
+      for (var i = 0; i < n; i++) {
+        var tot = 0;
+        BANDS.forEach(function(b){ tot += Math.max(0, +merged[i][b.k] || 0); });
+        tot = tot || 1e-9;
+        BANDS.forEach(function(b){ shares[b.k].push(Math.max(0, +merged[i][b.k] || 0) / tot); });
+      }
+      // smooth on a PHYSICAL window, not a sample count — a short/sparse read
+      // under-smoothed into a staircase before
+      var dt = (useT && n > 1) ? (lastT / (n-1)) : 1;
+      var win = Math.max(3, Math.round(SMOOTH_SEC / Math.max(dt, 0.4)));
+      BANDS.forEach(function(b){ shares[b.k] = movAvg(shares[b.k], win); });
+      BANDS.forEach(function(b){ var s = shares[b.k].slice().sort(function(a,c){return a-c;}); sessMed[b.k] = pctl(s, 0.5); });
+      // Domain from the SUPPORTABLE bands only, and floored. Pooling every band's
+      // shares let the noise-floor bands (gamma, ~0.3%) set the axis bottom, so on
+      // a log scale a meaningless gamma wiggle took a third of the plot height
+      // while delta — the band with real signal — got a sliver. Now the floor is
+      // a real share, and bands below it rest at the bottom instead of ballooning.
+      var all = [];
+      BANDS.forEach(function(b){ if (sessMed[b.k] >= CHART_FLOOR) shares[b.k].forEach(function(v){ if (v > 0) all.push(v); }); });
+      if (all.length < 8) { BANDS.forEach(function(b){ shares[b.k].forEach(function(v){ if (v>0) all.push(v); }); }); }
+      if (all.length < 8) return;
+      all.sort(function(a,b){ return a-b; });
+      var lo = Math.max(pctl(all, 0.05), CHART_FLOOR * 0.6), hi = Math.max(pctl(all, 0.99), lo * 1.5);
+      var log = (hi / lo) > 12;                      // clear multi-decade spread → log
+      var d0 = log ? Math.log10(lo) : lo, d1 = log ? Math.log10(hi) : hi;
+      var pad = (d1 - d0) * 0.08; d0 -= pad; d1 += pad;
+      scale = {
+        log: log, d0: d0, d1: d1, useT: useT, totalT: useT ? lastT : 1, n: n, shares: shares, merged: merged,
+        yOf: function (v) {
+          var m = this.log ? Math.log10(Math.max(v, 1e-6)) : v;
+          var f = (m - this.d0) / ((this.d1 - this.d0) || 1);
+          return BOX.y + BOX.h * (1 - Math.max(0, Math.min(1, f)));
+        },
+        xOf: function (i) {
+          var f = this.useT && isFinite(this.merged[i].t) ? this.merged[i].t / this.totalT : (this.n > 1 ? i / (this.n - 1) : 0);
+          return BOX.x + BOX.w * Math.max(0, Math.min(1, f));
+        }
+      };
+    }
+
+    function drawAxes() {
+      gridG.innerHTML = '';
+      if (!scale) return;
+      // Value axis: real percentages of the guest's own signal power. The
+      // candidate list is dense enough that a NARROW domain (a session where all
+      // five bands sit between 8% and 40%) still gets several labelled lines —
+      // a decade-only list left such a chart with two ticks on it.
+      var CAND = [0.002,0.003,0.005,0.007,0.01,0.015,0.02,0.03,0.05,0.07,0.1,0.15,0.2,0.3,0.5,0.7];
+      var inside = CAND.filter(function(v){ var y = scale.yOf(v); return y >= BOX.y + 8 && y <= BOX.y + BOX.h - 8; });
+      while (inside.length > 7) inside = inside.filter(function(_, i){ return i % 2 === 0; });
+      var shown = 0;
+      inside.forEach(function(v){
+        var y = scale.yOf(v);
+        if (y < BOX.y + 8 || y > BOX.y + BOX.h - 8) return;
+        shown++;
+        gridG.appendChild(el('line', { x1:BOX.x, x2:BOX.x+BOX.w, y1:y, y2:y, stroke:'var(--hair)', 'stroke-width':1, 'stroke-dasharray':'2 12' }));
+        var t = el('text', { x:BOX.x-16, y:y+5, fill:'var(--fg-faint)', 'text-anchor':'end',
+          'font-family':'var(--font-mono)', 'font-size':14, 'letter-spacing':'1.2' });
+        t.textContent = (v*100 >= 1 ? Math.round(v*100) : (v*100).toFixed(1)) + '%';
+        gridG.appendChild(t);
+      });
+      if (shown) {
+        // left-aligned to the plot's own left rail. Right-anchoring it to the
+        // axis ran the caption off the left edge of the screen.
+        var cap = el('text', { x:BOX.x, y:BOX.y-16, fill:'var(--fg-faint)',
+          'font-family':'var(--font-mono)', 'font-size':12, 'letter-spacing':'2' });
+        cap.textContent = 'SHARE OF YOUR SIGNAL';
+        gridG.appendChild(cap);
+      }
+      // time axis in minutes, so the guest can place every read on a clock
+      if (sessionSec > 20) {
+        var step = sessionSec > 480 ? 120 : (sessionSec > 240 ? 60 : 30);
+        for (var s = 0; s <= sessionSec + 0.5; s += step) {
+          var x = BOX.x + BOX.w * (s / sessionSec);
+          if (x > BOX.x + BOX.w) break;
+          gridG.appendChild(el('line', { x1:x, x2:x, y1:BOX.y+BOX.h, y2:BOX.y+BOX.h+7, stroke:'var(--hair-strong)', 'stroke-width':1 }));
+          var tt = el('text', { x:x, y:AXISY, fill:'var(--fg-faint)', 'text-anchor':'middle',
+            'font-family':'var(--font-mono)', 'font-size':14, 'letter-spacing':'1.4' });
+          tt.textContent = fmtClock(s);
+          gridG.appendChild(tt);
+        }
+      }
+    }
+
+    // Split a band's points into the runs that lie BETWEEN dropouts. A sample
+    // whose stream time falls inside a recorded gap is not plotted at all.
+    function runsBetweenGaps(pix) {
+      if (!gaps.length || !scale) return [pix];
+      var runs = [], cur = [];
+      for (var i = 0; i < pix.length; i++) {
+        var t = bandStream[i] && isFinite(bandStream[i].t) ? bandStream[i].t : null;
+        var inGap = false;
+        if (t != null) {
+          for (var g = 0; g < gaps.length; g++) {
+            if (t > gaps[g].from && t < gaps[g].to) { inGap = true; break; }
+          }
+        }
+        if (inGap) { if (cur.length) { runs.push(cur); cur = []; } }
+        else cur.push(pix[i]);
+      }
+      if (cur.length) runs.push(cur);
+      return runs.length ? runs : [pix];
+    }
+
+    // Mark each dropout on the plot so the break reads as "we lost the signal
+    // here", not as a rendering glitch.
+    function drawGaps() {
+      gapG.innerHTML = '';
+      if (!gaps.length || !scale || !sessionSec) return;
+      gaps.forEach(function(g){
+        var x0 = BOX.x + BOX.w * Math.max(0, Math.min(1, g.from / sessionSec));
+        var x1 = BOX.x + BOX.w * Math.max(0, Math.min(1, g.to / sessionSec));
+        if (x1 - x0 < 1) return;
+        gapG.appendChild(el('rect', { x:x0, y:BOX.y, width:x1-x0, height:BOX.h,
+          fill:'var(--fg-faint)', 'fill-opacity':0.05 }));
+        [x0, x1].forEach(function(x){
+          gapG.appendChild(el('line', { x1:x, x2:x, y1:BOX.y, y2:BOX.y+BOX.h,
+            stroke:'var(--fg-faint)', 'stroke-opacity':0.3, 'stroke-width':1, 'stroke-dasharray':'2 6' }));
+        });
+        var lb = el('text', { x:(x0+x1)/2, y:BOX.y+BOX.h/2, 'text-anchor':'middle', fill:'var(--fg-faint)',
+          'font-family':'var(--font-mono)', 'font-size':11, 'letter-spacing':'1.6' });
+        lb.textContent = 'NO SIGNAL';
+        gapG.appendChild(lb);
+      });
+    }
+
+    function drawBands() {
+      buildScale();
+      if (!scale) {
+        BANDS.forEach(function(b){ bandPathEls[b.k].glow.setAttribute('d',''); bandPathEls[b.k].line.setAttribute('d',''); });
+        labelG.innerHTML = ''; gridG.innerHTML = '';
+        return;
+      }
+      drawAxes();
+      drawGaps();
+      var ends = [];
+      BANDS.forEach(function(b){
+        var pix = scale.shares[b.k].map(function(v, i){ return { x: scale.xOf(i), y: scale.yOf(v) }; });
+        // BREAK the line across a dropout. Bluetooth drops mid-session, and a
+        // smooth curve drawn straight through the hole is the most confident
+        // thing on the chart while being the one stretch where nothing was
+        // recorded at all. Each run of real samples gets its own subpath.
+        var d = runsBetweenGaps(pix).map(function(seg){
+          return seg.length > 1 ? FL.smooth(seg) : '';
+        }).filter(Boolean).join(' ');
+        bandPathEls[b.k].glow.setAttribute('d', d);
+        bandPathEls[b.k].line.setAttribute('d', d);
+        ends.push({ b: b, y: pix[pix.length-1].y, share: scale.shares[b.k][scale.n-1] });
+      });
+      drawSeriesLabels(ends);
+      animateDrawIn();
+    }
+
+    // Inline series labels at the right end of each line, so a guest never has
+    // to match a colour swatch in a legend to a line in a chart. Labels are
+    // pushed apart when two bands finish close together.
+    function drawSeriesLabels(ends) {
+      labelG.innerHTML = '';
+      ends.sort(function(a,b){ return a.y - b.y; });
+      var GAP = 46, top = BOX.y - 6, bot = BOX.y + BOX.h + 6;
+      for (var i = 0; i < ends.length; i++) {
+        ends[i].ly = Math.max(top + i * GAP, Math.min(ends[i].y, bot - (ends.length - 1 - i) * GAP));
+        if (i > 0 && ends[i].ly - ends[i-1].ly < GAP) ends[i].ly = ends[i-1].ly + GAP;
+      }
+      ends.forEach(function(e){
+        var g = el('g', {});
+        g.style.transition = 'opacity 500ms var(--ease-in-out)';
+        // a short leader from the line's true end to its (possibly nudged) label
+        g.appendChild(el('path', { d: 'M '+(BOX.x+BOX.w+4)+' '+e.y.toFixed(1)+' L '+(LBLX-10)+' '+e.ly.toFixed(1),
+          fill:'none', stroke:e.b.col, 'stroke-opacity':0.35, 'stroke-width':1.4 }));
+        var gl = el('text', { x:LBLX, y:e.ly+8, fill:e.b.col, 'font-family':'var(--font-display)', 'font-size':26 });
+        gl.textContent = e.b.gl; g.appendChild(gl);
+        var nm = el('text', { x:LBLX+34, y:e.ly+2, fill:'var(--fg-strong)', 'font-family':'var(--font-mono)', 'font-size':15, 'letter-spacing':'1.8' });
+        nm.textContent = e.b.nm.toUpperCase(); g.appendChild(nm);
+        var ds = el('text', { x:LBLX+34, y:e.ly+20, fill:'var(--fg-faint)', 'font-family':'var(--font-mono)', 'font-size':12, 'letter-spacing':'1.4' });
+        ds.textContent = e.b.ds.toUpperCase(); g.appendChild(ds);
+        labelG.appendChild(g);
+        bandPathEls[e.b.k].lbl = g;
+      });
+    }
+
+    // the lines draw themselves in, left to right, once per session
+    function animateDrawIn() {
+      BANDS.forEach(function(b, i){
+        var p = bandPathEls[b.k].line, len;
+        try { len = p.getTotalLength(); } catch (e) { return; }
+        if (!len) return;
+        p.style.transition = 'none';
+        p.setAttribute('stroke-dasharray', len);
+        p.setAttribute('stroke-dashoffset', len);
+        // eslint-disable-next-line no-unused-expressions
+        p.getBoundingClientRect();
+        p.style.transition = 'stroke-dashoffset 1700ms var(--ease-out) ' + (i*70) + 'ms, stroke-opacity 500ms var(--ease-in-out), stroke-width 500ms var(--ease-in-out)';
+        p.setAttribute('stroke-dashoffset', 0);
+      });
+    }
+
+    // ---------------------------------------------------------------
+    // SPOTLIGHT + TIMELINE
+    // ---------------------------------------------------------------
+    // The two dim panels are created ONCE and animated between reads. Rebuilding
+    // them every slide is what made the box flicker, land misaligned, and
+    // sometimes not appear at all.
+    var spot = document.getElementById('spot'), anno = document.getElementById('anno'), tlG = document.getElementById('timeline');
+    // The dim panels cover the PLOT ONLY. Sizing them to overhang by 52px on
+    // each side put the time axis under the dim as well, so the clock labels
+    // greyed out along with the chart.
+    var dimL = el('rect', { x:BOX.x-2, y:BOX.y-6, width:0, height:BOX.h+12, fill:'rgba(6,6,5,0.5)' });
+    var dimR = el('rect', { x:BOX.x+BOX.w+2, y:BOX.y-6, width:0, height:BOX.h+12, fill:'rgba(6,6,5,0.5)' });
+    // The region is FRAMED, not just darkened around. Two bare black rectangles
+    // read as a smudge over the chart; a faint tint inside the window plus a
+    // bright edge on each boundary makes it obvious the box is pointing at
+    // something, and it survives on both light and dark stretches of the plot.
+    var focusFill = el('rect', { x:BOX.x, y:BOX.y-6, width:0, height:BOX.h+12, fill:'var(--c-signal)', 'fill-opacity':0.045 });
+    var edgeA = el('line', { x1:BOX.x, x2:BOX.x, y1:BOX.y-6, y2:BOX.y+BOX.h+6, stroke:'var(--c-signal)', 'stroke-opacity':0.5, 'stroke-width':1.5 });
+    var edgeB = el('line', { x1:BOX.x, x2:BOX.x, y1:BOX.y-6, y2:BOX.y+BOX.h+6, stroke:'var(--c-signal)', 'stroke-opacity':0.5, 'stroke-width':1.5 });
+    [dimL, dimR, focusFill].forEach(function(r){ r.style.transition = 'x 620ms var(--ease-in-out), width 620ms var(--ease-in-out)'; spot.appendChild(r); });
+    [edgeA, edgeB].forEach(function(l){ l.style.transition = 'x1 620ms var(--ease-in-out), x2 620ms var(--ease-in-out), stroke 400ms'; spot.appendChild(l); });
+
+    function drawTimeline() {
+      tlG.innerHTML = '';
+      tlG.appendChild(el('line', { x1:BOX.x, x2:BOX.x+BOX.w, y1:TLY, y2:TLY, stroke:'var(--hair-strong)', 'stroke-width':2 }));
+      // Each read's window as a segment on the session's own timeline. ONLY the
+      // active segment is named: the four labels sit wherever their windows fall,
+      // so with four of them printed at once they overlapped each other and read
+      // out of order (a strongest stretch early in the session put "STRONGEST"
+      // to the left of "RHYTHM").
+      R.forEach(function(rd, i){
+        var a = BOX.x + BOX.w*Math.max(0,Math.min(1,rd.r0)), b = BOX.x + BOX.w*Math.max(0,Math.min(1,rd.r1));
+        var isInt = rd.k === 'Interruption';
+        var on = i === idx;
+        var seg = el('line', { x1:a, x2:Math.max(b,a+6), y1:TLY, y2:TLY, 'stroke-width': on?7:5, 'stroke-linecap':'round',
+          stroke: isInt ? 'var(--c-orange)' : 'var(--c-signal)', 'stroke-opacity': on ? 1 : 0.2 });
+        seg.style.transition = 'stroke-opacity 500ms var(--ease-in-out), stroke-width 500ms var(--ease-in-out)';
+        tlG.appendChild(seg);
+        if (!on) return;
+        var lb = el('text', { x: Math.max(BOX.x+70, Math.min((a+b)/2, BOX.x+BOX.w-70)), y:TLY+26, 'text-anchor':'middle',
+          fill: isInt?'var(--c-orange)':'var(--c-signal)',
+          'font-family':'var(--font-mono)', 'font-size':13, 'letter-spacing':'2.2' });
+        lb.textContent = String(rd.k).toUpperCase() + '  ·  ' + String(rd.v || '').toUpperCase();
+        tlG.appendChild(lb);
+        // clamp by the label's REAL half-width — a fixed 70px margin let a long
+        // caption on an edge window ("STRONGEST · …") run past the chart's rail
+        try {
+          var hw = lb.getBBox().width / 2 + 4;
+          lb.setAttribute('x', Math.max(BOX.x + hw, Math.min((a+b)/2, BOX.x + BOX.w - hw)));
+        } catch (e) {}
+      });
+      // the notification, marked wherever it actually landed
+      var xi = BOX.x + BOX.w*Math.max(0,Math.min(1,interruptT));
+      tlG.appendChild(el('circle', { cx:xi, cy:TLY, r:6, fill:'var(--c-orange)' }));
+      tlG.appendChild(el('circle', { cx:xi, cy:TLY, r:11, fill:'none', stroke:'var(--c-orange)', 'stroke-opacity':0.4, 'stroke-width':1.5 }));
+      // How the guest actually moved through the page, on the same clock as the
+      // brain data: a rising ribbon is steady reading, a flat run is a pause.
+      if (scrollTrack.length > 3 && sessionSec > 0) {
+        var pix = scrollTrack.map(function(p){
+          return { x: BOX.x + BOX.w*Math.max(0,Math.min(1, p.t/sessionSec)), y: RIBY - 18*Math.max(0,Math.min(1,p.p)) };
+        });
+        tlG.appendChild(el('path', { d: FL.smooth(pix), fill:'none', stroke:'var(--fg-muted)', 'stroke-opacity':0.55,
+          'stroke-width':1.8, 'stroke-linecap':'round' }));
+        // in the left margin, clear of the ribbon itself — sitting it over the
+        // plot put the label directly under the line it was naming
+        var rl = el('text', { x:BOX.x-16, y:RIBY, 'text-anchor':'end', fill:'var(--fg-faint)',
+          'font-family':'var(--font-mono)', 'font-size':11, 'letter-spacing':'1.6' });
+        rl.textContent = 'HOW YOU READ'; tlG.appendChild(rl);
+      }
+    }
+
+    function spotlight(read) {
+      anno.innerHTML = '';
+      var x0 = BOX.x + BOX.w*Math.max(0,Math.min(1,read.r0));
+      var x1 = BOX.x + BOX.w*Math.max(0,Math.min(1,read.r1));
+      dimL.setAttribute('x', BOX.x-2); dimL.setAttribute('width', Math.max(0, x0-(BOX.x-2)));
+      dimR.setAttribute('x', x1);      dimR.setAttribute('width', Math.max(0, (BOX.x+BOX.w+2)-x1));
+      focusFill.setAttribute('x', x0); focusFill.setAttribute('width', Math.max(0, x1-x0));
+      var isInt = read.k === 'Interruption';
+      var edgeCol = isInt ? 'var(--c-orange)' : 'var(--c-signal)';
+      focusFill.setAttribute('fill', edgeCol);
+      [[edgeA, x0], [edgeB, x1]].forEach(function(p){
+        p[0].setAttribute('x1', p[1]); p[0].setAttribute('x2', p[1]); p[0].setAttribute('stroke', edgeCol);
+      });
+      // the notification's exact moment, marked on the plot itself. The label is
+      // clamped inside the box: at the far right it used to run off the screen.
+      if (isInt) {
+        var xi = BOX.x + BOX.w*Math.max(0,Math.min(1,interruptT));
+        anno.appendChild(el('line', { x1:xi, y1:BOX.y-26, x2:xi, y2:BOX.y+BOX.h, stroke:'var(--c-orange-line)', 'stroke-width':2, 'stroke-dasharray':'3 7' }));
+        var lx = Math.max(BOX.x+108, Math.min(xi, BOX.x+BOX.w-108));
+        var pl = el('text', { x:lx, y:BOX.y-38, fill:'var(--c-orange)', 'text-anchor':'middle', 'font-family':'var(--font-mono)', 'font-size':16, 'letter-spacing':'2.6' });
+        pl.textContent = 'THE NOTIFICATION'; anno.appendChild(pl);
+        anno.appendChild(el('circle', { cx:xi, cy:BOX.y-26, r:5, fill:'var(--c-orange)' }));
+      }
+      // Light the band lines this read is actually about, dim the rest. The
+      // guest is told "your beta fell 31%" — this is which line that is.
+      var focus = read.bandFocus && read.bandFocus.length ? read.bandFocus : null;
+      BANDS.forEach(function(b){
+        var on = !focus || focus.indexOf(b.k) !== -1;
+        var el2 = bandPathEls[b.k];
+        el2.line.setAttribute('stroke-opacity', on ? 1 : 0.34);
+        el2.line.setAttribute('stroke-width', on && focus ? 4.6 : 3.2);
+        el2.glow.setAttribute('stroke-opacity', on && focus ? 0.3 : (on ? 0.16 : 0.06));
+        if (el2.lbl) el2.lbl.style.opacity = on ? 1 : 0.4;
+      });
+    }
+
+    // ---------------------------------------------------------------
+    // SLIDES
+    // ---------------------------------------------------------------
+    var idx = 0, auto = true, beat = 60000, rafId, beatStart;
+    var dotsWrap = document.getElementById('readdots'), ringNS;
+    var ledger = document.getElementById('ledger'), prose = document.getElementById('prose');
+    function buildDots() {
+      dotsWrap.innerHTML = '';
+      var ring = el('svg', { class:'ring', viewBox:'0 0 36 36' });
+      ring.innerHTML = '<circle cx="18" cy="18" r="15" fill="none" stroke="var(--hair-strong)" stroke-width="2.5"/>' +
+        '<circle id="ringP" cx="18" cy="18" r="15" fill="none" stroke="var(--c-signal)" stroke-width="2.5" stroke-linecap="round" transform="rotate(-90 18 18)" stroke-dasharray="94.2" stroke-dashoffset="94.2"/>';
+      dotsWrap.appendChild(ring); ringNS = ring.querySelector('#ringP');
+      for (var i=0;i<R.length;i++){ var d=document.createElement('div'); d.className='d'; dotsWrap.appendChild(d); }
+    }
+    function paintDots(){ dotsWrap.querySelectorAll('.d').forEach(function(d,i){ d.className='d'+(i===idx?' on':(i<idx?' done':'')); }); }
+
+    // restart a CSS entrance animation on an element
+    function replay(node) { node.classList.remove('anim'); void node.offsetWidth; node.classList.add('anim'); }
+
+    // The prose block owns a fixed region. If a long note plus a ledger would
+    // overflow it, step the type down until it fits. Nothing can spill into the
+    // chart, and no slide silently loses its last line.
+    function fitProse() {
+      var scaleF = 1;
+      prose.style.fontSize = '';
+      var inner = prose.scrollHeight, avail = prose.clientHeight;
+      while (inner > avail && scaleF > 0.74) {
+        scaleF -= 0.04;
+        prose.style.fontSize = (scaleF * 100) + '%';
+        inner = prose.scrollHeight;
+      }
+    }
+
+    var statEl = document.getElementById('stat'), statV = document.getElementById('statV'), statL = document.getElementById('statL');
+    var countRaf = null;
+    function setStat(read) {
+      if (countRaf) { cancelAnimationFrame(countRaf); countRaf = null; }
+      // A read with no stat is a read we could not measure. Show nothing rather
+      // than a placeholder: an empty slot is honest, a dash invites a guess.
+      if (!read.stat || !read.stat.value) { statEl.style.visibility = 'hidden'; return; }
+      statEl.style.visibility = 'visible';
+      statEl.className = 'stat' + (read.k === 'Interruption' ? ' orange' : '');
+      statL.textContent = String(read.stat.label || '').toUpperCase();
+      var v = String(read.stat.value);
+      var m = v.match(/^(\d+)(%?)$/);
+      if (m) {                                   // a plain figure counts up
+        var target = parseInt(m[1], 10), suffix = m[2], t0 = performance.now(), DUR = 900;
+        (function step(now){
+          var p = Math.min(1, (now - t0) / DUR), eased = 1 - Math.pow(1 - p, 3);
+          statV.textContent = Math.round(target * eased) + suffix;
+          if (p < 1) countRaf = requestAnimationFrame(step); else countRaf = null;
+        })(t0);
+      } else {
+        statV.textContent = v;
+      }
+      replay(statEl);
+    }
+
+    function show(i) {
+      if (!R.length) return;
+      idx = (i + R.length) % R.length;
+      var read = R[idx];
+      document.getElementById('readno').textContent = 'READ ' + String(read.no).padStart(2,'0') + ' / ' + String(R.length).padStart(2,'0');
+      var title = document.getElementById('title');
+      title.textContent = read.title; replay(title);
+      document.getElementById('sentence').textContent = read.sentence || '';
+      document.getElementById('bandnote').textContent = read.bandNote || '';
+      if (read.ledger) {
+        document.getElementById('said').textContent = read.ledger.said;
+        var did = document.getElementById('did'); did.textContent = read.ledger.did;
+        did.style.color = read.color === 'var(--c-orange)' ? 'var(--c-orange)' : '';
+        ledger.classList.remove('off');
+      } else {
+        ledger.classList.add('off');
+      }
+      setStat(read);
+      fitProse(); replay(prose);
+      spotlight(read); drawTimeline(); paintDots();
+      beatStart = performance.now();
+    }
+    function loop(now) {
+      if (auto && R.length) {
+        var prog = Math.min(1, (now - beatStart) / beat);
+        if (ringNS) ringNS.setAttribute('stroke-dashoffset', (94.2*(1-prog)).toFixed(1));
+        if (prog >= 1) show(idx + 1);
+      }
+      rafId = requestAnimationFrame(loop);
+    }
+
+    // ---------- controls ----------
+    var btnAuto = document.getElementById('btnAuto');
+    btnAuto.onclick = function(){ auto=!auto; btnAuto.textContent=auto?'Pause auto':'Resume auto'; beatStart=performance.now(); };
+    document.getElementById('btnNext').onclick = function(){ show(idx+1); };
+    document.getElementById('btnPrev').onclick = function(){ show(idx-1); };
+    document.getElementById('selBeat').onchange = function(e){ beat=parseInt(e.target.value,10)*1000; beatStart=performance.now(); };
+    var controls = document.getElementById('controls');
+    document.getElementById('btnHide').onclick = function(){ controls.classList.add('hide'); };
+    document.addEventListener('keydown', function(e){ if(e.key==='c') controls.classList.toggle('hide'); if(e.key==='ArrowRight') show(idx+1); if(e.key==='ArrowLeft') show(idx-1); });
+    [[60,60],[1860,60],[60,1020],[1860,1020]].forEach(function(pos){ var d=document.createElement('div');
+      d.style.cssText='position:absolute;width:4px;height:4px;border-radius:50%;background:var(--dot);opacity:.18;left:'+pos[0]+'px;top:'+pos[1]+'px'; tv.appendChild(d); });
+
+    function normReads(reads){ return (reads||[]).map(function(r){ return Object.assign({}, r, { color: r.color==='orange'?'var(--c-orange)':'var(--c-signal)' }); }); }
+
+    var procEl = document.getElementById('processing');
+    function showProcessing(){ procEl.classList.remove('out'); procEl.classList.add('on'); }
+    function hideProcessing(){
+      if (!procEl.classList.contains('on')) return;
+      procEl.classList.add('out');
+      setTimeout(function(){ procEl.classList.remove('on','out'); }, 520);
+    }
+
+    // ---------- LIVE (orchestrator over WS) ----------
+    function connectLive() {
+      if (!location.host) return;
+      var ws; try { ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'); } catch(e){ return; }
+      ws.onopen = function(){ ws.send(JSON.stringify({ type:'client/hello', role:'tv', t:Date.now() })); connectLive._n = 0; };
+      ws.onmessage = function(ev){ var m; try{ m=JSON.parse(ev.data); }catch(e){ return; }
+        if (m.type === 'reveal/processing') {
+          showProcessing();
+        } else if (m.type === 'reveal/data') {
+          hideProcessing();
+          auto = false; controls.classList.add('hide');
+          bandStream = m.bands || [];
+          scrollTrack = m.scroll || [];
+          gaps = m.gaps || [];
+          interruptT = (typeof m.interruptT==='number') ? m.interruptT : 0.6;
+          R = normReads(m.reads);
+          drawBands(); buildDots(); if (R.length) show(0);
+        } else if (m.type === 'reveal/step' && typeof m.index === 'number') {
+          show(m.index - 1);
+        }
+      };
+      ws.onerror = function(){ try{ws.close();}catch(e){} };
+      // Reconnect forever, with capped jittered backoff. A fixed retry tick meant
+      // every surface in the room hammered a flapping access point in lockstep;
+      // the jitter spreads them out. This never gives up and never shows an error:
+      // a Wi-Fi drop is a pause, not a failure.
+      ws.onclose = function () {
+        connectLive._n = (connectLive._n || 0) + 1;
+        var b = Math.min(8000, 500 * Math.pow(2, Math.min(connectLive._n, 4)));
+        setTimeout(connectLive, b + Math.random() * b * 0.4);
+      };
+    }
+
+    // ---------- synthetic preview (file:// only) ----------
+    // Shaped like a real recording: 1/f ordering (delta highest, gamma ~0.3%),
+    // slow envelopes, and one alpha step at the interruption.
+    function synthSession() {
+      var N=220, out=[]; interruptT=0.42;
+      for (var i=0;i<N;i++){ var t=i/(N-1);
+        var settle=1/(1+Math.exp(-(t-0.16)*16));
+        var e=0.12+settle*0.7;
+        e -= Math.exp(-Math.pow(t-0.42,2)/(2*0.045*0.045))*0.42;
+        e += Math.exp(-Math.pow(t-0.8,2)/(2*0.06*0.06))*0.14;
+        var slow = 0.06*Math.sin(t*6.1) + 0.04*Math.sin(t*13.7+1.1);   // shared drift
+        out.push({ t: t*300,
+          delta: 0.34 + slow + 0.03*Math.sin(t*21),
+          theta: 0.29 + slow*0.8 - e*0.05 + Math.exp(-Math.pow(t-0.42,2)/(2*0.05*0.05))*0.06,
+          alpha: 0.17 + slow*0.5 - e*0.06 + Math.exp(-Math.pow(t-0.42,2)/(2*0.05*0.05))*0.09,
+          beta:  0.09 + e*0.10 + 0.008*Math.sin(t*31),
+          gamma: 0.004 + e*0.003 });
+      }
+      return out;
+    }
+    function synthScroll() {
+      var out=[]; for (var i=0;i<=60;i++){ var t=i/60;
+        var p = t < 0.42 ? t*1.05 : (t < 0.5 ? 0.44 : 0.44 + (t-0.5)*1.1);
+        out.push({ t: t*300, p: Math.max(0,Math.min(1,p)) }); }
+      return out;
+    }
+    function synthReads() {
+      return [
+        { no:'01', title:'How you settled', k:'Settle', v:'an easy settle', color:'var(--c-signal)', r0:0, r1:0.24,
+          stat:{ value:'1 min 20 sec', label:'to reach your steady level' },
+          sentence:'You were at your steady level 1 min 20 sec in, the first 26% of your reading. That is close to a cold start.',
+          bandNote:'As you settled, beta rose 18% above its session level and alpha fell 9%. Delta held 34% of your signal power through the climb.',
+          bandFocus:['beta','alpha'] },
+        { no:'02', title:'Your attention rhythm', k:'Rhythm', v:'long, steady stretches', color:'var(--c-signal)', r0:0.24, r1:0.40,
+          stat:{ value:'81%', label:'of the time inside your steady band' },
+          sentence:'Once you were in, you stayed in. Your focus sat inside its steady band 81% of the time and crossed its average only 4 times.',
+          bandNote:'Through the steady stretch beta ran 14% above its session level, alpha 7% below. Delta carried 35% of your signal.',
+          bandFocus:['beta','alpha'],
+          ledger:{ said:'“It drifts here and there.”', did:'It ran in long stretches, crossing its own average only 4 times.' } },
+        { no:'03', title:'Your interruption cost', k:'Interruption', v:'a clear dip, a steady climb back', color:'var(--c-orange)', r0:0.42, r1:0.60,
+          stat:{ value:'1 min 5 sec', label:'to get back to where you were' },
+          sentence:'One notification, at 2:05. Your focus fell 38% of its own range and needed 1 min 5 sec to return to the level it held before.',
+          bandNote:'Your beta rhythm, the focused-thinking one, fell 31% below its session level in this window while alpha rose 22%. The pull is in the bands, not just the line.',
+          bandFocus:['beta','alpha'],
+          ledger:{ said:'“A notification barely breaks me.”', did:'Your focus fell 38% of its own range, then took 1 min 5 sec to return.' } },
+        { no:'04', title:'Your strongest stretch', k:'Strongest', v:'your best run today', color:'var(--c-signal)', r0:0.74, r1:0.86,
+          stat:{ value:'3:40–4:20', label:'your highest run of the session' },
+          sentence:'Your strongest 40 sec ran from 3:40 to 4:20, sitting 24% of the scale above your own session average.',
+          bandNote:'In your strongest stretch beta ran 26% above its session level, the largest shift of your five rhythms.',
+          bandFocus:['beta'] }
+      ];
+    }
+
+    // Served in the room: blank shell until reveal/data. Opened as a file (or ?preview
+    // over LAN for QA): synthetic preview.
+    var SERVED = !!location.host && location.search.indexOf('preview') === -1;
+    if (SERVED) {
+      auto = false; controls.classList.add('hide');
+      document.getElementById('readno').textContent = '';
+      document.getElementById('title').textContent = '';
+      document.getElementById('sentence').textContent = '';
+      statEl.style.visibility = 'hidden';
+    } else {
+      bandStream = synthSession(); scrollTrack = synthScroll(); R = synthReads();
+      drawBands(); buildDots(); show(0);
+    }
+    rafId = requestAnimationFrame(loop);
+    connectLive();
+  })();
+  </script>
+</body>
+</html>

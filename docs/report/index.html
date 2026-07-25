@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Focus Room — Change Report · 2026-06-28</title>
+<link rel="stylesheet" href="/tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  /* internal-report departure: #0E0E0C and #14130F below are report-only inks
+     (steps between --bg-room and --bg-elevated); guest surfaces never use them. */
+  body { background: var(--bg-room, #0B0B0A); color: var(--fg, #D6D4C9); font-family: var(--font-sans, ui-sans-serif);
+         -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 48px 120px; }
+
+  /* ---- header ---- */
+  header { padding: 72px 0 40px; border-bottom: 1px solid var(--hair-strong, rgba(214,212,201,0.18)); }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 34px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c-signal, #DDCA8E);
+         box-shadow: 0 0 18px 2px rgba(221,202,142,0.45); }
+  .mono { font-family: var(--font-mono, ui-monospace); font-size: 12px; letter-spacing: 0.16em;
+          text-transform: uppercase; color: var(--fg-muted, rgba(214,212,201,0.62)); }
+  h1 { font-family: var(--font-display, var(--font-sans)); font-weight: 500; font-size: 54px;
+       letter-spacing: -0.02em; color: var(--fg-strong, #F3F2EE); max-width: 880px; line-height: 1.06; }
+  .sub { margin-top: 18px; font-size: 18px; line-height: 1.55; color: var(--fg-muted, rgba(214,212,201,0.62)); max-width: 760px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 30px; }
+  .chip { font-family: var(--font-mono, ui-monospace); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+          border: 1px solid var(--hair-strong, rgba(214,212,201,0.18)); border-radius: var(--r-pill, 9999px); padding: 7px 14px;
+          color: var(--fg-muted, rgba(214,212,201,0.62)); }
+  .chip b { color: var(--c-signal, #DDCA8E); font-weight: 500; }
+
+  /* ---- toc ---- */
+  nav.toc { display: flex; flex-wrap: wrap; gap: 6px 22px; padding: 20px 0; border-bottom: 1px solid var(--hair-strong, rgba(214,212,201,0.18)); }
+  nav.toc a { font-family: var(--font-mono, ui-monospace); font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase;
+              color: var(--fg-faint, rgba(214,212,201,0.45)); text-decoration: none; padding: 4px 0; }
+  nav.toc a:hover { color: var(--c-signal, #DDCA8E); }
+
+  /* ---- sections ---- */
+  section { padding-top: 84px; }
+  .kicker { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .kicker .n { font-family: var(--font-mono, ui-monospace); font-size: 12px; color: var(--c-signal, #DDCA8E); letter-spacing: 0.12em; }
+  h2 { font-family: var(--font-display, var(--font-sans)); font-weight: 500; font-size: 34px; letter-spacing: -0.015em;
+       color: var(--fg-strong, #F3F2EE); margin-bottom: 14px; max-width: 860px; }
+  .lede { font-size: 16.5px; line-height: 1.6; color: var(--fg-muted, rgba(214,212,201,0.62)); max-width: 820px; margin-bottom: 34px; }
+  .lede strong { color: var(--fg-strong, #F3F2EE); font-weight: 500; }
+  .lede code, p code, li code { font-family: var(--font-mono, ui-monospace); font-size: 0.86em;
+    background: rgba(214,212,201,0.07); border-radius: 5px; padding: 2px 6px; color: var(--fg, #D6D4C9); }
+
+  /* ---- before/after frames ---- */
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-bottom: 18px; }
+  .frame { border: 1px solid var(--hair-strong, rgba(214,212,201,0.18)); border-radius: 14px; overflow: hidden; background: #060605; }
+  .frame .bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px;
+                border-bottom: 1px solid var(--hair-strong, rgba(214,212,201,0.18)); }
+  .tag { font-family: var(--font-mono, ui-monospace); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; }
+  .tag.before { color: var(--fg-faint, rgba(214,212,201,0.45)); }
+  .tag.after { color: var(--c-signal, #DDCA8E); }
+  .bar .src { font-family: var(--font-mono, ui-monospace); font-size: 10px; color: var(--fg-faint, rgba(214,212,201,0.45)); letter-spacing: 0.04em; }
+  .frame iframe { display: block; width: 100%; border: 0; background: #060605; }
+  .frame iframe.tv { aspect-ratio: 16 / 9; }
+  .frame iframe.pad { height: 620px; }
+  .cap { font-size: 14px; line-height: 1.55; color: var(--fg-faint, rgba(214,212,201,0.45)); max-width: 860px; margin: 6px 0 40px; }
+  .cap b { color: var(--fg-muted, rgba(214,212,201,0.62)); font-weight: 500; }
+
+  /* ---- code before/after ---- */
+  .codes { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin: 8px 0 14px; }
+  .code { border: 1px solid var(--hair-strong, rgba(214,212,201,0.18)); border-radius: 12px; background: #0E0E0C; overflow: hidden; }
+  .code .bar { padding: 9px 14px; border-bottom: 1px solid var(--hair-strong, rgba(214,212,201,0.18));
+               display: flex; justify-content: space-between; align-items: center; }
+  .code pre { padding: 14px 16px; font-family: var(--font-mono, ui-monospace); font-size: 12px; line-height: 1.6;
+              color: var(--fg, #D6D4C9); overflow-x: auto; }
+  .code pre .x { color: rgba(214,212,201,0.35); }
+  .code pre .hi { color: var(--c-signal, #DDCA8E); }
+  .codenote { font-family: var(--font-mono, ui-monospace); font-size: 10px; color: var(--fg-faint, rgba(214,212,201,0.45)); letter-spacing: 0.04em; }
+
+  /* ---- cards / tables ---- */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 26px; }
+  .card { border: 1px solid var(--hair-strong, rgba(214,212,201,0.18)); border-radius: 14px; padding: 22px 22px 20px; background: #0E0E0C; }
+  .card h3 { font-size: 16.5px; font-weight: 500; color: var(--fg-strong, #F3F2EE); margin: 10px 0 8px; letter-spacing: -0.01em; }
+  .card p { font-size: 13.5px; line-height: 1.55; color: var(--fg-muted, rgba(214,212,201,0.62)); }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; }
+  th, td { text-align: left; padding: 11px 14px; font-size: 13.5px; line-height: 1.45;
+           border-bottom: 1px solid var(--hair, rgba(214,212,201,0.10)); }
+  th { font-family: var(--font-mono, ui-monospace); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+       color: var(--fg-faint, rgba(214,212,201,0.45)); font-weight: 400; }
+  td.good { color: var(--c-signal, #DDCA8E); }
+  td.bad { color: var(--fg-faint, rgba(214,212,201,0.45)); }
+
+  /* ---- ipad walker ---- */
+  .beats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .beats button { font-family: var(--font-mono, ui-monospace); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+                  color: var(--fg-muted, rgba(214,212,201,0.62)); background: transparent; cursor: pointer;
+                  border: 1px solid var(--hair-strong, rgba(214,212,201,0.18)); border-radius: var(--r-pill, 9999px); padding: 8px 15px;
+                  transition: all 150ms; }
+  .beats button:hover { color: var(--fg-strong, #F3F2EE); border-color: var(--fg-muted, rgba(214,212,201,0.5)); }
+  .beats button.on { color: #14130F; background: var(--c-signal, #DDCA8E); border-color: var(--c-signal, #DDCA8E); }
+  #beatcap { min-height: 44px; }
+
+  .fileref { font-family: var(--font-mono, ui-monospace); font-size: 11px; color: var(--fg-faint, rgba(214,212,201,0.45)); letter-spacing: 0.04em; }
+  .hr { height: 1px; background: var(--hair-strong, rgba(214,212,201,0.18)); margin-top: 84px; }
+  .banner { display: none; margin: 24px 0 0; border: 1px solid rgba(221,202,142,0.4); border-radius: 12px; padding: 16px 20px;
+            font-size: 14px; color: var(--c-signal, #DDCA8E); background: rgba(221,202,142,0.06); }
+  footer { padding-top: 64px; font-size: 13.5px; line-height: 1.7; color: var(--fg-faint, rgba(214,212,201,0.45)); max-width: 820px; }
+  ol.map { margin: 22px 0 0 18px; max-width: 820px; }
+  ol.map li { font-size: 15.5px; line-height: 1.65; color: var(--fg-muted, rgba(214,212,201,0.62)); padding: 7px 0; }
+  ol.map li b { color: var(--fg-strong, #F3F2EE); font-weight: 500; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: rgba(214,212,201,0.15); border-radius: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  @media (max-width: 980px) { .pair, .codes, .grid { grid-template-columns: 1fr; } .wrap { padding: 0 22px 80px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand"><span class="dot"></span><span class="mono">Zone · The Focus Room · Change report</span></div>
+  <h1>What changed, shown on the real surfaces.</h1>
+  <p class="sub">Every “before” below is the actual page extracted from git (checkpoint <code>1469104</code>) and
+  every “after” is the working tree at commit <code>b154c21</code> — embedded live, not screenshotted. The pass came
+  out of a five-lens audit whose findings were each adversarially re-verified against the code before anything
+  was applied. The sidecar (mid-hardware-verification) was deliberately untouched.</p>
+  <div class="chips">
+    <span class="chip"><b>56</b>&nbsp;findings audited</span>
+    <span class="chip"><b>34</b>&nbsp;applied now</span>
+    <span class="chip"><b>17</b>&nbsp;files · <b>+713</b>/−173</span>
+    <span class="chip"><b>5</b>&nbsp;lenses · <b>14</b>&nbsp;agents</span>
+    <span class="chip"><b>50</b>-assertion honesty test</span>
+    <span class="chip"><b>0</b>&nbsp;sidecar files touched</span>
+  </div>
+  <div class="banner" id="fileBanner">This report embeds the live surfaces, so it needs the local server:
+  run <code>npm run dev</code> (or <code>node build/static-serve.js</code>) and open
+  <code>http://localhost:4321/docs/report/index.html</code>.</div>
+</header>
+
+<nav class="toc">
+  <a href="#honesty">01 · Served honesty</a>
+  <a href="#orange">02 · Orange discipline</a>
+  <a href="#ipad">03 · The broken last third</a>
+  <a href="#tv">04 · Long readings, long idles</a>
+  <a href="#outputs">05 · Outputs that arrive</a>
+  <a href="#robust">06 · A day alone</a>
+  <a href="#session">07 · Also this session</a>
+  <a href="#road">08 · The path from here</a>
+</nav>
+
+<!-- ================= 01 SERVED HONESTY ================= -->
+<section id="honesty">
+  <div class="kicker"><span class="n">01</span><span class="mono">The one rule</span></div>
+  <h2>The room no longer invents.</h2>
+  <p class="lede">The master rule is that <strong>every guest-facing value traces to live signal or is omitted</strong>.
+  But all three TV surfaces booted into their design-preview demo and only switched on the first live message —
+  so a guest could watch a <strong>fabricated focus line</strong>, a fabricated reveal, and a wall claiming
+  <strong>“1,248 minds”</strong> that never existed. These embeds are both talking to the same server with no live
+  session running — exactly what a guest would see if the sidecar hiccupped. The before plays fiction; the after
+  holds an honest quiet until real signal arrives.</p>
+
+  <div class="pair">
+    <div class="frame">
+      <div class="bar"><span class="tag before">Before — served with no live session</span><span class="src">tv-live.html @ 1469104</span></div>
+      <iframe class="tv" loading="lazy" src="/docs/report/before/tv-live-served.html"></iframe>
+    </div>
+    <div class="frame">
+      <div class="bar"><span class="tag after">After — served with no live session</span><span class="src">tv-live.html @ b154c21</span></div>
+      <iframe class="tv" loading="lazy" src="/docs/report/after/tv-live-served.html"></iframe>
+    </div>
+  </div>
+  <p class="cap"><b>Left:</b> a synthetic line climbs, plateaus and dips — pure fabrication, with the dev control
+  pill visible on the guest TV. <b>Right:</b> blank live shell, controls hidden at boot; the line begins only when a
+  real <code>eeg/frame</code> lands. The reveal page got the same treatment (it used to auto-cycle a fake
+  four-read story forever if the socket failed).</p>
+
+  <div class="pair">
+    <div class="frame">
+      <div class="bar"><span class="tag before">Before — the wall, served</span><span class="src">tv-constellation.html @ 1469104</span></div>
+      <iframe class="tv" loading="lazy" src="/docs/report/before/tv-constellation-served.html"></iframe>
+    </div>
+    <div class="frame">
+      <div class="bar"><span class="tag after">After — the wall, served</span><span class="src">tv-constellation.html @ b154c21</span></div>
+      <iframe class="tv" loading="lazy" src="/docs/report/after/tv-constellation-served.html"></iframe>
+    </div>
+  </div>
+  <p class="cap"><b>Left:</b> ~940 synthetic dots and a hardcoded <b>“1,248”</b> count. <b>Right:</b> an empty wall
+  and an em-dash until <code>constellation/data</code> delivers the real dots — the count can only ever be the truth.
+  (The Electron main re-sends the wall on every TV connect, so in the room this gap is a blink.)</p>
+</section>
+
+<!-- ================= 02 ORANGE ================= -->
+<section id="orange">
+  <div class="kicker"><span class="n">02</span><span class="mono">One color, one meaning</span></div>
+  <h2>Orange belongs to the interruption.</h2>
+  <p class="lede">The brand reserves orange for a single moment — the engineered interruption. The live surface was
+  spending it all session long: a <strong>blinking orange pip</strong> in the header and a permanent drifting
+  <strong>orange ambient glow</strong>. And on the reveal, the ledger’s “Your focus” line was hardcoded orange on
+  <em>every</em> read, though real sessions attach ledgers to reads 02 and 04 too. These are the design-preview
+  modes of both eras — watch the header pip.</p>
+
+  <div class="pair">
+    <div class="frame">
+      <div class="bar"><span class="tag before">Before — blinking orange pip, orange ambient</span><span class="src">tv-live.html @ 1469104 · preview mode</span></div>
+      <iframe class="tv" loading="lazy" src="/docs/report/before/tv-live-demo.html"></iframe>
+    </div>
+    <div class="frame">
+      <div class="bar"><span class="tag after">After — signal-sand pip, slow breathe</span><span class="src">tv-live.html @ b154c21 · preview mode</span></div>
+      <iframe class="tv" loading="lazy" src="/docs/report/after/tv-live-demo.html"></iframe>
+    </div>
+  </div>
+  <p class="cap">The pip is now the same signal sand as the line, breathing on a slow 5.6s cycle instead of a 2.4s
+  blink — the single most attention-grabbing pixel on a surface whose brief is calm. Zero orange remains on the
+  live surface; when the interruption finally spends it, it means something.</p>
+
+  <div class="codes">
+    <div class="code">
+      <div class="bar"><span class="tag before">Before</span><span class="codenote">tv-reveal.html:53</span></div>
+      <pre>.ledger .did { color: var(--c-orange); }  <span class="x">/* every read */</span></pre>
+    </div>
+    <div class="code">
+      <div class="bar"><span class="tag after">After</span><span class="codenote">tv-reveal.html · show()</span></div>
+      <pre>.ledger .did { color: var(--fg-strong); }
+<span class="hi">didEl.style.color = read.color === ORANGE</span>
+<span class="hi">  ? 'var(--c-orange)'   /* the interruption read only */</span>
+<span class="hi">  : 'var(--fg-strong)';</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03 IPAD ================= -->
+<section id="ipad">
+  <div class="kicker"><span class="n">03</span><span class="mono">Guest flow wiring</span></div>
+  <h2>The last third of the session was quietly broken.</h2>
+  <p class="lede">The audit’s worst discoveries were wiring, not looks: the Close button was a
+  <strong>no-op</strong> (so the report never emailed and the room never reset for the next guest), the email
+  address and strongest-stretch guess were <strong>never transmitted</strong>, and a leftover preview timer fired a
+  <strong>canned interruption card at 5.2 seconds</strong> into every live reading — then swallowed the real one.
+  Sim walkthroughs never caught these because the scripted test driver sent the correct payloads the real iPad
+  never did. Walk both eras side by side:</p>
+
+  <div class="beats" id="beats"></div>
+  <div class="pair">
+    <div class="frame">
+      <div class="bar"><span class="tag before">Before</span><span class="src">ipad bundle @ 1469104 (rebuilt from source)</span></div>
+      <iframe class="pad" id="padBefore" loading="lazy" src="/docs/report/before/ipad-flow-demo.html"></iframe>
+    </div>
+    <div class="frame">
+      <div class="bar"><span class="tag after">After</span><span class="src">ipad bundle @ b154c21</span></div>
+      <iframe class="pad" id="padAfter" loading="lazy" src="/docs/report/after/ipad-flow-demo.html"></iframe>
+    </div>
+  </div>
+  <p class="cap" id="beatcap"></p>
+
+  <div class="codes">
+    <div class="code">
+      <div class="bar"><span class="tag before">Before</span><span class="codenote">ipad/screens2.jsx — the Close CTA</span></div>
+      <pre>e(PillBtn, { <span class="hi">onClick: () =&gt; {}</span>, ... }, d.cta)
+<span class="x">// close_choice never sent → no email, no reset,</span>
+<span class="x">// the room is wedged for the next guest</span></pre>
+    </div>
+    <div class="code">
+      <div class="bar"><span class="tag after">After</span><span class="codenote">ipad/screens2.jsx + controller.jsx</span></div>
+      <pre>function Close({ <span class="hi">go</span>, answers, setAnswers, outputs }) ...
+e(PillBtn, { <span class="hi">onClick: go</span>, ... }, d.cta)
+<span class="x">// controller sends the contract payloads:</span>
+if (beat === 'strongest') p.choice = a.strongestGuess;
+if (beat === 'email')     p.email  = a.email;
+if (beat === 'close')     p.door   = a.door || 'investor';</pre>
+    </div>
+  </div>
+  <div class="codes">
+    <div class="code">
+      <div class="bar"><span class="tag before">Before</span><span class="codenote">ipad/screens2.jsx — interruption card</span></div>
+      <pre>useEffect(() =&gt; {
+  <span class="x">// fires in EVERY session — live included —</span>
+  <span class="x">// because interruption is null until the real one</span>
+  if (!props.interruption)
+    t = setTimeout(<span class="hi">showCard, 5200</span>);
+}, []);
+<span class="x">// and sticky `dismissed` then hides the REAL card</span></pre>
+    </div>
+    <div class="code">
+      <div class="bar"><span class="tag after">After</span><span class="codenote">ipad/screens2.jsx</span></div>
+      <pre>if (<span class="hi">!location.host</span> &amp;&amp; !props.interruption)
+  t = setTimeout(showCard, 5200);  <span class="x">// preview only</span>
+
+useEffect(() =&gt; {           <span class="x">// a real interruption</span>
+  <span class="hi">setDismissed(false)</span>;      <span class="x">// always shows, keyed</span>
+}, [interruption &amp;&amp; interruption.t]);   <span class="x">// on its t</span></pre>
+    </div>
+  </div>
+  <div class="codes">
+    <div class="code">
+      <div class="bar"><span class="tag before">Before</span><span class="codenote">ipad/screens1.jsx — fit check</span></div>
+      <pre><span class="x">// WebSocket down? fake it:</span>
+if (props.ready == null)
+  setTimeout(() =&gt; setPhase(<span class="hi">'ready'</span>), 3200);
+<span class="x">// “Signal is clear.” with no impedance behind it</span></pre>
+    </div>
+    <div class="code">
+      <div class="bar"><span class="tag after">After</span><span class="codenote">ipad/screens1.jsx</span></div>
+      <pre>if (<span class="hi">location.host</span>) return;  <span class="x">// served: only the real</span>
+                            <span class="x">// impedance gate advances</span>
+setTimeout(() =&gt; setPhase('ready'), 3200); <span class="x">// preview</span></pre>
+    </div>
+  </div>
+  <p class="cap">Also in this cluster: a Wi-Fi blip mid-flow used to make the iPad silently <b>fork its own local
+  state</b> and snap the guest backward on reconnect — taps are now held in a single pending slot and flushed when
+  the socket reopens. The reading screen’s visible <b>“placeholder text”</b> line is gone and all four picker
+  pieces now carry full bodies (the lighthouse, the octopus, the cartographer, the 1977 signal — ~600 words each).
+  The archetype self-heals from <code>session/state</code>, and the Close takeaway only names outputs the pipeline
+  actually confirmed.</p>
+</section>
+
+<!-- ================= 04 TV ROBUSTNESS ================= -->
+<section id="tv">
+  <div class="kicker"><span class="n">04</span><span class="mono">The 100-inch surface</span></div>
+  <h2>Long readings, long idles, a big panel.</h2>
+  <p class="lede">Four smaller TV fixes with outsized effect on a room that runs unattended all day.</p>
+  <div class="grid">
+    <div class="card"><span class="mono">tv-live.html</span>
+      <h3>The line no longer piles up at the edge</h3>
+      <p>The x-axis assumed a 7-minute ceiling (<code>t / 420s</code>, clamped). A slow reader’s line stopped
+      advancing and scribbled vertically at the right edge — the exact spot their eyes were parked. The
+      denominator now adapts: <code>span&nbsp;=&nbsp;max(420, last.t)</code>, so an over-long session gently
+      compresses instead.</p></div>
+    <div class="card"><span class="mono">tv-constellation.html</span>
+      <h3>4K-correct idle wall</h3>
+      <p>The wall drew into a fixed 1920×1080 canvas and CSS-scaled it up — every dot softened 2× on a 4K panel
+      while the DOM text beside it stayed pin-sharp. The backing store now sizes to
+      <code>devicePixelRatio</code> physical pixels; all drawing code untouched.</p></div>
+    <div class="card"><span class="mono">tv-constellation.html</span>
+      <h3>Legible from the armchair</h3>
+      <p>The axis hints that explain what dot placement means were 13px mono at 22% opacity — about 8 arc-minutes
+      of cap height from 4.5m, i.e. smudges. Now 16px at 40%, with the live surface’s honesty caption
+      (“relative to your own session”) bumped too. Hierarchy preserved.</p></div>
+    <div class="card"><span class="mono">tv-live.html</span>
+      <h3>No ghost of the previous guest</h3>
+      <p>The “fresh session” clear was a no-op — <code>renderLive()</code> early-returned on an empty sample list,
+      leaving the previous guest’s full line on the wall until navigation. An explicit <code>clearPlot()</code>
+      now empties the paths and parks the playhead on idle/welcome.</p></div>
+    <div class="card"><span class="mono">tv-live.html</span>
+      <h3>The state word keeps its dignity</h3>
+      <p>The 132px display word swapped its text 300ms into a 620ms fade — visibly popping at half-opacity.
+      The swap now waits for the fade-out to complete.</p></div>
+    <div class="card"><span class="mono">tv-reveal.html</span>
+      <h3>Annotations that don’t collide</h3>
+      <p>On real data the trough guide label could land inside the prose block and a tag label could touch the
+      title. Labels now flip above their guide / below their anchor when they’d cross those zones — verified
+      against the synthetic preview’s four reads.</p></div>
+  </div>
+  <p class="cap">Also: the fabricated “session low” dashed baseline (a hardcoded v=0.30 that traced to nothing) is
+  gone from served mode, and the wall’s header now reads <b>“In session”</b> instead of “Idle” while a guest’s dot
+  is landing on it.</p>
+</section>
+
+<!-- ================= 05 OUTPUTS ================= -->
+<section id="outputs">
+  <div class="kicker"><span class="n">05</span><span class="mono">Card · profile · email</span></div>
+  <h2>Takeaways that actually arrive.</h2>
+  <p class="lede">The takeaway pipeline carried session data to its render pages in a base64 querystring. Node’s
+  HTTP server rejects headers over 16KB — so <strong>any session past about five minutes silently killed the card,
+  the profile and the email at once</strong>. And the 210-second plateau fallback makes five-minute sessions
+  normal, not rare.</p>
+  <table>
+    <tr><th>Session length</th><th>Encoded payload</th><th>Before</th><th>After</th></tr>
+    <tr><td>200 s</td><td>~10 KB</td><td class="good">renders</td><td class="good">querystring (unchanged path)</td></tr>
+    <tr><td>330 s</td><td>16.3 KB</td><td class="bad">dead — over the 16 KB header cap</td><td class="good">injected via executeJavaScript</td></tr>
+    <tr><td>480 s</td><td>23.7 KB</td><td class="bad">dead</td><td class="good">injected</td></tr>
+    <tr><td>30 min</td><td>~90 KB</td><td class="bad">dead</td><td class="good">injected</td></tr>
+  </table>
+  <p class="cap">Payloads ≤12KB keep the legacy querystring; larger ones load the page with <code>?wait=1</code>
+  and receive data through <code>window.__setData(...)</code> after load — no size ceiling. Both render pages also
+  now wait on <code>document.fonts.ready</code> before declaring themselves capturable (the PDF could previously
+  print fallback fonts), and the profile PNG embeds the brand woff2s as data-URLs inside the SVG raster — an
+  SVG-as-image can’t reach external webfonts at all, so the old raster always drew system type.</p>
+
+  <h2 style="font-size:26px; margin-top:44px;">The honesty engine, hardened.</h2>
+  <p class="lede">Two structural bugs and six empirical cases. Structural: strict mode keyed off
+  <code>NODE_ENV</code>, which nothing ever set in the packaged app — and a violation <em>threw</em>, taking down
+  all three outputs at once. Strict now derives from packaging itself and <strong>redacts loudly instead of
+  throwing</strong>, with each output isolated. Empirical, all reproduced then fixed and pinned by a 50-assertion
+  regression test:</p>
+  <table>
+    <tr><th>Guest-facing string</th><th>Before</th><th>After</th></tr>
+    <tr><td>“…scored 96 percent”</td><td class="bad">slipped through (only “%” was caught)</td><td class="good">caught</td></tr>
+    <tr><td>“…seven out of ten”</td><td class="bad">slipped through</td><td class="good">caught</td></tr>
+    <tr><td>felt-vs-measured split across two sentences</td><td class="bad">slipped through</td><td class="good">caught</td></tr>
+    <tr><td>“This isn’t a diagnosis…”</td><td class="bad">wrongly mangled (the negation lookbehind could never match a contraction)</td><td class="good">passes</td></tr>
+    <tr><td>“We don’t diagnose anything in this room.”</td><td class="bad">wrongly mangled</td><td class="good">passes</td></tr>
+    <tr><td>“It is not presented as a clinical score…”</td><td class="bad">wrongly mangled (12-char negation window too short)</td><td class="good">passes</td></tr>
+  </table>
+  <p class="cap">Also in this cluster: the Postmark send gets a 10-second abort timeout and
+  <b>persist-before-send</b> — the outgoing report is written to disk before the attempt and deleted only on
+  confirmed success, so a mid-send failure is recoverable instead of gone. Addresses are trimmed and validated
+  server-side; a clearly invalid one skips the provider with a logged reason and still writes the recovery
+  artifact.</p>
+</section>
+
+<!-- ================= 06 ROBUSTNESS ================= -->
+<section id="robust">
+  <div class="kicker"><span class="n">06</span><span class="mono">Unattended by design</span></div>
+  <h2>Built for a day alone.</h2>
+  <p class="lede">No operator means every failure is permanent until someone notices. Six of those failure modes
+  are now closed:</p>
+  <div class="grid">
+    <div class="card"><span class="mono">app/main.js</span>
+      <h3>A busy port no longer blanks the day</h3>
+      <p>If port 4321 was taken at launch, the app logged one line and carried on — while the TV loaded a URL
+      nothing served. Blank screen until staff intervened. The bind now retries (3s×5, then every 30s forever)
+      and reloads the TV surface the moment it succeeds.</p></div>
+    <div class="card"><span class="mono">app/main.js</span>
+      <h3>Crash guard with a loop breaker</h3>
+      <p>One unhandled throw killed TV, server and sidecar together. Fatal errors now log to
+      <code>crash.log</code>, attempt cleanup (3s cap), and relaunch — unless more than 3 crashes land inside 10
+      minutes, which stops a relaunch storm.</p></div>
+    <div class="card"><span class="mono">app/server.js</span>
+      <h3>Zombie sockets get swept</h3>
+      <p>An iPad that dropped off Wi-Fi never sends a FIN; its socket buffered every broadcast forever
+      (<code>isAlive</code> was write-only). A standard 30s ping/pong heartbeat now terminates the dead.</p></div>
+    <div class="card"><span class="mono">app/store.js</span>
+      <h3>The wall survives a power cut</h3>
+      <p>The constellation JSON was truncate-written in place — one power cut mid-write and months of dots were
+      gone, permanently, through a silent catch. Writes are now tmp+rename atomic, and a corrupt file is
+      quarantined aside rather than overwritten.</p></div>
+    <div class="card"><span class="mono">app/orchestrator.js</span>
+      <h3>Only the iPad drives the session</h3>
+      <p>Any laptop on the room network could send guest events — and a duplicated intake message could skip the
+      reading picker entirely. Guest messages are now gated by client role, and only a real reading pick advances
+      out of the picker.</p></div>
+    <div class="card"><span class="mono">app/orchestrator.js</span>
+      <h3>Reseat coaching that persists</h3>
+      <p>The “reseat the earbud” prompt rode a one-shot broadcast; any state rebroadcast (a resync, a sidecar
+      restart) wiped it while the signal was still bad. It’s now canonical state carried by every broadcast until
+      the signal actually recovers.</p></div>
+  </div>
+</section>
+
+<!-- ================= 07 SESSION ================= -->
+<section id="session">
+  <div class="kicker"><span class="n">07</span><span class="mono">Also this session</span></div>
+  <h2>The hardware unlock and the home-screen app.</h2>
+  <p class="lede">Before the audit, this session solved the real-buds connect. The UUID catalogue turned out to
+  describe buds other than yours — validation rejected the pair (<code>Left device did not match any pair</code>)
+  and a separate probe connection made Windows lose the device address. The connect is now
+  <strong>catalogue-free</strong>: the SDK’s own validated path is hooked so the pair matcher reads each bud’s real
+  GATT <em>inside</em> the SDK’s tuned connect sequence and picks the EEG service itself — preferring the
+  <code>2fda</code> vendor family your buds actually expose:</p>
+  <div class="codes">
+    <div class="code">
+      <div class="bar"><span class="tag before">Your bud’s real GATT (from the diagnostic)</span><span class="codenote">discovery run · 2026-06-28</span></div>
+      <pre><span class="x">left: GATT service</span> 8d53dc1d-… <span class="x">:: one bidirectional char (pairing/control — the trap)</span>
+<span class="x">left: GATT service</span> <span class="hi">00000000-2fda-…0253</span> <span class="x">:: …0255[notify] + …0254[write] ← EEG</span>
+<span class="x">left: GATT service</span> 00000000-2fda-…0256 <span class="x">:: …0258[notify] + …0257[write]</span>
+<span class="x">left: GATT service</span> 00000000-2fda-…0259 <span class="x">:: …025b[notify] + …025a[write]</span></pre>
+    </div>
+    <div class="code">
+      <div class="bar"><span class="tag after">The rank that picks it</span><span class="codenote">sidecar/zone_source.py · _probe_uuids</span></div>
+      <pre><span class="x"># zone-family & disjoint  >  disjoint  >  zone  >  shared char</span>
+disjoint = trip["tx"] != trip["rx"]
+zone = su.startswith(<span class="hi">ZONE_EEG_PREFIX</span>)  <span class="x"># 00000000-2fda-</span>
+tier = 0 if (zone and disjoint) else 1 if disjoint
+       else 2 if zone else 3</pre>
+    </div>
+  </div>
+  <p class="cap">The fit gate also moved to the SDK’s own QC line — it demanded ≤150 kΩ, but dry in-ear electrodes
+  normally sit at 150–500 kΩ with a perfectly clean read, so no real guest could ever pass. It now gates on the
+  SDK’s <code>phase == "good"</code> (≤800 kΩ). <b>This is the change awaiting your hardware run.</b> A liveness
+  check backs it up: streaming with zero EEG frames for 6s raises <code>no_eeg_data</code> instead of a
+  mysteriously flat line.</p>
+  <p class="lede" style="margin-top:26px;">And the iPad became a real home-screen app: web manifest, standalone
+  meta, portrait lock, and a device mode that drops the desktop-preview bezel and cover-scales the canvas to fill
+  the screen. Add to Home Screen in Safari and it launches chromeless.
+  <span class="fileref" style="display:block; margin-top:14px;">app icon (placeholder until the real orb art arrives):</span></p>
+  <div style="display:flex; gap:18px; align-items:flex-end; margin-top:12px;">
+    <img src="/assets/app-icon-180.png" width="90" height="90" style="border-radius:20px;" alt="app icon 180">
+    <img src="/assets/app-icon-192.png" width="64" height="64" style="border-radius:14px;" alt="app icon 192">
+    <img src="/assets/app-icon-512.png" width="44" height="44" style="border-radius:10px;" alt="app icon 512">
+    <span class="cap" style="margin:0 0 4px 8px;">Generated with a dependency-free PNG encoder to match the Welcome
+    orb — both are placeholders you plan to replace with your own art.</span>
+  </div>
+</section>
+
+<!-- ================= 08 ROADMAP ================= -->
+<section id="road">
+  <div class="kicker"><span class="n">08</span><span class="mono">Sequenced, gated</span></div>
+  <h2>The path from here.</h2>
+  <ol class="map">
+    <li><b>Hardware gate (yours):</b> run <code>npm run dev:real</code> — does the iPad reach “Signal is clear”?
+      One word unblocks everything below.</li>
+    <li><b>Dual-bud stability (next, sidecar):</b> re-arm the SDK’s Windows anti-throttle by subscribing the other
+      <code>2fda</code> services’ TX chars as keepalives; verify the EEG-service pick by actual frame decode; reset
+      the engine per session (guest 2 currently inherits guest 1’s scale and plateau latch); flush stale channel
+      buffers between fit and streaming; rework mid-reading bud-loss recovery end to end.</li>
+    <li><b>Unattended hardening:</b> the abandonment watchdog (a walk-away still wedges the room — only a completed
+      close resets it today) and sidecar command acknowledgements.</li>
+    <li><b>Ship prep:</b> re-freeze the sidecar (the frozen binary predates every commit), printer test on the HP,
+      <code>POSTMARK_API_KEY</code>, licensed PP Neue Montreal, the real orb art, then the signed Mac Mini build.</li>
+    <li><b>Polish backlog:</b> live-line tweening (the 1 Hz steps), the TV type token scale, the strongest-stretch
+      TV treatment (the answer is currently readable off the wall during the guess), a paste step for “your own
+      material”, the battery gate revival.</li>
+  </ol>
+</section>
+
+<div class="hr"></div>
+<footer>
+  <p><b style="color:var(--fg-muted, rgba(214,212,201,0.62));">About this report.</b> Generated 2026-06-28 against
+  commits <code>1469104</code> (before) → <code>b154c21</code> (after). The embeds are the genuine pages: “before”
+  files extracted from git history (the iPad bundle rebuilt from its committed sources with the same esbuild
+  settings), staged under <code>docs/report/before|after/</code> with only a <code>&lt;base&gt;</code> tag added —
+  “demo” variants additionally redirect <code>location.host</code> so the design-preview mode runs inside an
+  iframe. Verification behind the pass: <code>node --check</code> on every edited file,
+  <code>node tests/honesty.test.js</code> (50 assertions), a fresh esbuild bundle, and served-mode checks of all
+  four surfaces in a browser. View this page via <code>npm run dev</code> or
+  <code>node build/static-serve.js</code> → <code>http://localhost:4321/docs/report/index.html</code>.</p>
+</footer>
+
+</div>
+<script>
+(function () {
+  if (!location.host) document.getElementById('fileBanner').style.display = 'block';
+
+  // ---- iPad walker: drive both eras' controllers in sync ----
+  var BEATS = ['welcome', 'fit', 'intake', 'picker', 'reading', 'strongest', 'standby', 'email', 'close'];
+  var CAPS = {
+    welcome: 'The dark ritual entry. Identical in both — the orb is the CSS placeholder awaiting your art.',
+    fit: 'Looks the same here, but the wiring differs: in the room, the before could fake “Signal is clear” 3.2s after a socket drop; the after only advances on the real impedance gate. (In this preview both use the demo timer.)',
+    intake: 'Three beliefs on record plus the on-your-mind capture — unchanged this pass.',
+    picker: 'Four pieces. In the room the after hides “read your own” (it dead-ended into the wrong body; the paste step is roadmap).',
+    reading: 'The visible fix — both walkers just picked “How an Octopus Thinks”: before shows the lighthouse body anyway (one hardcoded story for every piece, plus a literal “placeholder text” line). After renders the actual octopus piece; all four pieces now carry full ~600-word bodies. The canned 5.2s interruption card fired here in live sessions before — and swallowed the real one.',
+    strongest: 'Before: the guess was never stored or transmitted, so read 04’s guessed-vs-actual moment always silently vanished. After: the tap lands in answers.strongestGuess and rides the event payload.',
+    standby: 'The dark holding screen while the TV reveals. The skip control was a 13px, 45%-opacity sliver sitting in the 3:4 crop zone — now a real 44px target, higher up.',
+    email: 'After adds the quiet skip (“No thanks — just the card”), trims + anchors validation, and actually transmits the address. Before, the report could never send: the payload never carried it.',
+    close: 'The biggest break: before, the CTA was onClick: () => {} — no close_choice, no email, no reset for the next guest. After wires it through, and the takeaway line only names outputs the pipeline confirmed.'
+  };
+  var wrap = document.getElementById('beats');
+  var cap = document.getElementById('beatcap');
+  var frames = [document.getElementById('padBefore'), document.getElementById('padAfter')];
+  var btns = [];
+  BEATS.forEach(function (b, i) {
+    var el = document.createElement('button');
+    el.textContent = (i + 1) + ' · ' + b;
+    el.onclick = function () {
+      frames.forEach(function (f) {
+        try {
+          var w = f.contentWindow;
+          if (!w || !w.__nav) return;
+          if (b === 'reading') {
+            // arrive the way a guest does: through the picker, choosing the
+            // octopus — so the piece is set and the after shows its real body
+            // (the before shows the lighthouse anyway; that is the bug).
+            w.__nav.to(3);
+            setTimeout(function () {
+              var rows = Array.prototype.slice.call(f.contentDocument.querySelectorAll('#screen button'));
+              var oct = rows.filter(function (r) { return /octopus/i.test(r.textContent || ''); })[0];
+              if (oct) oct.click(); else w.__nav.to(i);
+            }, 300);
+          } else {
+            w.__nav.to(i);
+          }
+        } catch (_) {}
+      });
+      btns.forEach(function (x) { x.classList.remove('on'); });
+      el.classList.add('on');
+      cap.innerHTML = '<b>' + b.charAt(0).toUpperCase() + b.slice(1) + ':</b> ' + CAPS[b];
+    };
+    btns.push(el); wrap.appendChild(el);
+  });
+  // land on the reading screen once both frames are alive — the clearest visual diff
+  var tries = 0;
+  var t = setInterval(function () {
+    tries++;
+    var ready = frames.every(function (f) { try { return f.contentWindow && f.contentWindow.__nav; } catch (_) { return false; } });
+    if (ready || tries > 40) { clearInterval(t); if (ready) btns[4].click(); }
+  }, 250);
+})();
+</script>
+</body>
+</html>

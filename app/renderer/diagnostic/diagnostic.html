@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Focus Room — Diagnostic</title>
+<style>
+  :root{
+    --bg:#141414; --panel:#1E1D1C; --panel2:#201F1D; --hair:rgba(214,212,201,.10);
+    --fg:#D6D4C9; --fg-strong:#F3F2EE; --fg-muted:#7A7873; --signal:#DDCA8E;
+    --orange:#FF5714; --ok:#4ADE80; --bad:#F87171;
+    --mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);
+       font-size:12px;padding:14px}
+  h1{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--fg-muted);
+     margin:0 0 12px;display:flex;justify-content:space-between;align-items:center}
+  .pill{font-size:10px;padding:3px 8px;border:1px solid var(--hair);border-radius:9999px}
+  .pill.sim{color:var(--orange);border-color:var(--orange)}
+  .pill.real{color:var(--signal);border-color:var(--signal)}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .card{background:var(--panel);border:1px solid var(--hair);border-radius:10px;padding:12px}
+  .card h2{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-muted);
+           margin:0 0 8px}
+  .row{display:flex;justify-content:space-between;padding:2px 0;gap:8px}
+  .k{color:var(--fg-muted)} .v{color:var(--fg-strong);font-variant-numeric:tabular-nums}
+  .v.warn{color:var(--orange)} .v.ok{color:var(--ok)} .v.bad{color:var(--bad)}
+  .bar{height:4px;background:#000;border-radius:2px;margin-top:3px;overflow:hidden}
+  .bar > span{display:block;height:100%;background:var(--signal)}
+  .controls{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+  button{font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;
+         background:var(--panel2);color:var(--fg);border:1px solid var(--hair);
+         border-radius:8px;padding:8px 12px;cursor:pointer}
+  button:hover{border-color:var(--signal);color:var(--fg-strong)}
+  button.accent{border-color:var(--orange);color:var(--orange)}
+  pre{grid-column:1/-1;background:#000;border:1px solid var(--hair);border-radius:8px;
+      padding:10px;height:120px;overflow:auto;color:var(--fg-muted);font-size:11px;margin:0}
+</style>
+</head>
+<body>
+  <h1>
+    <span>Focus Room · Diagnostic <span style="color:var(--fg-muted)">(Ctrl+Shift+D)</span></span>
+    <span id="mode" class="pill">—</span>
+  </h1>
+  <div class="grid">
+    <div class="card">
+      <h2>Sidecar</h2>
+      <div class="row"><span class="k">running</span><span class="v" id="s_run">—</span></div>
+      <div class="row"><span class="k">connected</span><span class="v" id="s_conn">—</span></div>
+      <div class="row"><span class="k">ready</span><span class="v" id="s_ready">—</span></div>
+      <div class="row"><span class="k">source</span><span class="v" id="s_src">—</span></div>
+      <div class="row"><span class="k">pid</span><span class="v" id="s_pid">—</span></div>
+      <div class="row"><span class="k">restarts</span><span class="v" id="s_restarts">0</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Native metrics (metrics.*)</h2>
+      <div class="row"><span class="k">engagement</span><span class="v" id="m_eng">—</span></div>
+      <div class="row"><span class="k">focus</span><span class="v" id="m_focus">—</span></div>
+      <div class="row"><span class="k">stress</span><span class="v" id="m_stress">—</span></div>
+      <div class="row"><span class="k">readiness</span><span class="v" id="m_ready">—</span></div>
+      <div class="row"><span class="k">drowsiness</span><span class="v" id="m_drowsy">—</span></div>
+      <div class="row"><span class="k">relaxation</span><span class="v" id="m_relax">—</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Band powers + index</h2>
+      <div class="row"><span class="k">delta</span><span class="v" id="b_delta">—</span></div>
+      <div class="row"><span class="k">theta</span><span class="v" id="b_theta">—</span></div>
+      <div class="row"><span class="k">alpha</span><span class="v" id="b_alpha">—</span></div>
+      <div class="row"><span class="k">beta</span><span class="v" id="b_beta">—</span></div>
+      <div class="row"><span class="k">gamma</span><span class="v" id="b_gamma">—</span></div>
+      <div class="row"><span class="k">β/(α+θ) index</span><span class="v" id="b_idx">—</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Live line (guest-facing)</h2>
+      <div class="row"><span class="k">engagementRel</span><span class="v" id="f_rel">—</span></div>
+      <div class="bar"><span id="f_bar" style="width:0%"></span></div>
+      <div class="row"><span class="k">state word</span><span class="v" id="f_state">—</span></div>
+      <div class="row"><span class="k">signal quality</span><span class="v" id="f_sq">—</span></div>
+      <div class="row"><span class="k">t (session)</span><span class="v" id="f_t">—</span></div>
+      <div class="row"><span class="k">plateau / dip</span><span class="v" id="f_ev">—</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Battery / fit</h2>
+      <div class="row"><span class="k">left %</span><span class="v" id="bat_l">—</span></div>
+      <div class="row"><span class="k">right %</span><span class="v" id="bat_r">—</span></div>
+      <div class="row"><span class="k">battery ok</span><span class="v" id="bat_ok">—</span></div>
+      <div class="row"><span class="k">impedance allGood</span><span class="v" id="imp_all">—</span></div>
+      <div class="row"><span class="k">L ch1/ch2</span><span class="v" id="imp_l">—</span></div>
+      <div class="row"><span class="k">R ch1/ch2</span><span class="v" id="imp_r">—</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Packet stats / connection</h2>
+      <div class="row"><span class="k">dev1 rate</span><span class="v" id="st_r1">—</span></div>
+      <div class="row"><span class="k">dev1 recv/drop</span><span class="v" id="st_d1">—</span></div>
+      <div class="row"><span class="k">dev2 rate</span><span class="v" id="st_r2">—</span></div>
+      <div class="row"><span class="k">dev2 recv/drop</span><span class="v" id="st_d2">—</span></div>
+      <div class="row"><span class="k">elapsed</span><span class="v" id="st_el">—</span></div>
+      <div class="row"><span class="k">status</span><span class="v" id="st_status">—</span></div>
+      <div class="row"><span class="k">devices</span><span class="v" id="st_devices">—</span></div>
+    </div>
+
+    <div class="controls">
+      <button data-cmd="discover">Discover</button>
+      <button data-cmd="connect">Connect</button>
+      <button data-cmd="start_fit">Start Fit</button>
+      <button data-cmd="stop_fit">Stop Fit</button>
+      <button data-cmd="start_session">Start Session</button>
+      <button data-cmd="stop_session">Stop Session</button>
+      <button data-cmd="test_signal" class="accent">Inject Test Signal</button>
+      <button data-cmd="mark" data-kind="interruption" class="accent">Mark Interruption</button>
+      <button data-cmd="disconnect">Disconnect</button>
+    </div>
+    <pre id="log"></pre>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const set = (id, val, cls) => { const el = $(id); if (!el) return; el.textContent = val;
+    el.className = 'v' + (cls ? ' ' + cls : ''); };
+  const n = (x, d=3) => (x === null || x === undefined) ? '—' : Number(x).toFixed(d);
+
+  function applyStatus(s) {
+    if (!s) return;
+    set('s_run', s.running ? 'yes' : 'no', s.running ? 'ok' : 'bad');
+    set('s_conn', s.connected ? 'yes' : 'no', s.connected ? 'ok' : 'bad');
+    set('s_ready', s.ready ? 'yes' : 'no', s.ready ? 'ok' : 'warn');
+    set('s_src', s.frozen ? 'frozen' : 'venv');
+    set('s_pid', s.pid ?? '—');
+    set('s_restarts', s.restarts ?? 0, s.restarts ? 'warn' : null);
+    const mode = $('mode');
+    mode.textContent = s.simulate ? 'SIMULATION' : 'REAL EEG';
+    mode.className = 'pill ' + (s.simulate ? 'sim' : 'real');
+  }
+
+  function log(line) {
+    const el = $('log');
+    el.textContent += line + '\n';
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function onMessage(m) {
+    switch (m.type) {
+      case 'eeg/metrics':
+        set('m_eng', n(m.engagement)); set('m_focus', n(m.focus));
+        set('m_stress', n(m.stress)); set('m_ready', n(m.mental_readiness));
+        set('m_drowsy', n(m.drowsiness)); set('m_relax', n(m.relaxation)); break;
+      case 'eeg/brainwaves':
+        set('b_delta', n(m.delta)); set('b_theta', n(m.theta)); set('b_alpha', n(m.alpha));
+        set('b_beta', n(m.beta)); set('b_gamma', n(m.gamma)); set('b_idx', n(m.engIndex), 'warn'); break;
+      case 'eeg/frame':
+        set('f_rel', n(m.engagementRel)); set('f_state', m.stateWord || '—');
+        set('f_sq', n(m.signalQuality)); set('f_t', n(m.tRel, 1));
+        $('f_bar').style.width = Math.round((m.engagementRel ?? 0) * 100) + '%'; break;
+      case 'session/plateau': set('f_ev', 'PLATEAU @ ' + n(m.tRel,1) + 's', 'warn'); log('» plateau @ ' + n(m.tRel,1) + 's'); break;
+      case 'session/dip': set('f_ev', 'DIP @ ' + n(m.tRel,1) + 's', 'bad'); log('» dip @ ' + n(m.tRel,1) + 's'); break;
+      case 'fit/battery':
+        set('bat_l', m.leftPct ?? '—'); set('bat_r', m.rightPct ?? '—');
+        set('bat_ok', m.ok ? 'yes' : 'NO', m.ok ? 'ok' : 'bad'); break;
+      case 'fit/impedance': {
+        set('imp_all', m.allGood ? 'YES' : 'no', m.allGood ? 'ok' : 'warn');
+        const c = m.channels || {};
+        const fmt = (e) => e ? `${e.ch1?.state||'?'}/${e.ch2?.state||'?'}` : '—';
+        set('imp_l', fmt(c.left)); set('imp_r', fmt(c.right)); break;
+      }
+      case 'eeg/stats':
+        if (m.dev1) { set('st_r1', n(m.dev1.rate,1)); set('st_d1', `${m.dev1.received}/${m.dev1.dropped}`); }
+        if (m.dev2) { set('st_r2', n(m.dev2.rate,1)); set('st_d2', `${m.dev2.received}/${m.dev2.dropped}`); }
+        set('st_el', n(m.elapsed,1)); break;
+      case 'eeg/connection':
+        if (m.status) set('st_status', m.status, 'warn');
+        else if (m.leftConnected !== undefined)
+          set('st_status', `L:${m.leftConnected?'●':'○'} R:${m.rightConnected?'●':'○'}`); break;
+      case 'discovered': {
+        const ds = m.devices || [];
+        set('st_devices', ds.length ? ds.map(d => `${d.side||'?'}${d.rssi!=null?'('+d.rssi+')':''}`).join('  ') : 'none found',
+            ds.length ? 'ok' : 'warn');
+        ds.forEach(d => log(`• ${d.name} [${d.side||'?'}] ${d.address} rssi=${d.rssi}`));
+        if (!ds.length) log('· discover: no Zone buds found');
+        break;
+      }
+      case 'log': log('· ' + (m.msg || '')); break;
+      case 'error': log('✕ ' + (m.code||'') + ' ' + (m.msg||'')); break;
+    }
+  }
+
+  if (window.focusroom) {
+    focusroom.on('sidecar:status', applyStatus);
+    focusroom.on('sidecar:message', onMessage);
+    focusroom.on('sidecar:stderr', (l) => log('  ' + l));
+    focusroom.info().then((info) => { if (info && info.sidecar) applyStatus(info.sidecar); });
+    document.querySelectorAll('button[data-cmd]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const payload = btn.dataset.kind ? { kind: btn.dataset.kind } : {};
+        focusroom.command(btn.dataset.cmd, payload).then((r) =>
+          log(`→ ${btn.dataset.cmd} ${r && r.ok ? 'ok' : 'failed'}`));
+      });
+    });
+  } else {
+    log('preload bridge unavailable');
+  }
+</script>
+</body>
+</html>

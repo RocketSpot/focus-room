@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Zone · The Focus Room</title>
+<style>
+  /* Brand tokens inlined (Electron window loads via file://; the served
+     surfaces use tokens.css). Room-black field, one warm-sand signal line. */
+  :root{
+    --black:#0B0B0A; --near-black:#141414; --signal:#DDCA8E;
+    --warm-200:#D6D4C9; --warm-300:#7A7873; --orange:#FF5714;
+    --mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --display:"PP Neue Montreal","Space Grotesk","Helvetica Neue",Arial,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:var(--black);color:var(--warm-200);font-family:var(--display);
+       overflow:hidden;display:flex;flex-direction:column}
+  .frame{position:absolute;inset:0;display:flex;flex-direction:column;
+         padding:5vh 6vw}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.18em;
+           text-transform:uppercase;color:var(--warm-300);display:flex;
+           justify-content:space-between;align-items:center}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--warm-300);
+       display:inline-block;margin-right:10px;vertical-align:middle}
+  .live .dot{background:var(--signal);box-shadow:0 0 12px var(--signal)}
+  .stage{flex:1;display:flex;align-items:center;justify-content:center;position:relative}
+  svg{width:100%;height:62vh;overflow:visible}
+  #baseline{stroke:rgba(214,212,201,.16);stroke-width:1;stroke-dasharray:2 8}
+  #line{fill:none;stroke:var(--signal);stroke-width:3;stroke-linecap:round;
+        stroke-linejoin:round;filter:drop-shadow(0 0 10px rgba(221,202,142,.35))}
+  #head{fill:var(--signal);filter:drop-shadow(0 0 10px rgba(221,202,142,.6))}
+  .state{position:absolute;left:6vw;bottom:6vh;font-size:40px;font-weight:400;
+         letter-spacing:-.02em;color:var(--warm-200);text-transform:lowercase}
+  .tag{font-family:var(--mono);font-size:12px;letter-spacing:.14em;
+       text-transform:uppercase;color:var(--warm-300)}
+  .sim{color:var(--orange)}
+</style>
+</head>
+<body>
+  <div class="frame">
+    <div class="eyebrow">
+      <span><span class="dot"></span>Zone · The Focus Room</span>
+      <span id="status" class="tag">connecting…</span>
+    </div>
+    <div class="stage">
+      <svg id="plot" viewBox="0 0 1000 480" preserveAspectRatio="none">
+        <line id="baseline" x1="0" y1="440" x2="1000" y2="440"></line>
+        <path id="line" d=""></path>
+        <circle id="head" cx="0" cy="440" r="0"></circle>
+      </svg>
+    </div>
+    <div class="state" id="state"></div>
+  </div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const wsPort = params.get('ws') || '4321';
+  const role = params.get('role') || 'tv';
+  const BOX = { x: 0, y: 20, w: 1000, h: 420 };
+  const points = []; // {t, v}
+  let simulate = false;
+
+  const $ = (id) => document.getElementById(id);
+
+  // tiny Catmull-Rom smoother (same shape language as lib/focusline.js)
+  function smooth(pts) {
+    if (pts.length < 2) return '';
+    let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i-1]||pts[i], p1 = pts[i], p2 = pts[i+1], p3 = pts[i+2]||p2;
+      const c1x = p1.x + (p2.x-p0.x)/6, c1y = p1.y + (p2.y-p0.y)/6;
+      const c2x = p2.x - (p3.x-p1.x)/6, c2y = p2.y - (p3.y-p1.y)/6;
+      d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    }
+    return d;
+  }
+
+  function draw() {
+    if (!points.length) return;
+    const t0 = points[0].t, t1 = Math.max(points[points.length-1].t, t0 + 1);
+    const pix = points.map(p => ({
+      x: BOX.x + ((p.t - t0)/(t1 - t0)) * BOX.w,
+      y: BOX.y + (1 - p.v) * BOX.h,
+    }));
+    $('line').setAttribute('d', smooth(pix));
+    const head = pix[pix.length-1];
+    $('head').setAttribute('cx', head.x); $('head').setAttribute('cy', head.y);
+    $('head').setAttribute('r', 5);
+  }
+
+  function setStatus(txt, live) {
+    $('status').textContent = txt;
+    document.querySelector('.eyebrow').classList.toggle('live', !!live);
+  }
+
+  function connect() {
+    const ws = new WebSocket(`ws://127.0.0.1:${wsPort}/ws`);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'client/hello', role, t: Date.now() }));
+      setStatus('waiting for signal…');
+    };
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (m.type === 'session/state' && m.sidecar) {
+        simulate = !!m.sidecar.simulate;
+      }
+      if (m.type === 'eeg/frame') {
+        points.push({ t: m.tRel ?? (m.t/1000), v: m.engagementRel ?? 0.5 });
+        if (points.length > 600) points.shift();
+        draw();
+        $('state').textContent = m.stateWord || '';
+        setStatus(simulate ? 'pipeline live · simulation' : 'pipeline live · real eeg', true);
+        $('status').classList.toggle('sim', simulate);
+      }
+    };
+    ws.onclose = () => { setStatus('reconnecting…'); setTimeout(connect, 800); };
+    ws.onerror = () => ws.close();
+  }
+  connect();
+</script>
+</body>
+</html>

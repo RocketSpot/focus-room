@@ -1,0 +1,904 @@
+{
+ "zone_eeg": {
+  "Earbud_1": {
+   "Serial_Number": "Earbud number 1",
+   "Left_Service_UUID": "efaecafe-ddce-cafe-fbbe-cbabffbccbab",
+   "Left_RX_UUID": "efaecafe-ddce-cafe-bebd-afcebddfcacf",
+   "Left_TX_UUID": "efaecafe-ddce-cafe-bebd-cbadeebbbdad",
+   "Right_Service_UUID": "efaecafe-baca-cafe-bdad-afbacebadaee",
+   "Right_RX_UUID": "efaecafe-baca-cafe-bbae-dcceaebddeec",
+   "Right_TX_UUID": "efaecafe-baca-cafe-efae-eddecfdcfbaf"
+  },
+  "Earbud_2": {
+   "Serial_Number": "Earbud number 2",
+   "Left_Service_UUID": "efaecafe-edea-cafe-fdcb-fdafddfaeeef",
+   "Left_RX_UUID": "efaecafe-edea-cafe-accd-adafbdafeadb",
+   "Left_TX_UUID": "efaecafe-edea-cafe-accd-bffaccfceacd",
+   "Right_Service_UUID": "efaecafe-dbbf-cafe-bfff-eaaccffbaabd",
+   "Right_RX_UUID": "efaecafe-dbbf-cafe-debc-acefdfadabaa",
+   "Right_TX_UUID": "efaecafe-dbbf-cafe-fdae-edcccefacfae"
+  },
+  "Earbud_3": {
+   "Serial_Number": "Earbud number 3",
+   "Left_Service_UUID": "efaecafe-caea-cafe-afbb-fbbeacbcaede",
+   "Left_RX_UUID": "efaecafe-caea-cafe-aaad-badaededdedf",
+   "Left_TX_UUID": "efaecafe-caea-cafe-dada-fccbfdfebbef",
+   "Right_Service_UUID": "efaecafe-dbfe-cafe-cade-cbbddcdbccfc",
+   "Right_RX_UUID": "efaecafe-dbfe-cafe-abfc-efeafeddabff",
+   "Right_TX_UUID": "efaecafe-dbfe-cafe-eadc-beabdbfcbadf"
+  },
+  "Earbud_4": {
+   "Serial_Number": "Earbud number 4",
+   "Left_Service_UUID": "efaecafe-adad-cafe-edaf-fcbccdbfeccc",
+   "Left_RX_UUID": "efaecafe-adad-cafe-afab-cdebfadfbbeb",
+   "Left_TX_UUID": "efaecafe-adad-cafe-bfff-dbafcebacebe",
+   "Right_Service_UUID": "efaecafe-ebba-cafe-bfff-ddedbacabbbd",
+   "Right_RX_UUID": "efaecafe-ebba-cafe-ddac-bcccbbadddab",
+   "Right_TX_UUID": "efaecafe-ebba-cafe-deda-bafcbcddcdeb"
+  },
+  "Earbud_5": {
+   "Serial_Number": "Earbud number 5",
+   "Left_Service_UUID": "efaecafe-beac-cafe-ecdd-bbdadecaceba",
+   "Left_RX_UUID": "efaecafe-beac-cafe-aade-fdcbcedfeafb",
+   "Left_TX_UUID": "efaecafe-beac-cafe-aade-cbdfaeacaaec",
+   "Right_Service_UUID": "efaecafe-dfcf-cafe-cfcb-bcacefebfafb",
+   "Right_RX_UUID": "efaecafe-dfcf-cafe-cddf-dbdadbbdebce",
+   "Right_TX_UUID": "efaecafe-dfcf-cafe-acdf-caffbdbcebbc"
+  },
+  "Earbud_6": {
+   "Serial_Number": "Earbud number 6",
+   "Left_Service_UUID": "efaecafe-fbac-cafe-bcad-dfefacbeffba",
+   "Left_RX_UUID": "efaecafe-fbac-cafe-efcf-edafaadddcef",
+   "Left_TX_UUID": "efaecafe-fbac-cafe-efcf-edbecfccfdad",
+   "Right_Service_UUID": "efaecafe-ceda-cafe-aeda-efffefceafcb",
+   "Right_RX_UUID": "efaecafe-ceda-cafe-cfee-fceafacfafbc",
+   "Right_TX_UUID": "efaecafe-ceda-cafe-fbfc-ddaefeffacbc"
+  },
+  "Earbud_7": {
+   "Serial_Number": "Earbud number 7",
+   "Left_Service_UUID": "efaecafe-deab-cafe-dead-ddddbabecefb",
+   "Left_RX_UUID": "efaecafe-deab-cafe-bffd-ddcedeaaecba",
+   "Left_TX_UUID": "efaecafe-deab-cafe-bbdb-cdebadccdbfe",
+   "Right_Service_UUID": "efaecafe-cddc-cafe-ddee-fcffbfabfaeb",
+   "Right_RX_UUID": "efaecafe-cddc-cafe-aeee-febdebdbbeaa",
+   "Right_TX_UUID": "efaecafe-cddc-cafe-addb-ebbafdfabfee"
+  },
+  "Earbud_8": {
+   "Serial_Number": "Earbud number 8",
+   "Left_Service_UUID": "efaecafe-acbd-cafe-fbde-eeadfedaaeba",
+   "Left_RX_UUID": "efaecafe-acbd-cafe-ddab-acdebcbafbcc",
+   "Left_TX_UUID": "efaecafe-acbd-cafe-bcbc-badcedafbcdc",
+   "Right_Service_UUID": "efaecafe-bacc-cafe-bcbc-caeccffbebca",
+   "Right_RX_UUID": "efaecafe-bacc-cafe-cccd-fdbbfdffaebb",
+   "Right_TX_UUID": "efaecafe-bacc-cafe-accb-cdacafbcdeef"
+  },
+  "Earbud_9": {
+   "Serial_Number": "Earbud number 9",
+   "Left_Service_UUID": "efaecafe-eeba-cafe-aefa-afededafcace",
+   "Left_RX_UUID": "efaecafe-eeba-cafe-adee-dcdddebbefbd",
+   "Left_TX_UUID": "efaecafe-eeba-cafe-adee-ecebcceccbdc",
+   "Right_Service_UUID": "efaecafe-fcab-cafe-deae-feeacfccbfcd",
+   "Right_RX_UUID": "efaecafe-fcab-cafe-dafc-dbeceddbbada",
+   "Right_TX_UUID": "efaecafe-fcab-cafe-bebb-fbcdbffbcaba"
+  },
+  "Earbud_10": {
+   "Serial_Number": "Earbud number 10",
+   "Left_Service_UUID": "efaecafe-acfc-cafe-effc-defdcdeefaef",
+   "Left_RX_UUID": "efaecafe-acfc-cafe-eced-aaeadeacfedd",
+   "Left_TX_UUID": "efaecafe-acfc-cafe-eced-bcfdffcdeefb",
+   "Right_Service_UUID": "efaecafe-cebc-cafe-fadf-dbecfebcaedf",
+   "Right_RX_UUID": "efaecafe-cebc-cafe-cced-dddcdcbdedda",
+   "Right_TX_UUID": "efaecafe-cebc-cafe-ccfe-dbfeedaacdcb"
+  },
+  "Earbud_11": {
+   "Serial_Number": "Earbud number 11",
+   "Left_Service_UUID": "efaecafe-ecdb-cafe-fbea-bbbffefcabce",
+   "Left_RX_UUID": "efaecafe-ecdb-cafe-eeea-ebebdfbafabb",
+   "Left_TX_UUID": "efaecafe-ecdb-cafe-bbcc-ceecdaddbfea",
+   "Right_Service_UUID": "efaecafe-cafa-cafe-fdbf-eefabeedbcdc",
+   "Right_RX_UUID": "efaecafe-cafa-cafe-abfc-aaefcafaecdb",
+   "Right_TX_UUID": "efaecafe-cafa-cafe-dbdb-faddaeccacfd"
+  },
+  "Earbud_12": {
+   "Serial_Number": "Earbud number 12",
+   "Left_Service_UUID": "efaecafe-cbbd-cafe-ecbb-cdfcfcefdbca",
+   "Left_RX_UUID": "efaecafe-cbbd-cafe-daff-ffcbafeebdeb",
+   "Left_TX_UUID": "efaecafe-cbbd-cafe-dfaf-aefcfbdefdfe",
+   "Right_Service_UUID": "efaecafe-addf-cafe-dfaf-ebfddfabeece",
+   "Right_RX_UUID": "efaecafe-addf-cafe-adbd-fdcecdefefdc",
+   "Right_TX_UUID": "efaecafe-addf-cafe-ebca-bcfacdfefdcb"
+  },
+  "Earbud_13": {
+   "Serial_Number": "Earbud number 13",
+   "Left_Service_UUID": "efaecafe-ebfa-cafe-eafb-affdeedfcccb",
+   "Left_RX_UUID": "efaecafe-ebfa-cafe-adba-fdcecccefadc",
+   "Left_TX_UUID": "efaecafe-ebfa-cafe-adba-bedddefbcafe",
+   "Right_Service_UUID": "efaecafe-dbbe-cafe-faea-ebafccfdfffc",
+   "Right_RX_UUID": "efaecafe-dbbe-cafe-cfad-cccdbeeacffa",
+   "Right_TX_UUID": "efaecafe-dbbe-cafe-acbc-adabebffdcaf"
+  },
+  "Earbud_14": {
+   "Serial_Number": "Earbud number 14",
+   "Left_Service_UUID": "efaecafe-bebc-cafe-dfec-eceabeadcfde",
+   "Left_RX_UUID": "efaecafe-bebc-cafe-adab-dceebcbdcbca",
+   "Left_TX_UUID": "efaecafe-bebc-cafe-adab-fbeddeaeeead",
+   "Right_Service_UUID": "efaecafe-caed-cafe-cddc-ddeadbfceecf",
+   "Right_RX_UUID": "efaecafe-caed-cafe-bfda-fefaafefbcfd",
+   "Right_TX_UUID": "efaecafe-caed-cafe-edce-faeefdfcffdd"
+  },
+  "Earbud_15": {
+   "Serial_Number": "Earbud number 15",
+   "Left_Service_UUID": "efaecafe-acdd-cafe-faac-fcbddbddebda",
+   "Left_RX_UUID": "efaecafe-acdd-cafe-bded-ebaccaddcfda",
+   "Left_TX_UUID": "efaecafe-acdd-cafe-afdc-abadcfefdbbb",
+   "Right_Service_UUID": "efaecafe-adaa-cafe-deeb-cfcecccfbebd",
+   "Right_RX_UUID": "efaecafe-adaa-cafe-edfd-aadeacdfbcee",
+   "Right_TX_UUID": "efaecafe-adaa-cafe-cfcf-fddfbffcfafe"
+  },
+  "Earbud_16": {
+   "Serial_Number": "Earbud number 16",
+   "Left_Service_UUID": "efaecafe-ffbd-cafe-ddcc-baddbfeebfcc",
+   "Left_RX_UUID": "efaecafe-ffbd-cafe-aeaf-bebfbfecccac",
+   "Left_TX_UUID": "efaecafe-ffbd-cafe-efbf-fcdffbcbfcec",
+   "Right_Service_UUID": "efaecafe-dfab-cafe-efbf-afdcabeadcef",
+   "Right_RX_UUID": "efaecafe-dfab-cafe-afce-ccbadabdeedb",
+   "Right_TX_UUID": "efaecafe-dfab-cafe-cbfc-dbebbddfdcdc"
+  },
+  "Earbud_17": {
+   "Serial_Number": "Earbud number 17",
+   "Left_Service_UUID": "efaecafe-aeee-cafe-bfae-eceafbdabcfe",
+   "Left_RX_UUID": "efaecafe-aeee-cafe-bcad-aabeecfaffdb",
+   "Left_TX_UUID": "efaecafe-aeee-cafe-bcad-ecfcbbbbdcea",
+   "Right_Service_UUID": "efaecafe-fccf-cafe-cabe-aeedefecbcfb",
+   "Right_RX_UUID": "efaecafe-fccf-cafe-fbca-bcccadbadffa",
+   "Right_TX_UUID": "efaecafe-fccf-cafe-adcc-beacaeadaaaf"
+  },
+  "Earbud_18": {
+   "Serial_Number": "Earbud number 18",
+   "Left_Service_UUID": "efaecafe-ecec-cafe-cbdc-dbffbabcfabe",
+   "Left_RX_UUID": "efaecafe-ecec-cafe-eeef-cefdbeabcebd",
+   "Left_TX_UUID": "efaecafe-ecec-cafe-eeef-badcaefbceca",
+   "Right_Service_UUID": "efaecafe-fdca-cafe-dddc-dcacfadeedbf",
+   "Right_RX_UUID": "efaecafe-fdca-cafe-bacc-edccdecbeefa",
+   "Right_TX_UUID": "efaecafe-fdca-cafe-cedc-dbfefeedadae"
+  },
+  "Earbud_19": {
+   "Serial_Number": "Earbud number 19",
+   "Left_Service_UUID": "efaecafe-abfb-cafe-ffde-dccbababbfca",
+   "Left_RX_UUID": "efaecafe-abfb-cafe-cceb-ffbeadcbaabd",
+   "Left_TX_UUID": "efaecafe-abfb-cafe-dbfd-bcdfaccececf",
+   "Right_Service_UUID": "efaecafe-cfef-cafe-fabb-cedbddbacefd",
+   "Right_RX_UUID": "efaecafe-cfef-cafe-bffc-cdbbbaeccecc",
+   "Right_TX_UUID": "efaecafe-cfef-cafe-ffcb-eacecbcebdeb"
+  },
+  "Earbud_20": {
+   "Serial_Number": "Earbud number 20",
+   "Left_Service_UUID": "efaecafe-aace-cafe-bcde-dffeeceabfdd",
+   "Left_RX_UUID": "efaecafe-aace-cafe-dbaf-ecbebeabeeaf",
+   "Left_TX_UUID": "efaecafe-aace-cafe-edbc-bfedabdcffda",
+   "Right_Service_UUID": "efaecafe-eeee-cafe-edbc-cffbcdddfbeb",
+   "Right_RX_UUID": "efaecafe-eeee-cafe-bfbd-acdfedebeaac",
+   "Right_TX_UUID": "efaecafe-eeee-cafe-dcfb-eacbcabfbccc"
+  },
+  "Earbud_21": {
+   "Serial_Number": "Earbud number 21",
+   "Left_Service_UUID": "efaecafe-aacb-cafe-ccfd-dbeafcfcebdb",
+   "Left_RX_UUID": "efaecafe-aacb-cafe-eefb-abcccdfacffc",
+   "Left_TX_UUID": "efaecafe-aacb-cafe-eefb-bcccfbbffaab",
+   "Right_Service_UUID": "efaecafe-fbce-cafe-accb-bdffbbcdfeda",
+   "Right_RX_UUID": "efaecafe-fbce-cafe-dbaf-daefbddabeca",
+   "Right_TX_UUID": "efaecafe-fbce-cafe-cbdb-ebafafffcfcd"
+  },
+  "Earbud_22": {
+   "Serial_Number": "Earbud number 22",
+   "Left_Service_UUID": "efaecafe-cbcb-cafe-cdaa-eeedfcffdbbb",
+   "Left_RX_UUID": "efaecafe-cbcb-cafe-aeba-caecfcddfebe",
+   "Left_TX_UUID": "efaecafe-cbcb-cafe-aeba-ffcbdeaaafdc",
+   "Right_Service_UUID": "efaecafe-ecaa-cafe-bcff-abeaafbceeeb",
+   "Right_RX_UUID": "efaecafe-ecaa-cafe-fdef-dadbdebbdaeb",
+   "Right_TX_UUID": "efaecafe-ecaa-cafe-dcfc-ceadfedeafac"
+  },
+  "Earbud_23": {
+   "Serial_Number": "Earbud number 23",
+   "Left_Service_UUID": "efaecafe-cbcf-cafe-aeca-fbcaaffcbbbb",
+   "Left_RX_UUID": "efaecafe-cbcf-cafe-fdac-ecdbfcfdccac",
+   "Left_TX_UUID": "efaecafe-cbcf-cafe-edce-ebabfabccdbe",
+   "Right_Service_UUID": "efaecafe-cffb-cafe-dbfa-bcecfcfbedeb",
+   "Right_RX_UUID": "efaecafe-cffb-cafe-eaec-befccfdfdfeb",
+   "Right_TX_UUID": "efaecafe-cffb-cafe-aabc-eedaabbbdfcb"
+  },
+  "Earbud_24": {
+   "Serial_Number": "Earbud number 24",
+   "Left_Service_UUID": "efaecafe-afdc-cafe-cbca-fbffdfeffdfa",
+   "Left_RX_UUID": "efaecafe-afdc-cafe-faef-acfcedbefafa",
+   "Left_TX_UUID": "efaecafe-afdc-cafe-aacb-acfbdcdfbdbd",
+   "Right_Service_UUID": "efaecafe-efff-cafe-aacb-cfbbeadbbcda",
+   "Right_RX_UUID": "efaecafe-efff-cafe-aaed-ceabdbfbefaf",
+   "Right_TX_UUID": "efaecafe-efff-cafe-bcbd-effcfaabcadd"
+  },
+  "Earbud_25": {
+   "Serial_Number": "Earbud number 25",
+   "Left_Service_UUID": "efaecafe-bbec-cafe-cfef-fcecfffadbfb",
+   "Left_RX_UUID": "efaecafe-bbec-cafe-dfed-aaeebaeddffd",
+   "Left_TX_UUID": "efaecafe-bbec-cafe-dfed-bfcdadfbaaaf",
+   "Right_Service_UUID": "efaecafe-dcba-cafe-dcef-ceffffabadaa",
+   "Right_RX_UUID": "efaecafe-dcba-cafe-cacb-bebfdafeabfd",
+   "Right_TX_UUID": "efaecafe-dcba-cafe-abfa-bffedaebcefa"
+  },
+  "Earbud_26": {
+   "Serial_Number": "Earbud number 26",
+   "Left_Service_UUID": "efaecafe-caca-cafe-efca-fbabbbbcdfcf",
+   "Left_RX_UUID": "efaecafe-caca-cafe-fbad-fcdfecebbebe",
+   "Left_TX_UUID": "efaecafe-caca-cafe-fbad-dddacbfcbcff",
+   "Right_Service_UUID": "efaecafe-fecf-cafe-fcfe-acaecdeaeace",
+   "Right_RX_UUID": "efaecafe-fecf-cafe-adcc-acfccaecebaf",
+   "Right_TX_UUID": "efaecafe-fecf-cafe-bbfc-cfbeefebfbfb"
+  },
+  "Earbud_27": {
+   "Serial_Number": "Earbud number 27",
+   "Left_Service_UUID": "efaecafe-caca-cafe-ebce-bbaedfcfddca",
+   "Left_RX_UUID": "efaecafe-caca-cafe-dfbd-efcaabcefead",
+   "Left_TX_UUID": "efaecafe-caca-cafe-dcbc-ccfffdfdaece",
+   "Right_Service_UUID": "efaecafe-efcf-cafe-cdaa-eafcaeabcdfe",
+   "Right_RX_UUID": "efaecafe-efcf-cafe-fbba-feaddbeafbfb",
+   "Right_TX_UUID": "efaecafe-efcf-cafe-afac-dcdedccbeebc"
+  },
+  "Earbud_28": {
+   "Serial_Number": "Earbud number 28",
+   "Left_Service_UUID": "efaecafe-cadd-cafe-dbef-cdfdacfbdaac",
+   "Left_RX_UUID": "efaecafe-cadd-cafe-fbdd-ffcaaddccaca",
+   "Left_TX_UUID": "efaecafe-cadd-cafe-bcdc-eaaefddaafaf",
+   "Right_Service_UUID": "efaecafe-cdef-cafe-bcdc-cffebdeddcfb",
+   "Right_RX_UUID": "efaecafe-cdef-cafe-dabd-fecfcfcbdbec",
+   "Right_TX_UUID": "efaecafe-cdef-cafe-fdaf-dcbbdebcdfaa"
+  },
+  "Earbud_29": {
+   "Serial_Number": "Earbud number 29",
+   "Left_Service_UUID": "efaecafe-ceda-cafe-aace-cfabbefadfce",
+   "Left_RX_UUID": "efaecafe-ceda-cafe-eeea-dfaddaeeecac",
+   "Left_TX_UUID": "efaecafe-ceda-cafe-eeea-ceeccaddecef",
+   "Right_Service_UUID": "efaecafe-bfaa-cafe-ddaa-cbcedeccbbfb",
+   "Right_RX_UUID": "efaecafe-bfaa-cafe-dcfb-dcfedfbdfbfe",
+   "Right_TX_UUID": "efaecafe-bfaa-cafe-dcef-ccfbdbbccbea"
+  },
+  "Earbud_30": {
+   "Serial_Number": "Earbud number 30",
+   "Left_Service_UUID": "efaecafe-fdca-cafe-efdf-affaaaacdfff",
+   "Left_RX_UUID": "efaecafe-fdca-cafe-cacb-babaeefcedcc",
+   "Left_TX_UUID": "efaecafe-fdca-cafe-cacb-ffbceeeffbdc",
+   "Right_Service_UUID": "efaecafe-abba-cafe-cceb-aecbcfbbccdb",
+   "Right_RX_UUID": "efaecafe-abba-cafe-caed-dddfdacbcfad",
+   "Right_TX_UUID": "efaecafe-abba-cafe-dabc-caeccdcacbda"
+  },
+  "Earbud_31": {
+   "Serial_Number": "Earbud number 31",
+   "Left_Service_UUID": "efaecafe-aecf-cafe-edad-efcabcfccdde",
+   "Left_RX_UUID": "efaecafe-aecf-cafe-cecd-acbdaeafbccf",
+   "Left_TX_UUID": "efaecafe-aecf-cafe-addb-cccdbabebade",
+   "Right_Service_UUID": "efaecafe-cbdb-cafe-fdcb-eddfaabcaaae",
+   "Right_RX_UUID": "efaecafe-cbdb-cafe-ddce-fdfdfceefadc",
+   "Right_TX_UUID": "efaecafe-cbdb-cafe-bbfe-aaaaacfbdbac"
+  },
+  "Earbud_32": {
+   "Serial_Number": "Earbud number 32",
+   "Left_Service_UUID": "efaecafe-cfee-cafe-ddba-dcacfeacaefd",
+   "Left_RX_UUID": "efaecafe-cfee-cafe-ceae-eeacabecdcfc",
+   "Left_TX_UUID": "efaecafe-cfee-cafe-bece-dbdaeaffbfbd",
+   "Right_Service_UUID": "efaecafe-fdbf-cafe-bece-fdcdbaeebaee",
+   "Right_RX_UUID": "efaecafe-fdbf-cafe-cccf-bdfbbecaddca",
+   "Right_TX_UUID": "efaecafe-fdbf-cafe-ceec-ccabcfebdefb"
+  },
+  "Earbud_33": {
+   "Serial_Number": "Earbud number 33",
+   "Left_Service_UUID": "efaecafe-fcdb-cafe-efbe-ebbcfbbaeeab",
+   "Left_RX_UUID": "efaecafe-fcdb-cafe-effa-cfeedafedfea",
+   "Left_TX_UUID": "efaecafe-fcdb-cafe-effa-bbaefabfbdee",
+   "Right_Service_UUID": "efaecafe-ebce-cafe-bfef-eaaebddbddbe",
+   "Right_RX_UUID": "efaecafe-ebce-cafe-eaca-fabadfbaddee",
+   "Right_TX_UUID": "efaecafe-ebce-cafe-faac-afadbbdfeddf"
+  },
+  "Earbud_34": {
+   "Serial_Number": "Earbud number 34",
+   "Left_Service_UUID": "efaecafe-ffbf-cafe-daca-aeadcdcddcde",
+   "Left_RX_UUID": "efaecafe-ffbf-cafe-cadc-fbacfaffdaaf",
+   "Left_TX_UUID": "efaecafe-ffbf-cafe-cadc-bfafaabceaac",
+   "Right_Service_UUID": "efaecafe-fede-cafe-edfe-efcedefcbafa",
+   "Right_RX_UUID": "efaecafe-fede-cafe-fdba-fbbfebbefbbd",
+   "Right_TX_UUID": "efaecafe-fede-cafe-fabf-efeebeddafeb"
+  },
+  "Earbud_35": {
+   "Serial_Number": "Earbud number 35",
+   "Left_Service_UUID": "efaecafe-abee-cafe-ebbf-ebbfbafacdff",
+   "Left_RX_UUID": "efaecafe-abee-cafe-ddff-ecfeadbbcfdc",
+   "Left_TX_UUID": "efaecafe-abee-cafe-cfec-fedcccdbbead",
+   "Right_Service_UUID": "efaecafe-eabb-cafe-efcd-ccafbbdfecbf",
+   "Right_RX_UUID": "efaecafe-eabb-cafe-adaa-faaccebdaedc",
+   "Right_TX_UUID": "efaecafe-eabb-cafe-cdeb-fefceeeceaed"
+  },
+  "Earbud_36": {
+   "Serial_Number": "Earbud number 36",
+   "Left_Service_UUID": "efaecafe-feef-cafe-abbb-dbdacdedaeac",
+   "Left_RX_UUID": "efaecafe-feef-cafe-fedd-ccadbafbaabf",
+   "Left_TX_UUID": "efaecafe-feef-cafe-febd-daafcecacfdd",
+   "Right_Service_UUID": "efaecafe-debf-cafe-febd-aebcdaefffad",
+   "Right_RX_UUID": "efaecafe-debf-cafe-cfdb-aeccebbeebfe",
+   "Right_TX_UUID": "efaecafe-debf-cafe-ccaa-faacccfbbcdb"
+  },
+  "Earbud_37": {
+   "Serial_Number": "Earbud number 37",
+   "Left_Service_UUID": "efaecafe-bbaa-cafe-bcee-eadbedaacfab",
+   "Left_RX_UUID": "efaecafe-bbaa-cafe-eced-adbdefdeafdf",
+   "Left_TX_UUID": "efaecafe-bbaa-cafe-eced-ddcafdfcdada",
+   "Right_Service_UUID": "efaecafe-aeeb-cafe-deda-ffcbadebefde",
+   "Right_RX_UUID": "efaecafe-aeeb-cafe-cbdd-eeeacbcfefee",
+   "Right_TX_UUID": "efaecafe-aeeb-cafe-efee-fbecdbecfefc"
+  },
+  "Earbud_38": {
+   "Serial_Number": "Earbud number 38",
+   "Left_Service_UUID": "efaecafe-cfda-cafe-decc-eaacbbbddebd",
+   "Left_RX_UUID": "efaecafe-cfda-cafe-daad-dcdedfaddedf",
+   "Left_TX_UUID": "efaecafe-cfda-cafe-daad-edbeadcccaba",
+   "Right_Service_UUID": "efaecafe-becf-cafe-adfd-acbeeafaacef",
+   "Right_RX_UUID": "efaecafe-becf-cafe-bddf-befcddefaffd",
+   "Right_TX_UUID": "efaecafe-becf-cafe-fddb-eeddebdadacd"
+  },
+  "Earbud_39": {
+   "Serial_Number": "Earbud number 39",
+   "Left_Service_UUID": "efaecafe-bfdd-cafe-aebb-afbebdddafee",
+   "Left_RX_UUID": "efaecafe-bfdd-cafe-cdbb-fcccbbcbeffb",
+   "Left_TX_UUID": "efaecafe-bfdd-cafe-fcae-cecbdaefbade",
+   "Right_Service_UUID": "efaecafe-bacd-cafe-ccdf-aefaefecbddb",
+   "Right_RX_UUID": "efaecafe-bacd-cafe-eddd-ceaacdbccbff",
+   "Right_TX_UUID": "efaecafe-bacd-cafe-eddf-ffbadebbffca"
+  },
+  "Earbud_40": {
+   "Serial_Number": "Earbud number 40",
+   "Left_Service_UUID": "efaecafe-eacc-cafe-aede-ecfabebabeac",
+   "Left_RX_UUID": "efaecafe-eacc-cafe-cddc-cbaabfdadfbb",
+   "Left_TX_UUID": "efaecafe-eacc-cafe-dfca-becdbefabdcb",
+   "Right_Service_UUID": "efaecafe-cacf-cafe-dfca-eaddaedbbbfb",
+   "Right_RX_UUID": "efaecafe-cacf-cafe-ccca-ecfdbadbfbee",
+   "Right_TX_UUID": "efaecafe-cacf-cafe-cffd-cddecbabbada"
+  },
+  "Earbud_41": {
+   "Serial_Number": "Earbud number 41",
+   "Left_Service_UUID": "efaecafe-ccff-cafe-ffad-ecafaaabfbaa",
+   "Left_RX_UUID": "efaecafe-ccff-cafe-decd-eecafbcfdddc",
+   "Left_TX_UUID": "efaecafe-ccff-cafe-decd-bdafefbfeddb",
+   "Right_Service_UUID": "efaecafe-fbde-cafe-bbdc-bdcafacbbefe",
+   "Right_RX_UUID": "efaecafe-fbde-cafe-adbc-cdceeaddbaca",
+   "Right_TX_UUID": "efaecafe-fbde-cafe-bcfd-cfbafdffffee"
+  },
+  "Earbud_42": {
+   "Serial_Number": "Earbud number 42",
+   "Left_Service_UUID": "efaecafe-deff-cafe-badc-fccabfbbcaac",
+   "Left_RX_UUID": "efaecafe-deff-cafe-feba-fbbdffafcccb",
+   "Left_TX_UUID": "efaecafe-deff-cafe-feba-faefcbbbbabf",
+   "Right_Service_UUID": "efaecafe-dcfd-cafe-faed-ffbcbfbfafda",
+   "Right_RX_UUID": "efaecafe-dcfd-cafe-aabc-cbedfcefbedd",
+   "Right_TX_UUID": "efaecafe-dcfd-cafe-ccca-efedadcabfab"
+  },
+  "Earbud_43": {
+   "Serial_Number": "Earbud number 43",
+   "Left_Service_UUID": "efaecafe-ecdd-cafe-acfa-fbdbcfacfddb",
+   "Left_RX_UUID": "efaecafe-ecdd-cafe-ddfc-fdfefcdaddda",
+   "Left_TX_UUID": "efaecafe-ecdd-cafe-ebec-baecccabcbec",
+   "Right_Service_UUID": "efaecafe-bdca-cafe-caea-feccdfbebcec",
+   "Right_RX_UUID": "efaecafe-bdca-cafe-ccac-bedaafdddade",
+   "Right_TX_UUID": "efaecafe-bdca-cafe-fdac-ebfdecacdddf"
+  },
+  "Earbud_44": {
+   "Serial_Number": "Earbud number 44",
+   "Left_Service_UUID": "efaecafe-aacc-cafe-efeb-bddaeefcffdd",
+   "Left_RX_UUID": "efaecafe-aacc-cafe-dccb-eebdefdeddee",
+   "Left_TX_UUID": "efaecafe-aacc-cafe-dfae-befeafefafbc",
+   "Right_Service_UUID": "efaecafe-aedd-cafe-dfae-feafedeffbdf",
+   "Right_RX_UUID": "efaecafe-aedd-cafe-aaaa-adefabdafbce",
+   "Right_TX_UUID": "efaecafe-aedd-cafe-ceca-befaebdbefcd"
+  },
+  "Earbud_45": {
+   "Serial_Number": "Earbud number 45",
+   "Left_Service_UUID": "efaecafe-acbe-cafe-caea-ddbedacbaacd",
+   "Left_RX_UUID": "efaecafe-acbe-cafe-bbad-fbcbccbfbdcf",
+   "Left_TX_UUID": "efaecafe-acbe-cafe-bbad-acddbadcaaad",
+   "Right_Service_UUID": "efaecafe-afeb-cafe-feea-ccefaccafcbc",
+   "Right_RX_UUID": "efaecafe-afeb-cafe-aafb-aecdfcefdffd",
+   "Right_TX_UUID": "efaecafe-afeb-cafe-ebdd-aaadfabaedea"
+  },
+  "Earbud_46": {
+   "Serial_Number": "Earbud number 46",
+   "Left_Service_UUID": "efaecafe-ccbb-cafe-facf-bbdacdbaacdf",
+   "Left_RX_UUID": "efaecafe-ccbb-cafe-edab-ddcdecefecdf",
+   "Left_TX_UUID": "efaecafe-ccbb-cafe-edab-bdcdcaecabda",
+   "Right_Service_UUID": "efaecafe-fdbe-cafe-ccdf-befdadcdcbdc",
+   "Right_RX_UUID": "efaecafe-fdbe-cafe-dbfe-fbfafbcebcaf",
+   "Right_TX_UUID": "efaecafe-fdbe-cafe-bdab-abbebcdcdbbb"
+  },
+  "Earbud_47": {
+   "Serial_Number": "Earbud number 47",
+   "Left_Service_UUID": "efaecafe-cbbf-cafe-abec-aafeddbbfcdb",
+   "Left_RX_UUID": "efaecafe-cbbf-cafe-afbd-cdbcdffeabeb",
+   "Left_TX_UUID": "efaecafe-cbbf-cafe-cdcd-bbccdbfcdbdc",
+   "Right_Service_UUID": "efaecafe-adeb-cafe-ebfa-ecfebaabaabc",
+   "Right_RX_UUID": "efaecafe-adeb-cafe-ebdb-addbefbdfadb",
+   "Right_TX_UUID": "efaecafe-adeb-cafe-bbab-fbbbbafcadba"
+  },
+  "Earbud_48": {
+   "Serial_Number": "Earbud number 48",
+   "Left_Service_UUID": "efaecafe-bbfc-cafe-ceae-adddacbdeded",
+   "Left_RX_UUID": "efaecafe-bbfc-cafe-daff-cdedddbfbaec",
+   "Left_TX_UUID": "efaecafe-bbfc-cafe-baec-abeddaffcaac",
+   "Right_Service_UUID": "efaecafe-acfa-cafe-baec-cfaaaebbfabe",
+   "Right_RX_UUID": "efaecafe-acfa-cafe-adce-aafdbbdcaabe",
+   "Right_TX_UUID": "efaecafe-acfa-cafe-aafb-adddffafdefd"
+  },
+  "Earbud_49": {
+   "Serial_Number": "Earbud number 49",
+   "Left_Service_UUID": "efaecafe-aadf-cafe-abaf-beaebfeedfbd",
+   "Left_RX_UUID": "efaecafe-aadf-cafe-fdda-ceecadeaffee",
+   "Left_TX_UUID": "efaecafe-aadf-cafe-fdda-cdcacadcafec",
+   "Right_Service_UUID": "efaecafe-ccbc-cafe-eada-daeeedfdaedb",
+   "Right_RX_UUID": "efaecafe-ccbc-cafe-fecf-caebdceefacc",
+   "Right_TX_UUID": "efaecafe-ccbc-cafe-aefd-ddaaddcfacbf"
+  },
+  "Earbud_50": {
+   "Serial_Number": "Earbud number 50",
+   "Left_Service_UUID": "efaecafe-ddec-cafe-cedd-eabaafccbbcd",
+   "Left_RX_UUID": "efaecafe-ddec-cafe-ebdb-abfcdecedefb",
+   "Left_TX_UUID": "efaecafe-ddec-cafe-ebdb-addcebedacdd",
+   "Right_Service_UUID": "efaecafe-efdb-cafe-dcfa-ecffdefcbbbc",
+   "Right_RX_UUID": "efaecafe-efdb-cafe-eaae-cfeebbdabeeb",
+   "Right_TX_UUID": "efaecafe-efdb-cafe-fdba-beaacbdacecf"
+  },
+  "Earbud_51": {
+   "Serial_Number": "Earbud number 51",
+   "Left_Service_UUID": "efaecafe-bdee-cafe-ffaf-eecdbcdabcfb",
+   "Left_RX_UUID": "efaecafe-bdee-cafe-feed-eccaabddcabf",
+   "Left_TX_UUID": "efaecafe-bdee-cafe-edcb-dbfdebebdbee",
+   "Right_Service_UUID": "efaecafe-dced-cafe-ceca-eefdbedeaffb",
+   "Right_RX_UUID": "efaecafe-dced-cafe-adcf-fdfdcbfbaecc",
+   "Right_TX_UUID": "efaecafe-dced-cafe-edac-ceddfcdbddad"
+  },
+  "Earbud_52": {
+   "Serial_Number": "Earbud number 52",
+   "Left_Service_UUID": "efaecafe-aaff-cafe-bedb-fbdeffbeeccb",
+   "Left_RX_UUID": "efaecafe-aaff-cafe-bccc-fbcaaffaacda",
+   "Left_TX_UUID": "efaecafe-aaff-cafe-ecbc-dfccccdeaaca",
+   "Right_Service_UUID": "efaecafe-cdfd-cafe-ecbc-adfdffcacbee",
+   "Right_RX_UUID": "efaecafe-cdfd-cafe-cece-ffcedeadfffa",
+   "Right_TX_UUID": "efaecafe-cdfd-cafe-cafb-fcccecdcdfcb"
+  },
+  "Earbud_53": {
+   "Serial_Number": "Earbud number 53",
+   "Left_Service_UUID": "efaecafe-daab-cafe-ffcf-cfafeddaabac",
+   "Left_RX_UUID": "efaecafe-daab-cafe-ebec-cbcfdcdfcdbf",
+   "Left_TX_UUID": "efaecafe-daab-cafe-ebec-bcedaccfcdbb",
+   "Right_Service_UUID": "efaecafe-fabe-cafe-dfea-ebcbcabbcfcc",
+   "Right_RX_UUID": "efaecafe-fabe-cafe-fefe-acbcabfbffed",
+   "Right_TX_UUID": "efaecafe-fabe-cafe-cade-fcaaabaaccaf"
+  },
+  "Earbud_54": {
+   "Serial_Number": "Earbud number 54",
+   "Left_Service_UUID": "efaecafe-adef-cafe-cbda-bbddffafdcdb",
+   "Left_RX_UUID": "efaecafe-adef-cafe-cdbe-fcecccccaeee",
+   "Left_TX_UUID": "efaecafe-adef-cafe-cdbe-eecbfdcacbeb",
+   "Right_Service_UUID": "efaecafe-deaf-cafe-ccbc-aebbcdfedcba",
+   "Right_RX_UUID": "efaecafe-deaf-cafe-accf-fdfbeefefadf",
+   "Right_TX_UUID": "efaecafe-deaf-cafe-aaec-abcdcfefaaec"
+  },
+  "Earbud_55": {
+   "Serial_Number": "Earbud number 55",
+   "Left_Service_UUID": "efaecafe-acef-cafe-ffcf-dffdffdaccec",
+   "Left_RX_UUID": "efaecafe-acef-cafe-acdb-cfcefbddadaa",
+   "Left_TX_UUID": "efaecafe-acef-cafe-daae-ebbbeedbaadb",
+   "Right_Service_UUID": "efaecafe-ddad-cafe-bacf-fdaaebaedfcf",
+   "Right_RX_UUID": "efaecafe-ddad-cafe-bdac-addeabdaafbe",
+   "Right_TX_UUID": "efaecafe-ddad-cafe-befc-afbbecedcdfd"
+  },
+  "Earbud_56": {
+   "Serial_Number": "Earbud number 56",
+   "Left_Service_UUID": "efaecafe-ebab-cafe-adcf-efbabedadbeb",
+   "Left_RX_UUID": "efaecafe-ebab-cafe-feff-baffbbebbdbd",
+   "Left_TX_UUID": "efaecafe-ebab-cafe-ebbb-ebfdcdedcfbb",
+   "Right_Service_UUID": "efaecafe-ffbe-cafe-ebbb-beeedbeedbae",
+   "Right_RX_UUID": "efaecafe-ffbe-cafe-bcac-eeacbadeddbb",
+   "Right_TX_UUID": "efaecafe-ffbe-cafe-fbcc-accdadfaadfa"
+  },
+  "Earbud_57": {
+   "Serial_Number": "Earbud number 57",
+   "Left_Service_UUID": "efaecafe-aeac-cafe-fead-cdeffbacfeae",
+   "Left_RX_UUID": "efaecafe-aeac-cafe-aadf-dbbbfccfedec",
+   "Left_TX_UUID": "efaecafe-aeac-cafe-aadf-ccadcfcffffc",
+   "Right_Service_UUID": "efaecafe-ecfe-cafe-bfdb-abebfcdafdfb",
+   "Right_RX_UUID": "efaecafe-ecfe-cafe-cfcf-aabffdacfedc",
+   "Right_TX_UUID": "efaecafe-ecfe-cafe-bcfa-dccbcfdeeafe"
+  },
+  "Earbud_58": {
+   "Serial_Number": "Earbud number 58",
+   "Left_Service_UUID": "efaecafe-bcec-cafe-bdba-befeefbacedc",
+   "Left_RX_UUID": "efaecafe-bcec-cafe-febe-ebddadaecada",
+   "Left_TX_UUID": "efaecafe-bcec-cafe-febe-eeededdfeaff",
+   "Right_Service_UUID": "efaecafe-edec-cafe-ffba-bbfbcfbaaedd",
+   "Right_RX_UUID": "efaecafe-edec-cafe-bbba-fcbaeebfecef",
+   "Right_TX_UUID": "efaecafe-edec-cafe-bacb-acecedabdedd"
+  },
+  "Earbud_59": {
+   "Serial_Number": "Earbud number 59",
+   "Left_Service_UUID": "efaecafe-afdf-cafe-fbbd-baefdecaeeac",
+   "Left_RX_UUID": "efaecafe-afdf-cafe-edfc-aafcbfdcadff",
+   "Left_TX_UUID": "efaecafe-afdf-cafe-fffc-bcceaaedacff",
+   "Right_Service_UUID": "efaecafe-bbcc-cafe-abac-feaecabdbdaa",
+   "Right_RX_UUID": "efaecafe-bbcc-cafe-acee-daabedbeabfe",
+   "Right_TX_UUID": "efaecafe-bbcc-cafe-eaea-caefaeccbeee"
+  },
+  "Earbud_60": {
+   "Serial_Number": "Earbud number 60",
+   "Left_Service_UUID": "efaecafe-bfce-cafe-aebf-afdcfeddecaf",
+   "Left_RX_UUID": "efaecafe-bfce-cafe-fbac-eebfefcdcaca",
+   "Left_TX_UUID": "efaecafe-bfce-cafe-cacb-bbfdbfefbdda",
+   "Right_Service_UUID": "efaecafe-efee-cafe-cacb-eaeebfaaceac",
+   "Right_RX_UUID": "efaecafe-efee-cafe-deeb-cbcadccabcfa",
+   "Right_TX_UUID": "efaecafe-efee-cafe-dbae-aaffdcdfdfed"
+  },
+  "Earbud_61": {
+   "Serial_Number": "Earbud number 61",
+   "Left_Service_UUID": "efaecafe-acab-cafe-ddda-edcdabebcdea",
+   "Left_RX_UUID": "efaecafe-acab-cafe-acbb-cbccebbbedaf",
+   "Left_TX_UUID": "efaecafe-acab-cafe-acbb-ebefcbefebaa",
+   "Right_Service_UUID": "efaecafe-fbce-cafe-eabf-cfaeccbabddf",
+   "Right_RX_UUID": "efaecafe-fbce-cafe-dfdf-cdabbebffcfb",
+   "Right_TX_UUID": "efaecafe-fbce-cafe-cbda-bbdbeaefaeca"
+  },
+  "Earbud_62": {
+   "Serial_Number": "Earbud number 62",
+   "Left_Service_UUID": "efaecafe-baad-cafe-fede-aeeadcfcfbbd",
+   "Left_RX_UUID": "efaecafe-baad-cafe-adad-ccfceffceeaa",
+   "Left_TX_UUID": "efaecafe-baad-cafe-adad-bafdffffaeed",
+   "Right_Service_UUID": "efaecafe-efaa-cafe-bceb-fcabfadfcedd",
+   "Right_RX_UUID": "efaecafe-efaa-cafe-decd-daafdcbcbafb",
+   "Right_TX_UUID": "efaecafe-efaa-cafe-ccae-debedddbbaea"
+  },
+  "Earbud_63": {
+   "Serial_Number": "Earbud number 63",
+   "Left_Service_UUID": "efaecafe-efdb-cafe-cece-fcddefdeabbe",
+   "Left_RX_UUID": "efaecafe-efdb-cafe-cabc-ebaeafaecedc",
+   "Left_TX_UUID": "efaecafe-efdb-cafe-ceae-dfaeaaaaccba",
+   "Right_Service_UUID": "efaecafe-dcfa-cafe-eefc-eefdcecaccba",
+   "Right_RX_UUID": "efaecafe-dcfa-cafe-bbde-eaaafcfffcfc",
+   "Right_TX_UUID": "efaecafe-dcfa-cafe-ebae-adceedfdbffa"
+  },
+  "Earbud_64": {
+   "Serial_Number": "Earbud number 64",
+   "Left_Service_UUID": "efaecafe-bdee-cafe-dbab-edcdddbfacaf",
+   "Left_RX_UUID": "efaecafe-bdee-cafe-fbdc-cfafcadfadbc",
+   "Left_TX_UUID": "efaecafe-bdee-cafe-fdeb-bfbffadebecc",
+   "Right_Service_UUID": "efaecafe-debe-cafe-fdeb-dffbefccdbdd",
+   "Right_RX_UUID": "efaecafe-debe-cafe-eeef-cbcfdedefdef",
+   "Right_TX_UUID": "efaecafe-debe-cafe-cead-fcabbcfeeeaf"
+  },
+  "Earbud_65": {
+   "Serial_Number": "Earbud number 65",
+   "Left_Service_UUID": "efaecafe-fbff-cafe-baea-eeefacebcaca",
+   "Left_RX_UUID": "efaecafe-fbff-cafe-ddad-aaccafccfacd",
+   "Left_TX_UUID": "efaecafe-fbff-cafe-ddad-ddafbdcacbdf",
+   "Right_Service_UUID": "efaecafe-efba-cafe-bffd-aeeadfaeffce",
+   "Right_RX_UUID": "efaecafe-efba-cafe-dbcf-caecafddfedd",
+   "Right_TX_UUID": "efaecafe-efba-cafe-daed-ebccdbccdfdc"
+  },
+  "Earbud_66": {
+   "Serial_Number": "Earbud number 66",
+   "Left_Service_UUID": "efaecafe-fcfe-cafe-ecfd-cbceedeadaab",
+   "Left_RX_UUID": "efaecafe-fcfe-cafe-bdbe-bfcdcaacdafa",
+   "Left_TX_UUID": "efaecafe-fcfe-cafe-bdbe-bacfcfbeddfc",
+   "Right_Service_UUID": "efaecafe-dceb-cafe-cfdf-acfffabcfebd",
+   "Right_RX_UUID": "efaecafe-dceb-cafe-aeee-fbadeaaaeecb",
+   "Right_TX_UUID": "efaecafe-dceb-cafe-ebaa-adbabbefefac"
+  },
+  "Earbud_67": {
+   "Serial_Number": "Earbud number 67",
+   "Left_Service_UUID": "efaecafe-eddc-cafe-fdcc-dfadecaffadd",
+   "Left_RX_UUID": "efaecafe-eddc-cafe-beca-adeabbeaeefb",
+   "Left_TX_UUID": "efaecafe-eddc-cafe-ecff-efaffefedacd",
+   "Right_Service_UUID": "efaecafe-edfa-cafe-fcbe-efcbafcfcdcf",
+   "Right_RX_UUID": "efaecafe-edfa-cafe-cbec-cffbefabfbbd",
+   "Right_TX_UUID": "efaecafe-edfa-cafe-cbee-adcbccffbfeb"
+  },
+  "Earbud_68": {
+   "Serial_Number": "Earbud number 68",
+   "Left_Service_UUID": "efaecafe-bcbb-cafe-abed-aaaccfccecee",
+   "Left_RX_UUID": "efaecafe-bcbb-cafe-ecad-daafeefbacef",
+   "Left_TX_UUID": "efaecafe-bcbb-cafe-efbf-dcadbedfbceb",
+   "Right_Service_UUID": "efaecafe-badf-cafe-efbf-cacccddecbed",
+   "Right_RX_UUID": "efaecafe-badf-cafe-bdca-cddddffbcdee",
+   "Right_TX_UUID": "efaecafe-badf-cafe-eeab-fefadbccfaea"
+  },
+  "Earbud_69": {
+   "Serial_Number": "Earbud number 69",
+   "Left_Service_UUID": "efaecafe-bacc-cafe-aaad-bbfaaceeeaea",
+   "Left_RX_UUID": "efaecafe-bacc-cafe-dbbc-cabbefbbfbae",
+   "Left_TX_UUID": "efaecafe-bacc-cafe-dbbc-eaeeadecfead",
+   "Right_Service_UUID": "efaecafe-fbbc-cafe-bdfc-ffcfcfddbaca",
+   "Right_RX_UUID": "efaecafe-fbbc-cafe-eead-abcebcacebcc",
+   "Right_TX_UUID": "efaecafe-fbbc-cafe-cdcc-eaaeddeddbfe"
+  },
+  "Earbud_70": {
+   "Serial_Number": "Earbud number 70",
+   "Left_Service_UUID": "efaecafe-ceca-cafe-ccee-acdbddafdaae",
+   "Left_RX_UUID": "efaecafe-ceca-cafe-bfda-cfdcbbddeccf",
+   "Left_TX_UUID": "efaecafe-ceca-cafe-bfda-eeeacfecccef",
+   "Right_Service_UUID": "efaecafe-ebce-cafe-dffa-ccaaaadbcaaa",
+   "Right_RX_UUID": "efaecafe-ebce-cafe-afac-dfdcfddeedca",
+   "Right_TX_UUID": "efaecafe-ebce-cafe-dffc-dbafdcaeaacc"
+  },
+  "Earbud_71": {
+   "Serial_Number": "Earbud number 71",
+   "Left_Service_UUID": "efaecafe-ceee-cafe-cdeb-abfdcbfbcabf",
+   "Left_RX_UUID": "efaecafe-ceee-cafe-caed-fbfdaafcfecf",
+   "Left_TX_UUID": "efaecafe-ceee-cafe-fcac-edbecdbaebbd",
+   "Right_Service_UUID": "efaecafe-adea-cafe-ffcd-aebafeefbedd",
+   "Right_RX_UUID": "efaecafe-adea-cafe-faaa-deffcfbfdfdd",
+   "Right_TX_UUID": "efaecafe-adea-cafe-abfa-cabeccbbcbfa"
+  },
+  "Earbud_72": {
+   "Serial_Number": "Earbud number 72",
+   "Left_Service_UUID": "efaecafe-edbd-cafe-eddf-abedcabacecc",
+   "Left_RX_UUID": "efaecafe-edbd-cafe-caab-cdbebcbacbbe",
+   "Left_TX_UUID": "efaecafe-edbd-cafe-fdae-abdedefacbdb",
+   "Right_Service_UUID": "efaecafe-eebf-cafe-fdae-abededebcfcc",
+   "Right_RX_UUID": "efaecafe-eebf-cafe-dded-bcfceaaaccab",
+   "Right_TX_UUID": "efaecafe-eebf-cafe-ddcb-ceedeebfbcde"
+  },
+  "Earbud_73": {
+   "Serial_Number": "Earbud number 73",
+   "Left_Service_UUID": "efaecafe-feda-cafe-dafb-cbdbffaacdaf",
+   "Left_RX_UUID": "efaecafe-feda-cafe-beeb-dfbfcfffdecd",
+   "Left_TX_UUID": "efaecafe-feda-cafe-beeb-effafbecbcfe",
+   "Right_Service_UUID": "efaecafe-cbcf-cafe-ccaf-dcdaccbbeade",
+   "Right_RX_UUID": "efaecafe-cbcf-cafe-dddd-cacddeeccbdb",
+   "Right_TX_UUID": "efaecafe-cbcf-cafe-faaf-cdcedbabcbce"
+  },
+  "Earbud_74": {
+   "Serial_Number": "Earbud number 74",
+   "Left_Service_UUID": "efaecafe-affc-cafe-baea-cbdcebeafdda",
+   "Left_RX_UUID": "efaecafe-affc-cafe-eaff-abbdafdecbae",
+   "Left_TX_UUID": "efaecafe-affc-cafe-eaff-bcbdfeeffdac",
+   "Right_Service_UUID": "efaecafe-fddf-cafe-bffc-fdddffcedadd",
+   "Right_RX_UUID": "efaecafe-fddf-cafe-aeca-eaafdbebfdbd",
+   "Right_TX_UUID": "efaecafe-fddf-cafe-aabb-dfcfdafecdca"
+  },
+  "Earbud_75": {
+   "Serial_Number": "Earbud number 75",
+   "Left_Service_UUID": "efaecafe-cccd-cafe-dceb-eebeccaeddff",
+   "Left_RX_UUID": "efaecafe-cccd-cafe-bdef-dbcabdcbbaed",
+   "Left_TX_UUID": "efaecafe-cccd-cafe-ecfa-cddfdbffedbe",
+   "Right_Service_UUID": "efaecafe-bddf-cafe-efbd-baccaeeaeafa",
+   "Right_RX_UUID": "efaecafe-bddf-cafe-dabf-fbfdbcedbede",
+   "Right_TX_UUID": "efaecafe-bddf-cafe-abee-dffeecbfccbc"
+  },
+  "Earbud_76": {
+   "Serial_Number": "Earbud number 76",
+   "Left_Service_UUID": "efaecafe-dacc-cafe-fede-ebacaddacabe",
+   "Left_RX_UUID": "efaecafe-dacc-cafe-ebcf-fdeebecebabb",
+   "Left_TX_UUID": "efaecafe-dacc-cafe-aeac-daaafdcefcac",
+   "Right_Service_UUID": "efaecafe-aedc-cafe-aeac-bdbccacbfcff",
+   "Right_RX_UUID": "efaecafe-aedc-cafe-caae-cefdccafdccf",
+   "Right_TX_UUID": "efaecafe-aedc-cafe-fdaa-ddeabfbfaabc"
+  },
+  "Earbud_77": {
+   "Serial_Number": "Earbud number 77",
+   "Left_Service_UUID": "efaecafe-befa-cafe-cfff-fcabbfeadbae",
+   "Left_RX_UUID": "efaecafe-befa-cafe-ebec-bcecafeeffda",
+   "Left_TX_UUID": "efaecafe-befa-cafe-ebec-caeaffebbbfc",
+   "Right_Service_UUID": "efaecafe-ecda-cafe-ebec-cadcaceffbdf",
+   "Right_RX_UUID": "efaecafe-ecda-cafe-aaeb-cfdcebacdcdc",
+   "Right_TX_UUID": "efaecafe-ecda-cafe-abdf-cfbcceafdffd"
+  },
+  "Earbud_78": {
+   "Serial_Number": "Earbud number 78",
+   "Left_Service_UUID": "efaecafe-adfa-cafe-ceea-dacffcdfbaff",
+   "Left_RX_UUID": "efaecafe-adfa-cafe-cfbf-fbfeaaeceeeb",
+   "Left_TX_UUID": "efaecafe-adfa-cafe-cfbf-efacbafebdaf",
+   "Right_Service_UUID": "efaecafe-ccee-cafe-badd-aaaabdeeddef",
+   "Right_RX_UUID": "efaecafe-ccee-cafe-dfca-dbebdaadbecd",
+   "Right_TX_UUID": "efaecafe-ccee-cafe-ccca-dfacaefcccbb"
+  },
+  "Earbud_79": {
+   "Serial_Number": "Earbud number 79",
+   "Left_Service_UUID": "efaecafe-bdaf-cafe-ffda-ebefeafdbbff",
+   "Left_RX_UUID": "efaecafe-bdaf-cafe-ebee-ddabcdbdfebe",
+   "Left_TX_UUID": "efaecafe-bdaf-cafe-cfab-babcdacaeadf",
+   "Right_Service_UUID": "efaecafe-adff-cafe-dcce-aacdfdebbdcf",
+   "Right_RX_UUID": "efaecafe-adff-cafe-beec-cbcfbfccceed",
+   "Right_TX_UUID": "efaecafe-adff-cafe-accf-caabddcdeffd"
+  },
+  "Earbud_80": {
+   "Serial_Number": "Earbud number 80",
+   "Left_Service_UUID": "efaecafe-ebec-cafe-dfdf-dbfddebefdda",
+   "Left_RX_UUID": "efaecafe-ebec-cafe-dfec-ddbfccbbbcaf",
+   "Left_TX_UUID": "efaecafe-ebec-cafe-fbce-eecdcfffacfe",
+   "Right_Service_UUID": "efaecafe-cebf-cafe-fbce-edfadfbccefd",
+   "Right_RX_UUID": "efaecafe-cebf-cafe-ecdf-dcccffdbaafa",
+   "Right_TX_UUID": "efaecafe-cebf-cafe-ecdf-cabcbedfbbbc"
+  },
+  "Earbud_81": {
+   "Serial_Number": "Earbud number 81",
+   "Left_Service_UUID": "efaecafe-befc-cafe-bdcf-bbebdbddbfba",
+   "Left_RX_UUID": "efaecafe-befc-cafe-fcdb-adecdebbfbde",
+   "Left_TX_UUID": "efaecafe-befc-cafe-fcdb-beaecaedefef",
+   "Right_Service_UUID": "efaecafe-cefb-cafe-cddc-accfbccbddde",
+   "Right_RX_UUID": "efaecafe-cefb-cafe-bfba-caeddffdbaec",
+   "Right_TX_UUID": "efaecafe-cefb-cafe-becc-efdcecdaaadb"
+  },
+  "Earbud_82": {
+   "Serial_Number": "Earbud number 82",
+   "Left_Service_UUID": "efaecafe-fddc-cafe-bcba-cffdfaeecdef",
+   "Left_RX_UUID": "efaecafe-fddc-cafe-ccfb-eaebaeacecbb",
+   "Left_TX_UUID": "efaecafe-fddc-cafe-ccfb-ddefeeeaddaf",
+   "Right_Service_UUID": "efaecafe-eade-cafe-abcb-bdaeabaccdcf",
+   "Right_RX_UUID": "efaecafe-eade-cafe-fece-cffcebcffabd",
+   "Right_TX_UUID": "efaecafe-eade-cafe-cfbc-fdfffdcafdbb"
+  },
+  "Earbud_83": {
+   "Serial_Number": "Earbud number 83",
+   "Left_Service_UUID": "efaecafe-eaec-cafe-afdf-dacecfdffbfc",
+   "Left_RX_UUID": "efaecafe-eaec-cafe-abda-acfddceecabe",
+   "Left_TX_UUID": "efaecafe-eaec-cafe-faec-ddbeffdfebbc",
+   "Right_Service_UUID": "efaecafe-adbb-cafe-bdcc-aeabbadadacb",
+   "Right_RX_UUID": "efaecafe-adbb-cafe-fafa-dfdfdafcadad",
+   "Right_TX_UUID": "efaecafe-adbb-cafe-bbbe-ccafcfefbcfc"
+  },
+  "Earbud_84": {
+   "Serial_Number": "Earbud number 84",
+   "Left_Service_UUID": "efaecafe-ecdc-cafe-adcd-dadaefbabacb",
+   "Left_RX_UUID": "efaecafe-ecdc-cafe-fbeb-decefedfabbe",
+   "Left_TX_UUID": "efaecafe-ecdc-cafe-abbf-dbedbdcdccbd",
+   "Right_Service_UUID": "efaecafe-bcbc-cafe-abbf-cfbdfecabfee",
+   "Right_RX_UUID": "efaecafe-bcbc-cafe-bfed-dcdfcbbccdcc",
+   "Right_TX_UUID": "efaecafe-bcbc-cafe-faaa-cfcabadedede"
+  },
+  "Earbud_85": {
+   "Serial_Number": "Earbud number 85",
+   "Left_Service_UUID": "efaecafe-ecae-cafe-ffcb-eecfaafdaadb",
+   "Left_RX_UUID": "efaecafe-ecae-cafe-faea-cbbfcafbcaad",
+   "Left_TX_UUID": "efaecafe-ecae-cafe-faea-bdecfaebcefd",
+   "Right_Service_UUID": "efaecafe-fdcb-cafe-eaec-efafdcbbdabf",
+   "Right_RX_UUID": "efaecafe-fdcb-cafe-cafc-deddabcccffa",
+   "Right_TX_UUID": "efaecafe-fdcb-cafe-bfab-ecfafecdfdbc"
+  },
+  "Earbud_86": {
+   "Serial_Number": "Earbud number 86",
+   "Left_Service_UUID": "efaecafe-addb-cafe-ecdd-ebbbdbaadadc",
+   "Left_RX_UUID": "efaecafe-addb-cafe-cdae-febdfaeaaccc",
+   "Left_TX_UUID": "efaecafe-addb-cafe-cdae-caddefaaceee",
+   "Right_Service_UUID": "efaecafe-bfbe-cafe-fccc-bffeffcdbeff",
+   "Right_RX_UUID": "efaecafe-bfbe-cafe-dbcd-acbdabacbccd",
+   "Right_TX_UUID": "efaecafe-bfbe-cafe-cbfb-aedbccfebacf"
+  },
+  "Earbud_87": {
+   "Serial_Number": "Earbud number 87",
+   "Left_Service_UUID": "efaecafe-fffe-cafe-afdf-bcadffaccbfa",
+   "Left_RX_UUID": "efaecafe-fffe-cafe-dbac-cbeabebadcbd",
+   "Left_TX_UUID": "efaecafe-fffe-cafe-bfce-ededcbbdecbf",
+   "Right_Service_UUID": "efaecafe-acad-cafe-cfcd-cadfabcdacdb",
+   "Right_RX_UUID": "efaecafe-acad-cafe-cdfd-ecdaabcbedcf",
+   "Right_TX_UUID": "efaecafe-acad-cafe-aadd-fcedabceadbe"
+  },
+  "Earbud_88": {
+   "Serial_Number": "Earbud number 88",
+   "Left_Service_UUID": "efaecafe-ddce-cafe-bffb-fbaaaaafdbdc",
+   "Left_RX_UUID": "efaecafe-ddce-cafe-cccd-ebadacabadac",
+   "Left_TX_UUID": "efaecafe-ddce-cafe-eeac-ebfadafdcfad",
+   "Right_Service_UUID": "efaecafe-dfff-cafe-eeac-deedcbfefbdd",
+   "Right_RX_UUID": "efaecafe-dfff-cafe-becd-facdbdaecced",
+   "Right_TX_UUID": "efaecafe-dfff-cafe-cfbd-bbcddbfedfbd"
+  },
+  "Earbud_89": {
+   "Serial_Number": "Earbud number 89",
+   "Left_Service_UUID": "efaecafe-afbd-cafe-efce-bfaadcddecba",
+   "Left_RX_UUID": "efaecafe-afbd-cafe-dbbc-cfecbaeaeccc",
+   "Left_TX_UUID": "efaecafe-afbd-cafe-dbbc-cfaeecdbebbd",
+   "Right_Service_UUID": "efaecafe-dcae-cafe-fbec-beeeffeaecdb",
+   "Right_RX_UUID": "efaecafe-dcae-cafe-adfd-aaaccbbeaaba",
+   "Right_TX_UUID": "efaecafe-dcae-cafe-dddf-fbecfebacada"
+  },
+  "Earbud_90": {
+   "Serial_Number": "Earbud number 90",
+   "Left_Service_UUID": "efaecafe-cedf-cafe-abbf-edadddbacccd",
+   "Left_RX_UUID": "efaecafe-cedf-cafe-abfd-fefbbcccdacc",
+   "Left_TX_UUID": "efaecafe-cedf-cafe-abfd-ccebebabcefb",
+   "Right_Service_UUID": "efaecafe-abcc-cafe-dead-bbbefaadcfdf",
+   "Right_RX_UUID": "efaecafe-abcc-cafe-fbeb-bbfcbeceefdb",
+   "Right_TX_UUID": "efaecafe-abcc-cafe-edcd-abdebbcddbfc"
+  },
+  "Earbud_91": {
+   "Serial_Number": "Earbud number 91",
+   "Left_Service_UUID": "efaecafe-cfcf-cafe-fffc-bebbccbfaeac",
+   "Left_RX_UUID": "efaecafe-cfcf-cafe-dacf-ceadcabaddab",
+   "Left_TX_UUID": "efaecafe-cfcf-cafe-baaf-ebddbbeceedc",
+   "Right_Service_UUID": "efaecafe-eefe-cafe-ddbf-eaefcbabffeb",
+   "Right_RX_UUID": "efaecafe-eefe-cafe-ffcf-aefcfecffafd",
+   "Right_TX_UUID": "efaecafe-eefe-cafe-ecad-adaccaacdbfe"
+  },
+  "Earbud_92": {
+   "Serial_Number": "Earbud number 92",
+   "Left_Service_UUID": "efaecafe-fbbe-cafe-bcdd-ccdefbbeddda",
+   "Left_RX_UUID": "efaecafe-fbbe-cafe-afcd-eafdcfdbfadd",
+   "Left_TX_UUID": "efaecafe-fbbe-cafe-befe-cfdebabadfca",
+   "Right_Service_UUID": "efaecafe-edec-cafe-befe-facbdaeaccbe",
+   "Right_RX_UUID": "efaecafe-edec-cafe-dcce-fdbdbfcceafa",
+   "Right_TX_UUID": "efaecafe-edec-cafe-cfdb-fcbbcddeacba"
+  },
+  "Earbud_93": {
+   "Serial_Number": "Earbud number 93",
+   "Left_Service_UUID": "efaecafe-bbdf-cafe-abac-dedaefcbafbd",
+   "Left_RX_UUID": "efaecafe-bbdf-cafe-fadb-bebfcfdffedf",
+   "Left_TX_UUID": "efaecafe-bbdf-cafe-fadb-eeafaedccffa",
+   "Right_Service_UUID": "efaecafe-abfd-cafe-bbdf-dabaaedffead",
+   "Right_RX_UUID": "efaecafe-abfd-cafe-beae-eaadaeeddffa",
+   "Right_TX_UUID": "efaecafe-abfd-cafe-edce-acecaffcbbbe"
+  },
+  "Earbud_94": {
+   "Serial_Number": "Earbud number 94",
+   "Left_Service_UUID": "efaecafe-afbb-cafe-faca-aceebfcfefbb",
+   "Left_RX_UUID": "efaecafe-afbb-cafe-ffbd-dfcbcfabfdeb",
+   "Left_TX_UUID": "efaecafe-afbb-cafe-ffbd-dcfcdfbcafdb",
+   "Right_Service_UUID": "efaecafe-dabc-cafe-bedb-daccdfcbdcec",
+   "Right_RX_UUID": "efaecafe-dabc-cafe-eabe-edfafeadbeaa",
+   "Right_TX_UUID": "efaecafe-dabc-cafe-fddb-aaffeaaafdbb"
+  },
+  "Earbud_95": {
+   "Serial_Number": "Earbud number 95",
+   "Left_Service_UUID": "efaecafe-dcfb-cafe-dded-cbeecdbffcbe",
+   "Left_RX_UUID": "efaecafe-dcfb-cafe-fffa-afabbdbfffdb",
+   "Left_TX_UUID": "efaecafe-dcfb-cafe-dbcd-feebbbebcbdf",
+   "Right_Service_UUID": "efaecafe-edbe-cafe-cadf-dfafbcedbaad",
+   "Right_RX_UUID": "efaecafe-edbe-cafe-effc-fdfbbdcdcbfd",
+   "Right_TX_UUID": "efaecafe-edbe-cafe-eedf-dbbadbccfaed"
+  },
+  "Earbud_96": {
+   "Serial_Number": "Earbud number 96",
+   "Left_Service_UUID": "efaecafe-caaf-cafe-abbf-fcbdacaebbac",
+   "Left_RX_UUID": "efaecafe-caaf-cafe-bdda-dececeafeaee",
+   "Left_TX_UUID": "efaecafe-caaf-cafe-efea-adaeadefbafc",
+   "Right_Service_UUID": "efaecafe-bbec-cafe-efea-edaddcceeadd",
+   "Right_RX_UUID": "efaecafe-bbec-cafe-fdad-cadfafcadfea",
+   "Right_TX_UUID": "efaecafe-bbec-cafe-cead-fbdedeebcdea"
+  },
+  "Earbud_97": {
+   "Serial_Number": "Earbud number 97",
+   "Left_Service_UUID": "efaecafe-aead-cafe-cdfc-deccecdfaeaf",
+   "Left_RX_UUID": "efaecafe-aead-cafe-edae-eedaccdabcac",
+   "Left_TX_UUID": "efaecafe-aead-cafe-edae-dbaaddafeffa",
+   "Right_Service_UUID": "efaecafe-adfd-cafe-fccc-aefafdaaaefa",
+   "Right_RX_UUID": "efaecafe-adfd-cafe-aebd-ffcaddacefba",
+   "Right_TX_UUID": "efaecafe-adfd-cafe-bead-ffedfcacffca"
+  },
+  "Earbud_98": {
+   "Serial_Number": "Earbud number 98",
+   "Left_Service_UUID": "efaecafe-fede-cafe-edae-beddcbfcfbac",
+   "Left_RX_UUID": "efaecafe-fede-cafe-ffba-eadacdadbaaf",
+   "Left_TX_UUID": "efaecafe-fede-cafe-ffba-baafecfeebed",
+   "Right_Service_UUID": "efaecafe-aadf-cafe-fddc-cddbfabbceaf",
+   "Right_RX_UUID": "efaecafe-aadf-cafe-cdce-ffebbdaadacf",
+   "Right_TX_UUID": "efaecafe-aadf-cafe-ecee-adabaffacbeb"
+  },
+  "Earbud_99": {
+   "Serial_Number": "Earbud number 99",
+   "Left_Service_UUID": "efaecafe-daed-cafe-fedc-dafdcafbebde",
+   "Left_RX_UUID": "efaecafe-daed-cafe-efaf-dceabfcceccd",
+   "Left_TX_UUID": "efaecafe-daed-cafe-dadd-adcdddeddfba",
+   "Right_Service_UUID": "efaecafe-bfff-cafe-dbdc-bfcecdfeacff",
+   "Right_RX_UUID": "efaecafe-bfff-cafe-cbcf-dddefbdeffbd",
+   "Right_TX_UUID": "efaecafe-bfff-cafe-cddd-bcefaadcbbfa"
+  },
+  "Earbud_100": {
+   "Serial_Number": "Earbud number 100",
+   "Left_Service_UUID": "efaecafe-ceec-cafe-dbde-cfbbacaaddaf",
+   "Left_RX_UUID": "efaecafe-ceec-cafe-aaea-aedabdaacdef",
+   "Left_TX_UUID": "efaecafe-ceec-cafe-ebbf-bbbbefedcdae",
+   "Right_Service_UUID": "efaecafe-bfbd-cafe-ebbf-bdcbeddaeadb",
+   "Right_RX_UUID": "efaecafe-bfbd-cafe-bcbb-cfadabaaefff",
+   "Right_TX_UUID": "efaecafe-bfbd-cafe-cecc-dcbbeaadedbe"
+  }
+ }
+}

@@ -1,0 +1,84 @@
+# ============================================================
+# Zone — The Focus Room :: packaging
+# Windows .exe is the active target. macOS .dmg is configured but
+# DEFERRED (build it on the Mac Mini; PyInstaller cannot cross-compile,
+# so the frozen sidecar must be produced on each OS — see docs/BUILD.md).
+# ============================================================
+appId: zone.focusroom
+productName: Zone Focus Room
+copyright: Zone
+
+directories:
+  output: dist
+  buildResources: build/resources
+
+# What goes INTO the asar (the Electron app itself). The Python sidecar and
+# the served web surfaces are shipped as extraResources (below) so the static
+# server and the spawn path can read them from disk.
+files:
+  - app/**/*
+  - assets/**/*
+  - package.json
+  - "!**/*.map"
+
+# Per-OS frozen sidecar + the staged web surfaces (served to TV/iPad over LAN).
+# ${platform} resolves to win32 / darwin — each built on its own machine.
+extraResources:
+  - from: build/sidecar/${platform}
+    to: sidecar
+    filter: ["**/*"]
+  - from: build/webroot
+    to: webroot
+    filter: ["**/*"]
+  # The sidecar SOURCES ride along as a fallback: PyInstaller cannot
+  # cross-compile, so a package built without a frozen sidecar for its OS
+  # (the Windows-built mac test app) runs the sim engine on the machine's
+  # own python3 — pure stdlib, no installs. resolveSidecar() falls back.
+  - from: sidecar
+    to: sidecar-src
+    # recursive: picks up a vendored zone_sdk/ when present (the source
+    # bundle ships it so a Mac-built app can run REAL earbuds)
+    filter: ["**/*.py", "ble_profiles*.json"]
+
+asar: true
+
+# ---------------- Windows (ACTIVE) ----------------
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName} Setup ${version}.${ext}
+  # the brand mark on the exe/taskbar/installer — never Electron's atom
+  icon: build/resources/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Zone Focus Room
+
+# ---------------- macOS (DEFERRED — configure on Mac Mini) ----------------
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  icon: build/resources/icon.png   # builder converts to .icns
+  category: public.app-category.healthcare-fitness
+  # Bluetooth + a spawned sidecar that uses BLE need this entitlement and a
+  # signed+notarized build (see docs/BUILD.md). Left here as the contract.
+  extendInfo:
+    NSBluetoothAlwaysUsageDescription: >-
+      The Focus Room reads a single Zone EEG earbud over Bluetooth to show your
+      live focus during your session.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/resources/entitlements.mac.plist
+  entitlementsInherit: build/resources/entitlements.mac.plist
+
+dmg:
+  title: Zone Focus Room

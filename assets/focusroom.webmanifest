@@ -1,0 +1,16 @@
+{
+  "name": "The Focus Room",
+  "short_name": "Focus Room",
+  "description": "A single quiet session with how your attention moves.",
+  "start_url": "/ipad-flow.html?kiosk=1",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#060605",
+  "theme_color": "#060605",
+  "icons": [
+    { "src": "app-icon-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "app-icon-512.png", "type": "image/png", "sizes": "512x512" },
+    { "src": "app-icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,23 @@
+# Zone — The Focus Room · Replit configuration
+# The whole room runs headless on one VM: Node serves the surfaces + WS and
+# supervises the Python SIM sidecar (pure stdlib — no pip installs needed).
+# build the iPad bundle only if it isn't already shipped (the zip includes it)
+run = ["sh", "-c", "[ -f ipad/dist/app.js ] || npm run build:ipad; node app/web-main.js"]
+entrypoint = "app/web-main.js"
+modules = ["nodejs-20", "python-3.11"]
+hidden = [".git", "node_modules", "dist", "venv", "data"]
+
+[env]
+FOCUSROOM_SIMULATE = "1"
+FOCUSROOM_PYTHON = "python3"
+
+[deployment]
+# ONE room, ONE brain: use a Reserved VM (always-on, single instance, keeps
+# its disk). Autoscale would run several stateless copies — several "rooms"
+# fighting over guests, and the constellation wiped on every cold start.
+deploymentTarget = "vm"
+run = ["sh", "-c", "[ -f ipad/dist/app.js ] || npm run build:ipad; node app/web-main.js"]
+
+[[ports]]
+localPort = 4321
+externalPort = 80

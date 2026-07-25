@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Focus Room — Surfaces</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-sans);
+    background: radial-gradient(120% 60% at 50% 0%, #211F1C 0%, #141414 45%, #0E0D0C 100%); min-height: 100vh; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 40px; }
+
+  /* hero */
+  header { position: relative; overflow: hidden; padding: 92px 0 56px; }
+  .glow { position: absolute; border-radius: 50%; filter: var(--blur-glow); pointer-events: none;
+          width: 760px; height: 420px; left: 50%; top: -180px; transform: translateX(-50%); background: rgba(221,202,142,0.10); }
+  .brandrow { display: flex; align-items: center; gap: 14px; margin-bottom: 40px; }
+  .brandrow .mark { width: 12px; height: 12px; border-radius: 50%; background: var(--c-signal); box-shadow: 0 0 20px 2px rgba(221,202,142,0.5); }
+  .brandrow .t { color: var(--fg-muted); font-family: var(--font-mono); font-size: 12px; letter-spacing: var(--tr-mono); text-transform: uppercase; }
+  h1 { font-family: var(--font-display); font-weight: 400; font-size: 72px; line-height: 0.98; letter-spacing: -0.03em; color: var(--fg-strong); max-width: 760px; }
+  .lede { margin-top: 26px; max-width: 620px; font-weight: 300; font-size: 20px; line-height: 1.5; color: var(--fg-muted); }
+  .heroline { position: relative; height: 120px; margin-top: 40px; }
+  .heroline svg { width: 100%; height: 100%; }
+
+  /* sections */
+  section { padding: 30px 0 10px; }
+  .sechead { display: flex; align-items: baseline; gap: 16px; padding: 26px 0 22px; border-top: 1px solid var(--hair); }
+  .sechead .num { font-family: var(--font-mono); font-size: 12px; letter-spacing: var(--tr-mono); color: var(--c-signal); text-transform: uppercase; }
+  .sechead .name { font-family: var(--font-display); font-weight: 500; font-size: 26px; letter-spacing: -0.02em; color: var(--fg-strong); }
+  .sechead .desc { margin-left: auto; font-size: 14px; color: var(--fg-faint); max-width: 360px; text-align: right; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; padding-bottom: 22px; }
+  .grid.two { grid-template-columns: repeat(2, 1fr); }
+  .card { position: relative; display: flex; flex-direction: column; text-decoration: none; color: inherit;
+    background: var(--bg-elevated); border: 1px solid var(--hair); border-radius: var(--r-lg); overflow: hidden;
+    transition: transform var(--dur-base) var(--ease-out), border-color var(--dur-base), background var(--dur-base); }
+  .card:hover { transform: translateY(-3px); border-color: var(--hair-strong); background: var(--bg-elevated-2); }
+  .thumb { height: 150px; position: relative; overflow: hidden; background: #0E0D0C; display: flex; align-items: center; justify-content: center; }
+  .thumb.light { background: #EFEAE3; }
+  .card .body { padding: 20px 22px 22px; }
+  .card .tag { font-family: var(--font-mono); font-size: 9px; letter-spacing: var(--tr-mono); text-transform: uppercase; color: var(--fg-faint); }
+  .card h3 { font-family: var(--font-sans); font-weight: 500; font-size: 19px; color: var(--fg-strong); margin-top: 10px; letter-spacing: -0.01em;
+    display: flex; align-items: center; justify-content: space-between; }
+  .card h3 .arr { color: var(--fg-muted); transition: transform var(--dur-base) var(--ease-out); }
+  .card:hover h3 .arr { transform: translate(3px, -3px); }
+  .card p { font-weight: 300; font-size: 14px; line-height: 1.5; color: var(--fg-muted); margin-top: 8px; }
+
+  /* foundations */
+  .found { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; padding: 8px 0 20px; }
+  .found .f { background: rgba(221,202,142,0.04); border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 22px 24px; }
+  .found .f .k { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--tr-mono); text-transform: uppercase; color: var(--c-signal); }
+  .found .f .n { font-family: var(--font-sans); font-weight: 500; font-size: 18px; color: var(--fg-strong); margin-top: 10px; }
+  .found .f p { font-weight: 300; font-size: 14px; line-height: 1.5; color: var(--fg-muted); margin-top: 7px; }
+
+  footer { padding: 40px 0 80px; border-top: 1px solid var(--hair); margin-top: 30px; }
+  footer .row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+  footer .note { font-size: 13px; color: var(--fg-faint); max-width: 620px; line-height: 1.6; }
+
+  /* mini thumbs */
+  .mini-dots span { position: absolute; border-radius: 50%; }
+  @media (max-width: 900px) { .grid, .grid.two, .found { grid-template-columns: 1fr; } h1 { font-size: 52px; } .wrap { padding: 0 24px; } }
+</style>
+</head>
+<body>
+  <header>
+    <div class="glow"></div>
+    <div class="wrap">
+      <div class="brandrow"><span class="mark"></span><span class="t">Zone — The Focus Room</span></div>
+      <h1>One room, one reading, one honest look at how your attention moves.</h1>
+      <p class="lede">The visitor experience, designed as code. A guest sits down, puts in one earbud, and reads — while the room watches their focus rise, break, and recover. These are the surfaces, in the order a guest meets them.</p>
+      <div class="heroline"><svg id="hero" viewBox="0 0 1040 120" preserveAspectRatio="none"></svg></div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- TV -->
+    <section>
+      <div class="sechead"><span class="num">01 · The Room</span><span class="name">The TV — 100&Prime; landscape</span><span class="desc">The only bright surface in a dark room. Read at distance, high contrast.</span></div>
+      <div class="grid">
+        <a class="card" href="tv-live.html">
+          <div class="thumb"><svg viewBox="0 0 320 150" style="width:100%;height:100%"><path id="t-live" fill="none" stroke="var(--c-signal)" stroke-width="2.2" stroke-linecap="round"/></svg></div>
+          <div class="body"><div class="tag">1920 × 1080 · animated</div><h3>Live Session <span class="arr">↗</span></h3><p>One calm line drawn in real time, a slow state word, and the interruption dip and recovery.</p></div>
+        </a>
+        <a class="card" href="tv-reveal.html">
+          <div class="thumb"><svg viewBox="0 0 320 150" style="width:100%;height:100%"><path id="t-rev-dim" fill="none" stroke="var(--c-signal-dim)" stroke-width="1.6"/><path id="t-rev" fill="none" stroke="var(--c-orange)" stroke-width="2.4" stroke-linecap="round"/></svg></div>
+          <div class="body"><div class="tag">1920 × 1080 · auto-paced</div><h3>The Reveal <span class="arr">↗</span></h3><p>The annotated replay — four reads walked one at a time, with the dot-grid motif.</p></div>
+        </a>
+        <a class="card" href="tv-constellation.html">
+          <div class="thumb" id="th-const"></div>
+          <div class="body"><div class="tag">1920 × 1080 · idle</div><h3>Constellation <span class="arr">↗</span></h3><p>Anonymous dots, one per guest, clustered by archetype — an accumulating star map.</p></div>
+        </a>
+      </div>
+    </section>
+
+    <!-- iPad -->
+    <section>
+      <div class="sechead"><span class="num">02 · The Guest</span><span class="name">The iPad — portrait kiosk</span><span class="desc">What the guest taps through, at reading distance. Dark when the room leads, light when you do.</span></div>
+      <div class="grid two">
+        <a class="card" href="ipad-flow.html" style="grid-column: span 2;">
+          <div class="thumb light" id="th-ipad"></div>
+          <div class="body"><div class="tag">Portrait · tappable prototype</div><h3>Guest Flow — welcome to close <span class="arr">↗</span></h3><p>Seat the earbud, go on record, choose a reading, the interruption, a single-tap guess, dark standby, email capture, and one matched door — investor, customer, or creator.</p></div>
+        </a>
+      </div>
+    </section>
+
+    <!-- Takeaways -->
+    <section>
+      <div class="sechead"><span class="num">03 · The Takeaways</span><span class="name">What leaves the room</span><span class="desc">Off-white-and-near-black brand contrast. Generated per guest at runtime.</span></div>
+      <div class="grid">
+        <a class="card" href="card.html">
+          <div class="thumb light" id="th-card"></div>
+          <div class="body"><div class="tag">4 × 6 in · SVG · print</div><h3>Printed Card <span class="arr">↗</span></h3><p>A keepsake object — the archetype, the session line with the interruption marked, one sentence.</p></div>
+        </a>
+        <a class="card" href="profile.html">
+          <div class="thumb" id="th-profile"></div>
+          <div class="body"><div class="tag">1080 × 1080 · SVG</div><h3>Focus Profile <span class="arr">↗</span></h3><p>The shareable graphic — leads with the archetype, not a number. Built to post.</p></div>
+        </a>
+        <a class="card" href="email.html">
+          <div class="thumb light" id="th-email"></div>
+          <div class="body"><div class="tag">HTML email · table-based</div><h3>Emailed Report <span class="arr">↗</span></h3><p>The substance — the full annotated line, the four reads written out, the matched next step.</p></div>
+        </a>
+      </div>
+    </section>
+
+    <!-- Foundations -->
+    <section>
+      <div class="sechead"><span class="num">00 · Foundations</span><span class="name">The shared source of truth</span><span class="desc">Both the design and the build read from these two files.</span></div>
+      <div class="found">
+        <div class="f"><div class="k">Design tokens</div><div class="n">tokens.css</div><p>The single source of truth — imports the bound Zone Design System token sheet and aliases its variables (the focus line is the DS's In&nbsp;Flow gold). Intentional departures for this room are documented inline.</p></div>
+        <div class="f"><div class="k">The line language</div><div class="n">lib/focusline.js</div><p>The focus-line generator and the four archetype shapes. The live line, the reveal, the card, the profile and the email all draw from it, so the shape is identical everywhere.</p></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap">
+    <div class="row">
+      <div class="brandrow" style="margin:0"><span class="mark"></span><span class="t">Zone — The Focus Room</span></div>
+      <div class="note">Display type is a neutral grotesque stand-in for PP Neue Montreal, which is bundled at build. Dynamic content — the archetype, the caption, the four reads, the focus-line path, the matched door — is marked as named slots and placeholders throughout.</div>
+    </div>
+  </footer>
+
+  <script src="lib/focusline.js"></script>
+  <script>
+  (function () {
+    var FL = window.FocusLine;
+    // hero animated line
+    var hero = document.getElementById('hero');
+    var hbox = { x: 10, y: 14, w: 1020, h: 96 };
+    var hp = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    hp.setAttribute('fill', 'none'); hp.setAttribute('stroke', 'var(--c-signal)');
+    hp.setAttribute('stroke-width', '2.4'); hp.setAttribute('stroke-linecap', 'round'); hp.setAttribute('stroke-linejoin', 'round');
+    hero.appendChild(hp);
+    var hhead = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    hhead.setAttribute('r', '5'); hhead.setAttribute('fill', 'var(--c-signal)'); hero.appendChild(hhead);
+    var p = 0, dir = 1;
+    function heroFrame() {
+      p += 0.0016; if (p >= 1) { p = 1; }
+      var res = FL.linePathTo('deep', hbox, Math.max(0.001, p), { samples: 160 });
+      hp.setAttribute('d', res.d); hhead.setAttribute('cx', res.head.x); hhead.setAttribute('cy', res.head.y);
+      if (p < 1) requestAnimationFrame(heroFrame);
+    }
+    heroFrame();
+
+    // thumb lines
+    function setLine(id, arch, box) { var el = document.getElementById(id); if (el) el.setAttribute('d', FL.linePath(arch, box, { samples: 120 })); }
+    setLine('t-live', 'deep', { x: 14, y: 30, w: 292, h: 92 });
+    setLine('t-rev-dim', 'deep', { x: 14, y: 30, w: 292, h: 92 });
+    // reveal thumb: bright orange only over the interruption region
+    var info = FL.interruptInfo('deep');
+    var rev = document.getElementById('t-rev');
+    if (rev) rev.setAttribute('d', FL.linePathRange('deep', { x: 14, y: 30, w: 292, h: 92 }, info.start, info.recovered, { samples: 120 }));
+
+    // card / profile / email mini line thumbs
+    function svgLine(elId, arch, stroke, box, light) {
+      var host = document.getElementById(elId); if (!host) return;
+      var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      s.setAttribute('viewBox', '0 0 320 150'); s.style.width = '100%'; s.style.height = '100%';
+      var pth = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      pth.setAttribute('d', FL.linePath(arch, box, { samples: 120 })); pth.setAttribute('fill', 'none');
+      pth.setAttribute('stroke', stroke); pth.setAttribute('stroke-width', '2.2'); pth.setAttribute('stroke-linecap', 'round'); pth.setAttribute('stroke-linejoin', 'round');
+      s.appendChild(pth); host.appendChild(s);
+    }
+    svgLine('th-card', 'deep', '#141414', { x: 26, y: 40, w: 268, h: 70 });
+    svgLine('th-profile', 'deep', 'var(--c-signal)', { x: 20, y: 36, w: 280, h: 78 });
+    svgLine('th-email', 'deep', '#B9A876', { x: 26, y: 40, w: 268, h: 70 });
+
+    // ipad thumb: a soft warm wash + dot
+    var ip = document.getElementById('th-ipad');
+    if (ip) { ip.style.background = 'radial-gradient(80% 120% at 50% 130%, rgba(255,140,90,0.30), transparent 60%), #EFEAE3';
+      ip.innerHTML = '<div style="width:46px;height:46px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#E9DDB6,#B6A876);box-shadow:0 0 40px 6px rgba(221,202,142,0.45)"></div>'; }
+
+    // constellation thumb: scattered dots
+    var th = document.getElementById('th-const');
+    if (th) {
+      th.style.background = '#0A0908'; th.style.position = 'relative';
+      var clusters = [[80, 50], [240, 50], [80, 110], [240, 110]];
+      var html = '';
+      clusters.forEach(function (c, ci) {
+        for (var i = 0; i < 26; i++) {
+          var x = c[0] + (Math.random() - 0.5) * 70, y = c[1] + (Math.random() - 0.5) * 54;
+          var a = 0.2 + Math.random() * 0.6, r = 1 + Math.random() * 2;
+          var col = ci === 2 ? '221,202,142' : (ci === 3 ? '203,201,188' : '232,192,137');
+          html += '<span style="left:' + x + 'px;top:' + y + 'px;width:' + r * 2 + 'px;height:' + r * 2 + 'px;background:rgba(' + col + ',' + a + ');box-shadow:0 0 6px rgba(' + col + ',' + (a * 0.8) + ')"></span>';
+        }
+      });
+      th.className += ' mini-dots'; th.innerHTML = html;
+    }
+  })();
+  </script>
+</body>
+</html>

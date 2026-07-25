@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Focus Room · Operator</title>
+<style>
+  :root{
+    --bg:#0f0f0e; --card:#171716; --card2:#1d1c1a; --hair:rgba(230,228,220,.08);
+    --fg:#e9e7e0; --fg-mut:#a5a096; --fg-faint:#807b72;
+    --ok:#6fcf7f; --info:#e8d79a; --warn:#f0a44a; --bad:#ff6a4d; --accent:#ddca8e;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:16px;line-height:1.5}
+  body{max-width:760px;margin:0 auto;padding:20px 20px 60px}
+  a{color:var(--accent)}
+
+  /* header */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:-.01em}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent)}
+  .badges{display:flex;gap:8px;align-items:center}
+  .badge{font:600 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;padding:6px 10px;border-radius:999px;border:1px solid var(--hair);color:var(--fg-mut)}
+  .badge.sim{color:var(--warn);border-color:var(--warn)}
+  .badge.real{color:var(--ok);border-color:var(--ok)}
+  .badge.link-off{color:var(--bad);border-color:var(--bad)}
+  .badge.link-on{color:var(--ok);border-color:transparent;background:rgba(111,207,127,.12)}
+
+  /* the one big health line */
+  .banner{border-radius:16px;padding:20px 22px;margin-bottom:18px;border:1px solid var(--hair);background:var(--card);display:flex;gap:16px;align-items:flex-start}
+  .banner .glyph{font-size:26px;line-height:1.1}
+  .banner h1{font-size:23px;font-weight:600;letter-spacing:-.02em}
+  .banner p{color:var(--fg-mut);font-size:14px;margin-top:2px}
+  .banner.ok{border-color:rgba(111,207,127,.35);background:linear-gradient(180deg,rgba(111,207,127,.08),transparent)}
+  .banner.info{border-color:rgba(232,215,154,.3)}
+  .banner.warn{border-color:rgba(240,164,74,.45);background:linear-gradient(180deg,rgba(240,164,74,.08),transparent)}
+  .banner.bad{border-color:rgba(255,106,77,.5);background:linear-gradient(180deg,rgba(255,106,77,.1),transparent)}
+
+  h2.sec{font:600 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--fg-mut);margin:22px 2px 10px}
+
+  /* assistant cards — what's wrong + how to fix */
+  .fix{background:var(--card);border:1px solid var(--hair);border-left-width:3px;border-radius:12px;padding:15px 17px;margin-bottom:10px}
+  .fix.warn{border-left-color:var(--warn)} .fix.bad{border-left-color:var(--bad)}
+  .fix.info{border-left-color:var(--info)} .fix.ok{border-left-color:var(--ok)}
+  .fix h3{font-size:16px;font-weight:600;display:flex;align-items:center;gap:9px}
+  .fix .plain{color:var(--fg-mut);font-size:14px;margin:5px 0 0}
+  .fix ol{margin:11px 0 0;padding-left:4px;list-style:none;counter-reset:s}
+  .fix ol li{counter-increment:s;position:relative;padding:5px 0 5px 30px;font-size:14px;color:var(--fg)}
+  .fix ol li::before{content:counter(s);position:absolute;left:0;top:5px;width:20px;height:20px;border-radius:50%;
+    background:var(--card2);border:1px solid var(--hair);color:var(--fg-mut);font:600 11px/20px var(--mono);text-align:center}
+  .lvl-dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .lvl-dot.ok{background:var(--ok)} .lvl-dot.info{background:var(--info)}
+  .lvl-dot.warn{background:var(--warn)} .lvl-dot.bad{background:var(--bad)}
+
+  /* status chips */
+  .chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .chip{background:var(--card);border:1px solid var(--hair);border-radius:11px;padding:11px 13px}
+  .chip .k{font:600 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--fg-mut)}
+  .chip .v{font-size:16px;font-weight:600;margin-top:5px}
+  .chip .v small{font-weight:400;color:var(--fg-mut);font-size:13px}
+  .v.ok{color:var(--ok)} .v.warn{color:var(--warn)} .v.bad{color:var(--bad)} .v.mut{color:var(--fg-mut)}
+
+  /* controls */
+  .btns{display:flex;flex-wrap:wrap;gap:8px}
+  button{font:600 13px/1 var(--sans);color:var(--fg);background:var(--card2);border:1px solid var(--hair);
+    border-radius:10px;padding:12px 16px;min-height:44px;cursor:pointer;transition:border-color .15s,background .15s}
+  button:hover{border-color:var(--accent)} button:active{transform:translateY(1px)}
+  button.go{border-color:rgba(221,202,142,.4)}
+  button.warnbtn{border-color:rgba(240,164,74,.4);color:var(--warn)}
+
+  /* activity log */
+  .logwrap{background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+  .log{max-height:260px;overflow:auto}
+  .line{display:flex;gap:11px;align-items:baseline;padding:8px 14px;border-top:1px solid var(--hair);font-size:14px}
+  .line:first-child{border-top:none}
+  .line .ts{font:11px/1.4 var(--mono);color:var(--fg-mut);flex:none;width:44px}
+  .line .d{width:7px;height:7px;border-radius:50%;flex:none;margin-top:6px}
+  .line .d.ok{background:var(--ok)}.line .d.info{background:var(--info)}.line .d.warn{background:var(--warn)}.line .d.bad{background:var(--bad)}.line .d.muted{background:var(--fg-faint)}
+  .line .t{flex:1}.line.muted .t{color:var(--fg-mut);font-family:var(--mono);font-size:12px}
+
+  /* collapsible raw numbers */
+  details{margin-top:12px} summary{cursor:pointer;color:var(--fg-mut);font:600 12px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:8px 2px;list-style:none}
+  summary::-webkit-details-marker{display:none} summary::before{content:'▸ ';color:var(--fg-faint)}
+  details[open] summary::before{content:'▾ '}
+  .nums{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin-top:8px}
+  .num{background:var(--card);border:1px solid var(--hair);border-radius:8px;padding:8px 10px}
+  .num .k{font:10px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--fg-mut)}
+  .num .v2{font:600 15px/1.2 var(--mono);margin-top:4px;font-variant-numeric:tabular-nums}
+  .foot{margin-top:26px;color:var(--fg-mut);font:12px/1.6 var(--mono);text-align:center}
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand"><span class="dot"></span> Focus Room · Operator</div>
+    <div class="badges">
+      <span class="badge" id="modeBadge">—</span>
+      <span class="badge" id="linkBadge">connecting…</span>
+    </div>
+  </div>
+
+  <div class="banner" id="banner">
+    <span class="glyph" id="bannerGlyph">•</span>
+    <div><h1 id="bannerHead">Connecting to the room…</h1><p id="bannerSub"></p></div>
+  </div>
+
+  <div id="fixes"></div>
+
+  <h2 class="sec">At a glance</h2>
+  <div class="chips" id="chips"></div>
+
+  <h2 class="sec">Controls</h2>
+  <div class="btns">
+    <button class="go" data-cmd="discover">Find earbuds</button>
+    <button class="go" data-cmd="connect">Connect</button>
+    <button data-cmd="disconnect">Disconnect</button>
+    <button data-cmd="start_session">Start session</button>
+    <button data-cmd="stop_session">Stop session</button>
+    <button class="warnbtn" data-cmd="test_signal">Inject test signal</button>
+    <button class="warnbtn" data-cmd="mark" data-kind="interruption">Fire the interruption</button>
+  </div>
+
+  <h2 class="sec">What's happening</h2>
+  <div class="logwrap"><div class="log" id="log"></div></div>
+
+  <details>
+    <summary>Live numbers (for the curious)</summary>
+    <div class="nums" id="nums"></div>
+  </details>
+
+  <div class="foot" id="foot">—</div>
+
+<script src="lib/diagnose.js"></script>
+<script>
+(function(){
+  var D = window.Diagnose;
+  var $ = function(id){ return document.getElementById(id); };
+
+  // ---- the room's live state, assembled from the feed ----
+  var S = { mode:null, sidecar:{}, buds:{left:null,right:null}, battery:{}, impedance:null,
+            stats:null, signalQuality:null, beat:null, link:null, discovered:null,
+            lastError:null, lastFrameAt:0 };
+  var live = { bands:{}, metrics:{}, frame:{} };   // for the "live numbers" panel
+
+  // ---- activity log ----
+  var startedAt = Date.now();
+  function rel(){ var s=Math.floor((Date.now()-startedAt)/1000); return (s<60? s+'s' : Math.floor(s/60)+'m'+(s%60)+'s'); }
+  var logEl = $('log'); var lastLog='';
+  function pushLog(level, text){
+    if(!text) return;
+    var key = level+'|'+text;
+    if(key===lastLog) return;            // collapse immediate repeats
+    lastLog = key;
+    var line = document.createElement('div'); line.className='line'+(level==='muted'?' muted':'');
+    line.innerHTML = '<span class="ts">'+rel()+'</span><span class="d '+level+'"></span><span class="t"></span>';
+    line.querySelector('.t').textContent = text;
+    logEl.insertBefore(line, logEl.firstChild);
+    while(logEl.children.length>80) logEl.removeChild(logEl.lastChild);
+  }
+
+  // ---- ingest one telemetry event ----
+  function onSidecarMsg(m){
+    switch(m.type){
+      case 'eeg/frame': S.lastFrameAt=Date.now(); S.signalQuality=m.signalQuality; live.frame=m; break;
+      case 'eeg/brainwaves': live.bands=m; break;
+      case 'eeg/metrics': live.metrics=m; break;
+      case 'eeg/connection':
+        if(m.leftConnected!==undefined){ S.buds={left:!!m.leftConnected,right:!!m.rightConnected}; }
+        // battery rides the connection heartbeat (batteryL/R) — the streaming
+        // path never sends fit/battery, so this is where the chips learn it
+        if(m.batteryL!=null||m.batteryR!=null) S.battery={leftPct:m.batteryL,rightPct:m.batteryR,ok:true};
+        break;
+      case 'fit/battery': S.battery={leftPct:m.leftPct,rightPct:m.rightPct,ok:m.ok}; break;
+      case 'fit/impedance': S.impedance={allGood:m.allGood,channels:m.channels}; break;
+      case 'eeg/stats':
+        S.stats=m;
+        // the per-bud stream carries battery too — the streaming-fit path never
+        // sends fit/battery, so the chips sat on "—" through a whole session
+        if(m.batteryL!=null||m.batteryR!=null) S.battery={leftPct:m.batteryL,rightPct:m.batteryR,ok:true};
+        break;
+      case 'discovered': S.discovered=m.devices||[]; break;
+      case 'error': S.lastError={code:m.code,msg:m.msg,at:Date.now()}; break;
+    }
+    var h = D.humanize('sidecar:message', m); if(h) pushLog(h.level,h.text);
+  }
+  var seenData=false;   // has the room sent us anything real yet?
+  function onFeed(channel, payload){
+    seenData=true;
+    if(channel==='sidecar:status'){ S.sidecar=payload||{}; if(payload) S.mode=payload.simulate?'sim':'real'; }
+    else if(channel==='sidecar:message'){ onSidecarMsg(payload||{}); return; }
+    var h = D.humanize(channel, payload); if(h) pushLog(h.level,h.text);
+  }
+
+  // ---- render (throttled) ----
+  var GLYPH={ok:'✓',info:'•',warn:'▲',bad:'✕'};
+  function paintBanner(level, glyph, head, sub){
+    var b=$('banner'); b.className='banner '+level;
+    $('bannerGlyph').textContent=glyph; $('bannerGlyph').style.color='var(--'+level+')';
+    $('bannerHead').textContent=head; $('bannerSub').textContent=sub||'';
+  }
+  function oneFix(level, head, plain){
+    $('fixes').innerHTML='<div class="fix '+level+'"><h3><span class="lvl-dot '+level+'"></span>'+esc(head)+'</h3><p class="plain">'+esc(plain)+'</p></div>';
+  }
+  function render(){
+    S.lastFrameAgo = S.lastFrameAt ? (Date.now()-S.lastFrameAt) : null;
+
+    // HONESTY: never show a green "healthy" tick with no live data behind it.
+    // If the socket is down, or the room hasn't sent anything yet, say exactly
+    // that — the operator must never read a reassuring ✓ that means nothing.
+    if(!conn){
+      paintBanner('info','◦','Not connected to the room','Trying to reconnect… nothing is lost.');
+      oneFix('info','Reconnecting to the room','The console lost its connection. It keeps retrying on its own — no action needed.');
+      paintChips(); paintNums(); return;
+    }
+    if(!seenData){
+      paintBanner('info','•','Connecting to the room…','Waiting for the first update.');
+      oneFix('info','Waiting for the room','Connected, but the room has not sent anything yet.');
+      paintChips(); paintNums(); return;
+    }
+
+    var r = D.diagnose(S);
+    var lvl=r.level, glyph=GLYPH[lvl];
+    // and don't show the ✓ until the engine is genuinely ready with live frames
+    if(lvl==='ok' && !(S.sidecar.ready && S.lastFrameAt)) glyph='•';
+    var problems=r.alerts.filter(function(a){return a.level==='warn'||a.level==='bad';}).length;
+    paintBanner(lvl, glyph, r.headline, problems? (problems+' thing'+(problems>1?'s':'')+' to check below') :
+      (S.sidecar.ready? 'Everything is running normally.' : 'Waiting for the signal engine…'));
+
+    // fix cards
+    var fx=$('fixes'); fx.innerHTML='';
+    var actionable=r.alerts.filter(function(a){return a.level==='warn'||a.level==='bad'||a.id==='sim';});
+    if(!actionable.length){
+      var okc=document.createElement('div'); okc.className='fix ok';
+      okc.innerHTML='<h3><span class="lvl-dot ok"></span>Nothing needs your attention</h3>'+
+        '<p class="plain">'+(D.BEAT_PLAIN[S.beat]||'The room is healthy and idle.')+'</p>';
+      fx.appendChild(okc);
+    } else actionable.forEach(function(a){
+      var c=document.createElement('div'); c.className='fix '+a.level;
+      var steps=a.fix.length? '<ol>'+a.fix.map(function(s){return '<li>'+esc(s)+'</li>';}).join('')+'</ol>':'';
+      c.innerHTML='<h3><span class="lvl-dot '+a.level+'"></span>'+esc(a.headline)+'</h3>'+
+        '<p class="plain">'+esc(a.plain)+'</p>'+steps;
+      fx.appendChild(c);
+    });
+
+    paintChips(); paintNums();
+  }
+  function paintChips(){
+    var eng = S.sidecar.running===false?['Stopped','bad'] : S.sidecar.ready?['Ready','ok'] : S.sidecar.running?['Starting','warn']:['—','mut'];
+    var buds = (function(){ var l=S.buds.left,rr=S.buds.right;
+      if(l==null&&rr==null) return ['Unknown','mut'];
+      if(l&&rr) return ['Both','ok']; if(!l&&!rr) return ['None','bad']; return [(l?'Left':'Right')+' only','warn']; })();
+    var bat = (function(){ var a=S.battery.leftPct,c=S.battery.rightPct; if(a==null&&c==null) return ['—','mut'];
+      var lo=Math.min(a==null?100:a,c==null?100:c); return [(a==null?'—':a+'%')+' / '+(c==null?'—':c+'%'), lo<20?'warn':'ok']; })();
+    var contact = S.impedance? (S.impedance.allGood?['Clean','ok']:['Not yet','warn']) : ['—','mut'];
+    var sq = S.signalQuality==null?['—','mut'] : S.signalQuality>=0.7?['Good','ok'] : S.signalQuality>=0.5?['Fair','warn']:['Poor','bad'];
+    var beat = [D.BEAT_PLAIN[S.beat]||'—','mut'];
+    var chips=[['Signal engine',eng],['Earbuds',buds],['Battery L/R',bat],['Contact',contact],['Signal quality',sq],['Room',beat]];
+    $('chips').innerHTML = chips.map(function(c){
+      return '<div class="chip"><div class="k">'+c[0]+'</div><div class="v '+c[1][1]+'">'+esc(c[1][0])+'</div></div>';
+    }).join('');
+  }
+  function paintNums(){
+    var nb=live.bands, nm=live.metrics, nf=live.frame;
+    var nums=[['δ delta',fx3(nb.delta)],['θ theta',fx3(nb.theta)],['α alpha',fx3(nb.alpha)],['β beta',fx3(nb.beta)],['γ gamma',fx3(nb.gamma)],
+      ['β/(α+θ)',fx3(nb.engIndex)],['engagement',fx3(nf.engagementRel)],['state',nf.stateWord||'—'],
+      ['focus',fx3(nm.focus)],['stress',fx3(nm.stress)],['drowsiness',fx3(nm.drowsiness)]];
+    $('nums').innerHTML = nums.map(function(n){return '<div class="num"><div class="k">'+n[0]+'</div><div class="v2">'+esc(String(n[1]))+'</div></div>';}).join('');
+  }
+  function fx3(x){ return (x==null||isNaN(x))?'—':Number(x).toFixed(3); }
+  function esc(s){ return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+
+  // ---- websocket (reconnects forever, jittered) ----
+  var ws=null, attempt=0, conn=false, bus={send:function(){}};
+  function connect(){
+    if(!location.host) return;
+    try{ ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'); }catch(e){ return schedule(); }
+    ws.onopen=function(){ attempt=0; conn=true; setLink(true); ws.send(JSON.stringify({type:'client/hello',role:'ops',t:Date.now()})); };
+    ws.onmessage=function(ev){ var m; try{m=JSON.parse(ev.data);}catch(e){return;}
+      // main mirrors EVERY sidecar message to us over ops/feed, so we rely on
+      // that (not the direct guest-surface broadcasts) to avoid double-counting.
+      if(m.type==='ops/feed'){ onFeed(m.channel,m.payload); }
+      else if(m.type==='session/state'){
+        if(m.beat)S.beat=m.beat; S.link=m.link||S.link;
+        // the streaming signal check has no impedance messages — its clean-read
+        // verdict rides canonical state, and the Contact chip should say so
+        // (never overrides a real impedance read from the hardware fit path)
+        if(typeof m.fitAllGood==='boolean' && (!S.impedance || S.impedance.streaming))
+          S.impedance={allGood:m.fitAllGood,streaming:true};
+      }
+    };
+    ws.onerror=function(){ try{ws.close();}catch(e){} };
+    ws.onclose=function(){ conn=false; setLink(false); schedule(); };
+    bus.send=function(o){ try{ ws.send(JSON.stringify(o)); }catch(e){} };
+  }
+  function schedule(){ var base=Math.min(8000,500*Math.pow(2,Math.min(attempt,4))); attempt++; setTimeout(connect, base+Math.random()*base*0.4); }
+  function setLink(on){ var b=$('linkBadge'); b.textContent=on?'live':'reconnecting'; b.className='badge '+(on?'link-on':'link-off'); }
+
+  // mode badge
+  function tickBadges(){ var mb=$('modeBadge'); if(S.mode==='sim'){mb.textContent='Simulation';mb.className='badge sim';}
+    else if(S.mode==='real'){mb.textContent='Real EEG';mb.className='badge real';} else {mb.textContent='—';mb.className='badge';} }
+
+  // controls → ops command over the same socket
+  document.querySelectorAll('button[data-cmd]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var payload = btn.dataset.kind? {kind:btn.dataset.kind}:{};
+      bus.send({type:'ops/cmd', cmd:btn.dataset.cmd, payload:payload, t:Date.now()});
+      pushLog('info','You: '+btn.textContent);
+    });
+  });
+
+  $('foot').textContent = 'Open this page from any device on the room network · '+location.host;
+  setInterval(function(){ render(); tickBadges(); }, 500);
+  render(); connect();
+})();
+</script>
+</body>
+</html>

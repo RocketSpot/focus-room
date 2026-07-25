@@ -1,0 +1,39 @@
+{
+  "name": "zone-focus-room",
+  "productName": "Zone Focus Room",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Focus Room — single-room visitor EEG experience. Electron brain + bundled Python (Zone SDK) sidecar.",
+  "author": "Zone",
+  "license": "UNLICENSED",
+  "main": "app/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "npm run build:ipad && electron . --dev --simulate",
+    "dev:real": "npm run build:ipad && electron . --dev",
+    "sidecar:dev": "venv/Scripts/python.exe sidecar/main.py --simulate --stdio",
+    "build:ipad": "node build/build-ipad.js",
+    "watch:ipad": "node build/build-ipad.js --watch",
+    "build:webroot": "node build/stage-webroot.js",
+    "build:sidecar:win": "powershell -ExecutionPolicy Bypass -File build/build-sidecar.ps1",
+    "prepare:win": "powershell -ExecutionPolicy Bypass -File build/prepare-wincodesign.ps1",
+    "build:win": "npm run build:ipad && npm run prepare:win && npm run build:webroot && electron-builder --win --x64",
+    "dist:win": "npm run build:sidecar:win && npm run build:win",
+    "sessions": "node tools/list-sessions.js",
+    "verify": "electron tools/verify/room.js",
+    "test": "node tests/honesty.test.js && node tests/session-save.test.js && node tests/orchestrator-watchdog.test.js && node tests/ui-cues.test.js && node tests/demo-autopilot.test.js && node tests/reads-numbers.test.js && node tests/link-resilience.test.js",
+    "web": "node app/web-main.js",
+    "web:build": "npm run build:ipad && node app/web-main.js",
+    "bridge": "node bridge/desktop-bridge.js"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "34.5.8",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.2"
+  }
+}

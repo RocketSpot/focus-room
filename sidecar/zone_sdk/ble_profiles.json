@@ -1,0 +1,454 @@
+{
+  "zone_eeg": {
+    "Earbud_1": {
+      "Serial_Number": "Earbud number 1",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000001",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000002",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000003",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000004",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000005",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000006"
+    },
+    "Earbud_2": {
+      "Serial_Number": "Earbud number 2",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000007",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000008",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000009",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-00000000000a",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-00000000000b",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-00000000000c"
+    },
+    "Earbud_3": {
+      "Serial_Number": "Earbud number 3",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-00000000000d",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-00000000000e",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-00000000000f",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000010",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000011",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000012"
+    },
+    "Earbud_4": {
+      "Serial_Number": "Earbud number 4",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000013",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000014",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000015",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000016",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000017",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000018"
+    },
+    "Earbud_5": {
+      "Serial_Number": "Earbud number 5",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000019",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-00000000001a",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-00000000001b",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-00000000001c",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-00000000001d",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-00000000001e"
+    },
+    "Earbud_6": {
+      "Serial_Number": "Earbud number 6",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-00000000001f",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000020",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000021",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000022",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000023",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000024"
+    },
+    "Earbud_7": {
+      "Serial_Number": "Earbud number 7",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000025",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000026",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000027",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000028",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000029",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-00000000002a"
+    },
+    "Earbud_8": {
+      "Serial_Number": "Earbud number 8",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-00000000002b",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-00000000002c",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-00000000002d",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-00000000002e",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-00000000002f",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000030"
+    },
+    "Earbud_9": {
+      "Serial_Number": "Earbud number 9",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000031",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000032",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000033",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000034",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000035",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000036"
+    },
+    "Earbud_10": {
+      "Serial_Number": "Earbud number 10",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000037",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000038",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000039",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-00000000003a",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-00000000003b",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-00000000003c"
+    },
+    "Earbud_11": {
+      "Serial_Number": "Earbud number 11",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-00000000003d",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-00000000003e",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-00000000003f",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000040",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000041",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000042"
+    },
+    "Earbud_12": {
+      "Serial_Number": "Earbud number 12",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000043",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000044",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000045",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000046",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000047",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000048"
+    },
+    "Earbud_13": {
+      "Serial_Number": "Earbud number 13",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000049",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-00000000004a",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-00000000004b",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-00000000004c",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-00000000004d",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-00000000004e"
+    },
+    "Earbud_14": {
+      "Serial_Number": "Earbud number 14",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-00000000004f",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000050",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000051",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000052",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000053",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000054"
+    },
+    "Earbud_15": {
+      "Serial_Number": "Earbud number 15",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000055",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000056",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000057",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000058",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000059",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-00000000005a"
+    },
+    "Earbud_16": {
+      "Serial_Number": "Earbud number 16",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-00000000005b",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-00000000005c",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-00000000005d",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-00000000005e",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-00000000005f",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000060"
+    },
+    "Earbud_17": {
+      "Serial_Number": "Earbud number 17",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000061",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000062",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000063",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000064",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000065",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000066"
+    },
+    "Earbud_18": {
+      "Serial_Number": "Earbud number 18",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000067",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000068",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000069",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-00000000006a",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-00000000006b",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-00000000006c"
+    },
+    "Earbud_19": {
+      "Serial_Number": "Earbud number 19",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-00000000006d",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-00000000006e",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-00000000006f",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000070",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000071",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000072"
+    },
+    "Earbud_20": {
+      "Serial_Number": "Earbud number 20",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000073",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000074",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000075",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000076",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000077",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000078"
+    },
+    "Earbud_21": {
+      "Serial_Number": "Earbud number 21",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000079",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-00000000007a",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-00000000007b",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-00000000007c",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-00000000007d",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-00000000007e"
+    },
+    "Earbud_22": {
+      "Serial_Number": "Earbud number 22",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-00000000007f",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000080",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000081",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000082",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000083",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000084"
+    },
+    "Earbud_23": {
+      "Serial_Number": "Earbud number 23",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000085",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000086",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000087",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000088",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000089",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-00000000008a"
+    },
+    "Earbud_24": {
+      "Serial_Number": "Earbud number 24",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-00000000008b",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-00000000008c",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-00000000008d",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-00000000008e",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-00000000008f",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000090"
+    },
+    "Earbud_25": {
+      "Serial_Number": "Earbud number 25",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000091",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000092",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000093",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000094",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000095",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000096"
+    },
+    "Earbud_26": {
+      "Serial_Number": "Earbud number 26",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000097",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000098",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000099",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-00000000009a",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-00000000009b",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-00000000009c"
+    },
+    "Earbud_27": {
+      "Serial_Number": "Earbud number 27",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-00000000009d",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-00000000009e",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-00000000009f",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000a0",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000a1",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000a2"
+    },
+    "Earbud_28": {
+      "Serial_Number": "Earbud number 28",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000a3",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000a4",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000a5",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000a6",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000a7",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000a8"
+    },
+    "Earbud_29": {
+      "Serial_Number": "Earbud number 29",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000a9",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000aa",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000ab",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000ac",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000ad",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000ae"
+    },
+    "Earbud_30": {
+      "Serial_Number": "Earbud number 30",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000af",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000b0",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000b1",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000b2",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000b3",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000b4"
+    },
+    "Earbud_31": {
+      "Serial_Number": "Earbud number 31",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000b5",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000b6",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000b7",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000b8",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000b9",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000ba"
+    },
+    "Earbud_32": {
+      "Serial_Number": "Earbud number 32",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000bb",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000bc",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000bd",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000be",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000bf",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000c0"
+    },
+    "Earbud_33": {
+      "Serial_Number": "Earbud number 33",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000c1",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000c2",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000c3",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000c4",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000c5",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000c6"
+    },
+    "Earbud_34": {
+      "Serial_Number": "Earbud number 34",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000c7",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000c8",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000c9",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000ca",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000cb",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000cc"
+    },
+    "Earbud_35": {
+      "Serial_Number": "Earbud number 35",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000cd",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000ce",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000cf",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000d0",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000d1",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000d2"
+    },
+    "Earbud_36": {
+      "Serial_Number": "Earbud number 36",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000d3",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000d4",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000d5",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000d6",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000d7",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000d8"
+    },
+    "Earbud_37": {
+      "Serial_Number": "Earbud number 37",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000d9",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000da",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000db",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000dc",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000dd",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000de"
+    },
+    "Earbud_38": {
+      "Serial_Number": "Earbud number 38",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000df",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000e0",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000e1",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000e2",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000e3",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000e4"
+    },
+    "Earbud_39": {
+      "Serial_Number": "Earbud number 39",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000e5",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000e6",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000e7",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000e8",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000e9",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000ea"
+    },
+    "Earbud_40": {
+      "Serial_Number": "Earbud number 40",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000eb",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000ec",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000ed",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000ee",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000ef",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000f0"
+    },
+    "Earbud_41": {
+      "Serial_Number": "Earbud number 41",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000f1",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000f2",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000f3",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000f4",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000f5",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000f6"
+    },
+    "Earbud_42": {
+      "Serial_Number": "Earbud number 42",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000f7",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000f8",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000f9",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-0000000000fa",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-0000000000fb",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-0000000000fc"
+    },
+    "Earbud_43": {
+      "Serial_Number": "Earbud number 43",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-0000000000fd",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-0000000000fe",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-0000000000ff",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000100",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000101",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000102"
+    },
+    "Earbud_44": {
+      "Serial_Number": "Earbud number 44",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000103",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000104",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000105",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000106",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000107",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000108"
+    },
+    "Earbud_45": {
+      "Serial_Number": "Earbud number 45",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000109",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-00000000010a",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-00000000010b",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-00000000010c",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-00000000010d",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-00000000010e"
+    },
+    "Earbud_46": {
+      "Serial_Number": "Earbud number 46",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-00000000010f",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000110",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000111",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000112",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000113",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000114"
+    },
+    "Earbud_47": {
+      "Serial_Number": "Earbud number 47",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000115",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000116",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000117",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000118",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000119",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-00000000011a"
+    },
+    "Earbud_48": {
+      "Serial_Number": "Earbud number 48",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-00000000011b",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-00000000011c",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-00000000011d",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-00000000011e",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-00000000011f",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000120"
+    },
+    "Earbud_49": {
+      "Serial_Number": "Earbud number 49",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000121",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000122",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000123",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-000000000124",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-000000000125",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-000000000126"
+    },
+    "Earbud_50": {
+      "Serial_Number": "Earbud number 50",
+      "Left_Service_UUID": "00000000-2fda-0000-0000-000000000127",
+      "Left_RX_UUID": "00000000-2fda-0000-0000-000000000128",
+      "Left_TX_UUID": "00000000-2fda-0000-0000-000000000129",
+      "Right_Service_UUID": "00000000-2fda-0000-0000-00000000012a",
+      "Right_RX_UUID": "00000000-2fda-0000-0000-00000000012b",
+      "Right_TX_UUID": "00000000-2fda-0000-0000-00000000012c"
+    }
+  }
+}

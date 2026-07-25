@@ -1,0 +1,36 @@
+# --- runtime / installed ---
+node_modules/
+venv/
+
+# --- build artifacts ---
+dist/
+ipad/dist/
+build/webroot/
+build/sidecar/
+build/_pyinstaller/
+*.spec.bak
+
+# --- python ---
+__pycache__/
+*.pyc
+
+# --- local config / secrets (Postmark key etc.) ---
+.env
+config.local.json
+data/*.db
+data/*.sqlite
+data/sessions/
+
+# --- runtime/test artifacts (generated takeaways + the live constellation) ---
+data/outputs/
+data/constellation.json
+
+# --- licensed font: keep PP Neue Montreal out of the repo (OFL fonts stay) ---
+assets/fonts/files/PPNeueMontreal-*.woff2
+
+# --- editor / os ---
+.DS_Store
+Thumbs.db
+_document_text.txt
+
+# --- design source PDFs already in uploads/ stay tracked; raw scratch does not ---

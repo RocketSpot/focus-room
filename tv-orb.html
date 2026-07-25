@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Focus Room — TV · Orb</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #000; overflow: hidden; font-family: var(--font-sans); }
+  #wrap { position: fixed; inset: 0; background: #060605; }
+  /* stacked video layers, crossfaded by the live signal */
+  /* contain, never cover: cover crops the sphere against the TV's aspect and the
+     orb loses its edge. Long crossfades so a state change reads as a slow bloom. */
+  .orb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0;
+    transition: opacity 2600ms var(--ease-in-out); pointer-events: none; will-change: opacity; }
+  .orb.base { opacity: 1; }
+  /* full aura around the orb — additive over the black field, tinted to the
+     active state video in apply() and repainted EVERY frame so it snaps with
+     the state the instant the orb changes; breathes with the signal */
+  .aura { position: absolute; left: 50%; top: 50%; width: 96vmin; height: 96vmin;
+    transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none;
+    mix-blend-mode: screen; filter: blur(26px); will-change: transform, opacity; }
+  /* specks: tiny motes of the aura drifting off the orb (canvas, screen-blended) */
+  #specks { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen; }
+  /* mist: a few slow wisps drifting past the rim — barely-there, screen-blended */
+  .mist { position: absolute; left: 50%; top: 50%; border-radius: 50%; pointer-events: none;
+    mix-blend-mode: screen; filter: blur(34px); will-change: transform, opacity; }
+  .mist.m1 { width: 44vmin; height: 34vmin; animation: drift1 37s ease-in-out infinite alternate; }
+  .mist.m2 { width: 52vmin; height: 38vmin; animation: drift2 53s ease-in-out infinite alternate; }
+  .mist.m3 { width: 38vmin; height: 30vmin; animation: drift3 29s ease-in-out infinite alternate; }
+  @keyframes drift1 { from { transform: translate(-88%, -76%) scale(1); opacity: 0.5; }
+    50% { opacity: 0.9; } to { transform: translate(-4%, -58%) scale(1.18); opacity: 0.4; } }
+  @keyframes drift2 { from { transform: translate(-14%, -22%) scale(1.1); opacity: 0.42; }
+    50% { opacity: 0.85; } to { transform: translate(-86%, -40%) scale(0.94); opacity: 0.5; }  }
+  @keyframes drift3 { from { transform: translate(-52%, -108%) scale(0.9); opacity: 0.38; }
+    50% { opacity: 0.8; } to { transform: translate(-46%, 4%) scale(1.12); opacity: 0.45; } }
+  /* vignette sinks the video edges into room-black — a shade deeper now that
+     the orb sits alone: the frame should feel like a dark room, not a screen */
+  .vig { position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 100% at 50% 50%, transparent 42%, rgba(6,6,5,0.62) 78%, #060605 100%); }
+
+  #controls { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 10px; z-index: 50;
+    background: rgba(20,20,20,0.82); border: 1px solid var(--hair-strong); backdrop-filter: blur(12px); border-radius: var(--r-pill);
+    padding: 8px 10px; font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); }
+  #controls.hide { opacity: 0; pointer-events: none; }
+  #controls button { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg);
+    background: transparent; border: 1px solid var(--hair-strong); border-radius: var(--r-pill); padding: 7px 13px; cursor: pointer; }
+</style>
+</head>
+<body>
+  <div id="wrap">
+    <!-- gold is the base; the others crossfade over it with the live signal -->
+    <video class="orb base" id="v_gold"     src="assets/orb/gold.mp4"      muted loop autoplay playsinline preload="auto"></video>
+    <video class="orb"      id="v_lockedin" src="assets/orb/locked-in.mp4" muted loop autoplay playsinline preload="auto"></video>
+    <video class="orb"      id="v_drifting" src="assets/orb/drifting.mp4"  muted loop autoplay playsinline preload="auto"></video>
+    <video class="orb"      id="v_depleted" src="assets/orb/depleted.mp4"  muted loop autoplay playsinline preload="auto"></video>
+    <video class="orb"      id="v_red"      src="assets/orb/red.mp4"       muted loop autoplay playsinline preload="auto"></video>
+    <div class="aura" id="aura"></div>
+    <div class="mist m1"></div>
+    <div class="mist m2"></div>
+    <div class="mist m3"></div>
+    <canvas id="specks"></canvas>
+    <div class="vig"></div>
+    <!-- no header, no pip, no caption: during the reading the screen must not
+         ask for the guest's eyes. The orb alone in the dark room — colour and
+         breath carry the state; the words belong to the reveal at the end. -->
+  </div>
+  <div id="controls" class="hide"><button id="btnHide">Hide</button></div>
+
+  <script>
+  (function () {
+    var SERVED = !!location.host && location.search.indexOf('preview') === -1;
+    var STATIC = location.search.indexOf('static') !== -1;   // test harness: no synthetic drift
+    var V = { gold: document.getElementById('v_gold'), lockedin: document.getElementById('v_lockedin'),
+      drifting: document.getElementById('v_drifting'), depleted: document.getElementById('v_depleted'), red: document.getElementById('v_red') };
+    var aura = document.getElementById('aura'), auraFrame = 0;
+    var mists = document.querySelectorAll('.mist');
+    var glowR = 221, glowG = 202, glowB = 142; // live aura tint (gold until data)
+
+    // smoke: soft wisps of the aura's colour curling off the orb — not dots.
+    // Each wisp is a blurred radial blob that rises from the rim, swells and
+    // wavers sideways as it fades; drawn additively so it reads as lit vapour.
+    var scv = document.getElementById('specks'), sctx = scv.getContext('2d');
+    var wisps = [], emitAcc = 0;
+    function resizeSpecks() { scv.width = window.innerWidth; scv.height = window.innerHeight; }
+    window.addEventListener('resize', resizeSpecks); resizeSpecks();
+    function spawnWisp() {
+      var W = scv.width, H = scv.height, R = Math.min(W, H) * 0.17; // ≈ the orb's rim
+      // bias toward the upper half — smoke rises off the top of the orb
+      var ang = Math.random() < 0.75
+        ? -Math.PI * (0.12 + Math.random() * 0.76)          // upper arc
+        : Math.random() * Math.PI * 2;                      // occasional stray anywhere
+      var rr = R * (0.9 + Math.random() * 0.15);
+      wisps.push({
+        x: W / 2 + Math.cos(ang) * rr, y: H / 2 + Math.sin(ang) * rr,
+        vx: Math.cos(ang) * (2 + Math.random() * 4),
+        vy: -(6 + Math.random() * 8),                       // a slow, steady rise
+        r0: R * (0.10 + Math.random() * 0.10),              // starts small, swells ~3x
+        ph: Math.random() * 6.283, wf: 0.5 + Math.random() * 0.7, // sideways waver
+        wa: 8 + Math.random() * 14,
+        life: 0, max: 6 + Math.random() * 6
+      });
+    }
+    function specksTick(dt) {
+      var W = scv.width, H = scv.height;
+      // a wisp every second or so; a touch more when engaged or during red
+      emitAcc += dt * (0.9 + 0.6 * eng + (nowMs < redUntil ? 1.6 : 0));
+      while (emitAcc >= 1) { emitAcc -= 1; if (wisps.length < 26) spawnWisp(); }
+      sctx.clearRect(0, 0, W, H);
+      sctx.globalCompositeOperation = 'lighter';
+      var c = Math.round(glowR) + ',' + Math.round(glowG) + ',' + Math.round(glowB);
+      for (var i = wisps.length - 1; i >= 0; i--) {
+        var p = wisps[i];
+        p.life += dt;
+        if (p.life >= p.max) { wisps.splice(i, 1); continue; }
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        p.vx *= (1 - 0.25 * dt); // outward push relaxes; the rise remains
+        var u = p.life / p.max;
+        var px = p.x + Math.sin(p.ph + p.life * p.wf) * p.wa * u; // waver grows as it climbs
+        var rad = p.r0 * (1 + 2.1 * u);                          // the puff swells as it thins
+        var al = (u < 0.2 ? u / 0.2 : 1 - (u - 0.2) / 0.8) * 0.09;
+        var grad = sctx.createRadialGradient(px, p.y, 0, px, p.y, rad);
+        grad.addColorStop(0, 'rgba(' + c + ',' + al.toFixed(3) + ')');
+        grad.addColorStop(0.55, 'rgba(' + c + ',' + (al * 0.45).toFixed(3) + ')');
+        grad.addColorStop(1, 'rgba(' + c + ',0)');
+        sctx.fillStyle = grad;
+        sctx.beginPath(); sctx.arc(px, p.y, rad, 0, 6.2832); sctx.fill();
+      }
+      sctx.globalCompositeOperation = 'source-over';
+    }
+    Object.keys(V).forEach(function (k) { var p = V[k].play(); if (p && p.catch) p.catch(function () {}); });
+
+    // reactive state: crossfade the state videos over the gold base with the live
+    // signal. Engagement (relative) picks locked-in ↔ drifting ↔ depleted; an
+    // interruption flashes red. All driven by measured signal — no numbers shown.
+    var eng = 0.4, engT = 0.4, engHist = [];
+    var redUntil = 0, nowMs = 0, haveData = !SERVED;
+    // committed orb state + the dwell gate that keeps it from flickering
+    var state = 'drifting', pendingState = null, pendingSince = 0;
+    var MIN_DWELL = 14000;   // a claim must hold this long before the orb turns
+    function relEng(v) { if (v == null || !isFinite(v)) return null; engHist.push(v); if (engHist.length > 90) engHist.shift();
+      var lo = Infinity, hi = -Infinity; for (var i = 0; i < engHist.length; i++) { if (engHist[i] < lo) lo = engHist[i]; if (engHist[i] > hi) hi = engHist[i]; }
+      return (hi - lo) > 1e-9 ? (v - lo) / (hi - lo) : 0.5; }
+    function sstep(a, b, x) { x = Math.max(0, Math.min(1, (x - a) / (b - a))); return x * x * (3 - 2 * x); }
+
+    function apply() {
+      // Very slow signal smoothing (~4s), so the orb never twitches with the EEG.
+      eng += (engT - eng) * 0.004;
+      var red = nowMs < redUntil ? Math.min(1, (redUntil - nowMs) / 3000) : 0;   // fade the red out over ~3s
+
+      // The orb settles into a STATE and stays there. A state must win a wide
+      // hysteresis band AND hold its claim for MIN_DWELL before the orb commits,
+      // so the guest sees a slow bloom every half-minute or so — not a surface
+      // reacting to every breath. (Continuous crossfade lives in CSS: 2.6s.)
+      if (haveData) {
+        var want = state;
+        if (state === 'lockedin')      { if (eng < 0.50) want = (eng < 0.24) ? 'depleted' : 'drifting'; }
+        else if (state === 'drifting') { if (eng > 0.68) want = 'lockedin'; else if (eng < 0.20) want = 'depleted'; }
+        else if (state === 'depleted') { if (eng > 0.36) want = (eng > 0.68) ? 'lockedin' : 'drifting'; }
+        else                           { want = eng > 0.62 ? 'lockedin' : (eng < 0.26 ? 'depleted' : 'drifting'); }
+        if (want !== state) {
+          if (want !== pendingState) { pendingState = want; pendingSince = nowMs; }
+          else if (nowMs - pendingSince >= MIN_DWELL) { state = want; pendingState = null; }
+        } else { pendingState = null; }
+      }
+      var lockedin = (haveData && state === 'lockedin') ? 1 : 0;
+      var drifting = (haveData && state === 'drifting') ? 1 : 0;
+      var depleted = (haveData && state === 'depleted') ? 1 : 0;
+      // red takes over when it fires
+      var k = 1 - red;
+      V.lockedin.style.opacity = (lockedin * k).toFixed(3);
+      V.drifting.style.opacity = (drifting * k).toFixed(3);
+      V.depleted.style.opacity = (depleted * k).toFixed(3);
+      V.red.style.opacity = red.toFixed(3);
+
+      // aura + mist + smoke share one tint mixed from the same state weights as
+      // the video crossfade — repainted EVERY frame so the halo snaps with the
+      // orb the instant its state moves (red flashes the same frame it fires).
+      // TINTS are MEASURED from the state videos themselves (bright-pixel
+      // average, hue preserved, lifted to glow brightness) so every fade
+      // matches the orb exactly: gold=warm sand, locked-in=teal-blue,
+      // drifting=mauve, depleted=grey-lavender (kept dimmer), red=ember.
+      var wL = lockedin * k, wD = drifting * k, wDep = depleted * k, wR = red;
+      var wG = Math.max(0, 1 - (wL + wD + wDep + wR));
+      var sum = wG + wL + wD + wDep + wR;
+      glowR = (wG * 220 + wL * 104 + wD * 220 + wDep * 158 + wR * 230) / sum;
+      glowG = (wG * 202 + wL * 187 + wD * 165 + wDep * 159 + wR * 147) / sum;
+      glowB = (wG * 161 + wL * 220 + wD * 208 + wDep * 170 + wR * 114) / sum;
+      var a = 0.40 + 0.22 * eng + 0.25 * red;
+      var c = Math.round(glowR) + ',' + Math.round(glowG) + ',' + Math.round(glowB);
+      var breathe = 1 + 0.045 * Math.sin(nowMs * 0.0004) + 0.06 * eng;
+      aura.style.transform = 'translate(-50%,-50%) scale(' + breathe.toFixed(3) + ')';
+      aura.style.background = 'radial-gradient(closest-side, rgba(' + c + ',' + a.toFixed(2) + ') 0%, rgba(' + c + ',' + (a * 0.32).toFixed(2) + ') 52%, rgba(' + c + ',0) 74%)';
+      auraFrame++;
+      if (auraFrame % 8 === 0) { // the mist tint can lag a little; no need to repaint its blur at 60fps
+        for (var mi = 0; mi < mists.length; mi++) {
+          mists[mi].style.background = 'radial-gradient(closest-side, rgba(' + c + ',0.11) 0%, rgba(' + c + ',0.04) 55%, rgba(' + c + ',0) 72%)';
+        }
+      }
+    }
+
+    function connect() {
+      if (!location.host) return;
+      var ws; try { ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'); } catch (e) { return; }
+      ws.onopen = function () { ws.send(JSON.stringify({ type: 'client/hello', role: 'tv', t: Date.now() })); connect._n = 0; };
+      ws.onmessage = function (ev) { var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (m.type === 'eeg/frame') { var r = relEng(m.engagementRel); if (r != null) { engT = r; haveData = true; } }
+        else if (m.type === 'interruption/fire') { redUntil = nowMs + 5000; }   // notification → red orb
+        else if (m.type === 'session/state' && (m.beat === 'idle' || m.beat === 'welcome')) { engHist = []; haveData = false; engT = 0.4; redUntil = 0; }
+      };
+      ws.onerror = function () { try { ws.close(); } catch (e) {} };
+      // Reconnect forever, with capped jittered backoff. A fixed retry tick meant
+      // every surface in the room hammered a flapping access point in lockstep;
+      // the jitter spreads them out. This never gives up and never shows an error:
+      // a Wi-Fi drop is a pause, not a failure.
+      ws.onclose = function () {
+        connect._n = (connect._n || 0) + 1;
+        var b = Math.min(8000, 500 * Math.pow(2, Math.min(connect._n, 4)));
+        setTimeout(connect, b + Math.random() * b * 0.4);
+      };
+    }
+
+    var start = performance.now(), lastT = 0;
+    function tick(t) { nowMs = t;
+      var dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 0.016; lastT = t;
+      // preview drifts engagement through the states + an occasional interruption;
+      // ?static suppresses it so a harness can feed exact values (same flag as
+      // room-audio.html).
+      if (!SERVED && !STATIC) {
+        var s = (t - start) / 1000; engT = 0.5 + 0.42 * Math.sin(s * 0.22);
+        if (Math.floor(s) % 18 === 0 && (s % 1) < 0.05) redUntil = nowMs + 5000;
+      }
+      apply(); specksTick(dt); requestAnimationFrame(tick);
+    }
+    apply(); requestAnimationFrame(tick);   // synchronous first paint
+    connect();
+    // debug hook (harmless in production): lets a harness drive the signal and
+    // read the committed state without a WebSocket.
+    window.__orb = {
+      info: function () { return { state: state, pending: pendingState, eng: +eng.toFixed(3), engT: +engT.toFixed(3), haveData: haveData }; },
+      set: function (v) { engT = v; haveData = true; },
+      snap: function (v) { engT = eng = v; haveData = true; }   // skip the slow ramp
+    };
+    document.getElementById('btnHide').onclick = function () { document.getElementById('controls').classList.add('hide'); };
+    document.addEventListener('keydown', function (e) { if (e.key === 'c') document.getElementById('controls').classList.toggle('hide'); });
+  })();
+  </script>
+</body>
+</html>
