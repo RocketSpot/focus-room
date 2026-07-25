@@ -57,6 +57,14 @@ RATE_MISMATCH_TOL = 0.15                  # |ingest−expected|/expected above t
 GAP_TOLERANCE_SAMPLES = 8                 # inferred-missing below this is ignored as jitter
 # hysteresis (item 7): consecutive assessments a condition must hold before it acts
 SWITCH_HOLD = 3                           # ~1 s at the 0.33 s hop
+# eligibility (Phase 2A.2 correction 1): a session is (provisionally) reveal-eligible only
+# once analysis-eligibility has held across ENOUGH of the recording — both a minimum number
+# of assessments and a minimum clean fraction of them. PROVISIONAL — the orchestrator makes
+# the FINAL reveal decision (it knows the event pre/post window + any staff override). This
+# layer reports only the signal-derived truth. revealEligible is deliberately a HIGHER bar
+# than analysisEligible: the instant analysis first passes, the reveal is not yet eligible.
+REVEAL_COVERAGE_MIN = 0.8
+REVEAL_MIN_ASSESSMENTS = 10               # ~a few seconds of sustained eligibility (at the 0.33 s hop)
 
 CONFIG_SCHEMA_VERSION = 1
 RAW_SCHEMA_VERSION = 1
@@ -185,6 +193,46 @@ class EegStream:
         self._clear_since = None
         self._config_sent = False
         self._last_quality_emit = 0.0
+        # eligibility coverage history (correction 1): recent analysis-eligible verdicts,
+        # so 'reveal-eligible' can require sustained usable data, not one clean window.
+        self._analysis_hist = deque(maxlen=64)
+        # local validation recorder (correction / section 4): OFF unless FOCUSROOM_VALIDATION=1.
+        # Records raw ADC-count batches + config + quality + metadata + staff annotations to
+        # LOCAL engineering files only. Never uploads; never changes production retention.
+        self._recorder = None
+        try:
+            from validation_recorder import enabled as _valid_enabled, ValidationRecorder
+            if _valid_enabled():
+                self._recorder = ValidationRecorder("sim" if self.simulation else "real", self.simulation, log)
+        except Exception as e:  # a recorder problem must never break streaming
+            self.log(f"validation recorder unavailable: {e}")
+            self._recorder = None
+
+    # emit a message to the transport AND (when enabled) the local validation recorder.
+    def _emit(self, msg):
+        self.tx.send_raw(msg)
+        if self._recorder:
+            try:
+                self._recorder.record(msg)
+            except Exception as e:
+                self.log(f"validation record error: {e}")
+
+    # staff event annotation for the validation capture (blink/swallow/L-out/… — NOT a classifier).
+    def annotate(self, kind, t=None, note=None):
+        if self._recorder:
+            try:
+                self._recorder.annotate(kind, t, note)
+            except Exception as e:
+                self.log(f"validation annotate error: {e}")
+
+    # close the validation capture cleanly (stop_session / disconnect / shutdown).
+    def close(self, reason="stop"):
+        if self._recorder:
+            try:
+                self._recorder.close(reason)
+            except Exception as e:
+                self.log(f"validation close error: {e}")
+            self._recorder = None
 
     # ---- config (emit once per stream) ----
     def emit_config(self, labels, sdk_rate=None):
@@ -192,7 +240,7 @@ class EegStream:
             return
         self._config_sent = True
         self._sdk_rate = sdk_rate
-        self.tx.send_raw({
+        self._emit({
             "type": "eeg/config-v1", "schemaVersion": CONFIG_SCHEMA_VERSION,
             "physicalElectrodeCount": 8, "physicalElectrodesPerEar": 4,
             "sensingElectrodesPerEar": 2, "referenceElectrodesPerEar": 2,
@@ -270,13 +318,13 @@ class EegStream:
         samples = [[round(v, 1) for v in by_label.get(lab, [])] if present[lab] else None
                    for lab in ["Left-A", "Left-B", "Right-A", "Right-B"]]
 
-        self.tx.send_raw({
+        self._emit({
             "type": "eeg/raw-v1", "schemaVersion": RAW_SCHEMA_VERSION,
             "sequenceNumber": self.seq, "firstSampleIndex": first_index,
             "lastSampleIndex": last_index, "sampleCount": n,
             "expectedHardwareSampleRateHz": self.expected_rate,
             "sdkReportedSampleRateHz": self._sdk_rate,
-            "ingestThroughputSamplesPerSecond": round(self._throughput(), 1),
+            "ingestThroughputSamplesPerSecond": (round(self._throughput(), 1) or None),
             "sourceTimestamp": None,             # no per-sample device time exists
             "monotonicReceiveTimestamp": round(now_monotonic - self._t0, 6),
             "channelLabels": ["Left-A", "Left-B", "Right-A", "Right-B"],
@@ -296,13 +344,17 @@ class EegStream:
 
         if (now_monotonic - self._last_quality_emit) >= QUALITY_HOP_SEC:
             self._last_quality_emit = now_monotonic
-            self.tx.send_raw(self._quality_message(present, now_monotonic))
+            self._emit(self._quality_message(present, now_monotonic))
 
     # ---- throughput / cadence ----
     def _throughput(self):
-        if self._t0 is None:
+        if self._t0 is None or self._last_recv is None:
             return 0.0
-        el = max(1e-6, (self._last_recv or self._t0) - self._t0)
+        el = (self._last_recv or self._t0) - self._t0
+        # a sub-0.1 s window is not a measurable throughput — reporting total/tiny gives a
+        # nonsense rate (millions/s on the first emit). Omit it until the window is real.
+        if el < 0.1:
+            return 0.0
         return self.total_samples / el
 
     def _cadence_and_throughput_rate(self):
@@ -350,6 +402,96 @@ class EegStream:
         self._selected[ear] = cand
         return cand, switched
 
+    # ---- eligibility state machine (correction 1) ----------------------------
+    # SEPARATES "packets are arriving" from "the signal can be analysed". Receiving
+    # raw callbacks alone is NOT sufficient for the room to advance automatically:
+    #   transportReady  — callbacks arriving + samples ingested (no sustained stall)
+    #   displayEligible — >=1 channel present, so the consumer scope can draw honestly
+    #   analysisEligible — one grossly-usable channel on EACH ear (not flatline, not
+    #                      clipping), delivery sufficiently continuous, recent usable
+    #                      fraction over the provisional minimum
+    #   revealEligible  — analysis-eligible for a sufficient fraction of the recording
+    #                     (signal-derived only; the orchestrator adds the event pre/post
+    #                     coverage + staff-override gate before any guest claim)
+    # All thresholds PROVISIONAL. staffOverride is applied by the app layer, not here.
+    @staticmethod
+    def _gross_fail(ch):
+        # the two gross failures the spec calls out explicitly for analysis eligibility
+        return ch is None or not ch.get("present") or ch.get("flatline") or ch.get("clipping")
+
+    def _eligibility(self, chans, left, right, rate_mismatch):
+        left_ch = chans.get(left) if left else None
+        right_ch = chans.get(right) if right else None
+        # a selected channel is "usable" only if present, quality-eligible, and free of
+        # a gross failure (flatline / clipping). _select already only returns an
+        # eligible channel or None, but re-check here so the rule stands on its own.
+        left_usable = bool(left is not None and left_ch and left_ch.get("eligible")
+                           and not self._gross_fail(left_ch))
+        right_usable = bool(right is not None and right_ch and right_ch.get("eligible")
+                            and not self._gross_fail(right_ch))
+
+        transport_ready = bool(self.callback_count > 0 and self.total_samples > 0)
+        display_eligible = any(chans[l].get("present") for l in chans)
+        continuity_ok = not rate_mismatch                      # provisional delivery gate
+        analysis_eligible = bool(left_usable and right_usable and continuity_ok)
+
+        self._analysis_hist.append(analysis_eligible)
+        n_assess = len(self._analysis_hist)
+        coverage = (sum(1 for a in self._analysis_hist if a) / n_assess) if n_assess else 0.0
+        reveal_eligible = bool(analysis_eligible
+                               and n_assess >= REVEAL_MIN_ASSESSMENTS
+                               and coverage >= REVEAL_COVERAGE_MIN)
+
+        filling = any("filling" in (chans[l].get("reasons") or [])
+                      for l in chans if chans[l].get("present"))
+
+        reasons = []
+        if not transport_ready:
+            reasons.append("no_transport")
+        elif filling and not analysis_eligible:
+            reasons.append("filling_first_window")
+        if transport_ready and not left_usable:
+            reasons.append("left_ear_not_usable")
+        if transport_ready and not right_usable:
+            reasons.append("right_ear_not_usable")
+        if transport_ready and not continuity_ok:
+            reasons.append("delivery_discontinuous")
+        if analysis_eligible and not reveal_eligible:
+            if n_assess < REVEAL_MIN_ASSESSMENTS:
+                reasons.append("insufficient_recording_for_reveal(%d/%d)" % (n_assess, REVEAL_MIN_ASSESSMENTS))
+            elif coverage < REVEAL_COVERAGE_MIN:
+                reasons.append("insufficient_usable_coverage_for_reveal(%.2f)" % coverage)
+
+        if not transport_ready:
+            estatus = "checking"
+        elif analysis_eligible:
+            estatus = "provisional-pass"
+        elif filling:
+            estatus = "checking"
+        elif left_usable or right_usable:
+            estatus = "limited"
+        else:
+            estatus = "failed"
+
+        return {
+            "transportReady": transport_ready,
+            "displayEligible": display_eligible,
+            "analysisEligible": analysis_eligible,
+            "revealEligible": reveal_eligible,
+            "eligibilityStatus": estatus,
+            "qualityThresholdStatus": "provisional",
+            "staffOverride": False,          # signal layer; the app overlays a real override
+            "reasons": reasons,
+            "ears": {
+                "left": {"selected": left, "usable": left_usable},
+                "right": {"selected": right, "usable": right_usable},
+            },
+            "usableCoverageFraction": round(coverage, 3),
+            "note": ("Signal-derived eligibility. Thresholds PROVISIONAL (unvalidated on "
+                     "real Zone recordings). Staff override + event pre/post coverage are "
+                     "applied by the app layer, not here."),
+        }
+
     def _quality_message(self, present, now_monotonic):
         chans = {lab: self._q[lab].assess(present[lab])
                  for lab in ["Left-A", "Left-B", "Right-A", "Right-B"]}
@@ -393,13 +535,16 @@ class EegStream:
             frac = (sum(1 for c in up if c) / len(up)) if up else 0.0
             return "high" if frac > 0.85 else "medium" if frac > 0.6 else "low"
 
+        eligibility = self._eligibility(chans, left, right, rate_mismatch)
+
         return {
             "type": "eeg/quality-v1", "schemaVersion": QUALITY_SCHEMA_VERSION,
             "qualityThresholdStatus": "provisional", "clearStateEnabled": self.clear_state_enabled,
+            "eligibility": eligibility,
             "connectionQuality": {
                 "callbackCadenceHz": round(self._cadence_hz, 2) if self._cadence_hz else None,
                 "meanSamplesPerCallback": round(self._mean_batch, 1) if self._mean_batch else None,
-                "ingestThroughputSamplesPerSecond": round(thr, 1),
+                "ingestThroughputSamplesPerSecond": (round(thr, 1) or None),
                 "throughputMeasurementWindowSeconds": round((self._last_recv - self._t0), 1) if self._t0 else 0,
                 "expectedHardwareSampleRateHz": self.expected_rate,
                 "sdkReportedSampleRateHz": self._sdk_rate,

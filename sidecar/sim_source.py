@@ -135,6 +135,8 @@ class SimSource:
 
     async def stop_session(self):
         self._running = False
+        if self._eeg_stream is not None:
+            self._eeg_stream.close("stop_session")   # flush + close any validation capture
         self._eeg_stream = None
         await self._cancel(self._task)
         self._task = None
@@ -143,6 +145,9 @@ class SimSource:
             self.tx.send(OUT.ARCHETYPE, **self.engine.compute_archetype())
 
     def mark(self, kind, t):
+        # in validation mode, a mark is also a staff event annotation on the raw capture.
+        if self._eeg_stream is not None:
+            self._eeg_stream.annotate(kind, t)
         # The orchestrator's interruption fire lands here; deepen the dip now.
         if kind == "interruption" and self._interrupt_at is None and self._t_start is not None:
             self._interrupt_at = time.monotonic() - self._t_start

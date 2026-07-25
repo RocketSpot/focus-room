@@ -589,6 +589,8 @@ class ZoneSource:
 
     async def stop_session(self):
         self._session_active = False
+        if self._eeg_stream is not None:
+            self._eeg_stream.close("stop_session")   # flush + close any validation capture
         self._eeg_stream = None   # ignore any raw callbacks that arrive after stop
         if self._streaming:
             try:
@@ -604,6 +606,10 @@ class ZoneSource:
         # The interruption is a real pull; the dip is whatever the brain does.
         # We only record the alignment — the engine detects the real dip.
         self.log(f"mark {kind} @ {t}")
+        # in validation mode, a mark is also a staff event annotation on the raw capture
+        # (blink / swallow / L-out / disconnect / …). NOT a classifier.
+        if self._eeg_stream is not None:
+            self._eeg_stream.annotate(kind, t)
 
     def test_signal(self):
         res = self.sdk.send_test_signal()
