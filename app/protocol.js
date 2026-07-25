@@ -75,6 +75,8 @@ const GUEST_EVENT = Object.freeze({
   STRONGEST_STRETCH_GUESS: 'strongest_stretch_guess',
   // the guest tapped through the reveal's end on the iPad
   REVEAL_ACK: 'reveal_ack',
+  // Phase 2A: the iPad reports the notification card's actual rendered-frame time
+  NOTIFICATION_SHOWN: 'notification_shown',
   EMAIL_ENTERED: 'email_entered',
   CLOSE_CHOICE: 'close_choice',
 });
@@ -104,6 +106,10 @@ const SIDECAR_OUT = Object.freeze({
   DIP: 'session/dip',           // a real (non-artifact) dip confirmed
   ARCHETYPE: 'session/archetype', // computed features + label at session end
   SESSION_SAMPLES: 'session/samples', // the recorded relative sample array for replay/outputs
+  // Phase 2A — raw per-channel EEG (ADC counts) + honest quality, versioned.
+  EEG_CONFIG: 'eeg/config-v1',   // channel labels, sample-rate expectation, calibration status
+  EEG_RAW: 'eeg/raw-v1',         // batched ADC-count samples per channel + continuity
+  EEG_QUALITY: 'eeg/quality-v1', // per-channel quality + consumer selection + overall status
 });
 
 // ---- localhost TCP: main -> sidecar (commands) ---------------------------

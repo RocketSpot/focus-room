@@ -31,7 +31,11 @@ class StdoutTransport:
     """Selftest transport — writes NDJSON frames to stdout, no command channel."""
     def send(self, type_: str, **payload):
         payload.setdefault("t", int(time.time() * 1000))
-        sys.stdout.write(json.dumps({"type": type_, **payload}, separators=(",", ":")) + "\n")
+        self.send_raw({"type": type_, **payload})
+
+    def send_raw(self, msg):
+        msg.setdefault("t", int(time.time() * 1000))
+        sys.stdout.write(json.dumps(msg, separators=(",", ":")) + "\n")
         sys.stdout.flush()
 
 

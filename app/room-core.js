@@ -43,6 +43,8 @@ const SURFACE_FORWARD = new Set([
   SIDECAR_OUT.CONNECTION,
   SIDECAR_OUT.BATTERY,
   SIDECAR_OUT.IMPEDANCE,
+  // NOTE: EEG_CONFIG / EEG_RAW / EEG_QUALITY are intentionally NOT here — they are
+  // routed to the TV role only (item 11), handled explicitly in wireSidecar.
 ]);
 
 // hooks (all optional):
@@ -86,6 +88,10 @@ function createRoom(hooks = {}) {
   // console sat on "Waiting for the signal engine…" with dash chips in the
   // middle of a live session.
   const opsLast = new Map();   // msg.type → last raw sidecar message
+  // Phase 2A: a TV loading tv-signal after the fit stream started would miss the
+  // one-shot config (channel labels) and the latest quality — cache + replay them.
+  let lastEegConfig = null;
+  let lastEegQuality = null;
 
   function wireSidecar() {
     // Demo autopilot is OPT-IN (FOCUSROOM_DEMO=1, sim only): by default the room
@@ -110,8 +116,19 @@ function createRoom(hooks = {}) {
       pushDiag('sidecar:message', msg);
       // The orchestrator maps frames onto the EEG timeline + reacts to plateau/archetype.
       orchestrator.onSidecar(msg);
-      // Guest-relevant frames go to the surfaces verbatim.
-      if (SURFACE_FORWARD.has(msg.type)) server.broadcast(msg.type, msg);
+      // Phase 2A.1 raw-EEG routing (item 11): the raw per-channel stream is large
+      // and only the signal-check TV surface (and the engineering view it hosts)
+      // needs it — it is NOT sent to the iPad, reveal, audio, email, or analytics.
+      // Config + quality are small and TV-relevant, so they ride the TV role too.
+      // Everything else keeps the broadcast-to-all behavior.
+      if (msg.type === SIDECAR_OUT.EEG_RAW
+        || msg.type === SIDECAR_OUT.EEG_CONFIG || msg.type === SIDECAR_OUT.EEG_QUALITY) {
+        server.broadcast(msg.type, msg, 'tv');
+        if (msg.type === SIDECAR_OUT.EEG_CONFIG) lastEegConfig = msg;
+        else if (msg.type === SIDECAR_OUT.EEG_QUALITY) lastEegQuality = msg;
+      } else if (SURFACE_FORWARD.has(msg.type)) {
+        server.broadcast(msg.type, msg);
+      }
       // remember the slow-moving facts a late ops console needs on arrival
       if (msg.type === SIDECAR_OUT.BATTERY || msg.type === SIDECAR_OUT.CONNECTION
         || msg.type === SIDECAR_OUT.IMPEDANCE || msg.type === SIDECAR_OUT.READY
@@ -151,6 +168,10 @@ function createRoom(hooks = {}) {
       };
       // hand a freshly-loaded TV the whole constellation (+ a dot to land if pending)
       if (info.role === 'tv') {
+        // a TV that just loaded the signal-check surface mid-stream missed the
+        // one-shot EEG config (channel labels) and latest quality — replay them.
+        if (lastEegConfig && server.sendTo) server.sendTo(info.id, lastEegConfig.type, lastEegConfig);
+        if (lastEegQuality && server.sendTo) server.sendTo(info.id, lastEegQuality.type, lastEegQuality);
         sendOr(SERVER.CONSTELLATION_DATA,
           { dots: store.list(), count: store.count(), joinId: pendingJoin ? pendingJoin.id : null }, 'tv');
         // a TV that just (re)loaded into the reveal missed the one-time reveal/data

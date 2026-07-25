@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 
 from protocol import OUT
+from eeg_stream import EegStream
 
 SAFE_BATTERY_PCT = 25          # refuse to start below this so a session never dies mid-read
 IMPEDANCE_OK_STATES = {"low_z", "pair_ok"}
@@ -100,6 +101,12 @@ class ZoneSource:
         self.sdk.on_stats(self._on_stats)
         self.sdk.on_connection_status(self._on_connection)
         self.sdk.on_impedance(self._on_impedance)
+        # Phase 2A: raw per-channel EEG. The SDK already decodes + emits ADC counts
+        # here every chunk; before 2A nothing subscribed, so raw never left the SDK.
+        self.sdk.on_raw_data(self._on_raw)
+        self._eeg_stream = None       # per-session raw transport + quality (eeg_stream.py)
+        self._left_up = False         # last-known link state, for single-bud raw labelling
+        self._right_up = False
 
     def _catalogue_path(self):
         """Which UUID catalogue ships to the SDK. Engineering delivered three
@@ -418,6 +425,11 @@ class ZoneSource:
         self._flush_stale_buffers("session start")   # drop the fit check's lead-off tone
         self._session_active = True
         self._metrics_since_stream = 0
+        # Fresh raw transport + quality per session (continuity/quality reset).
+        st = self.sdk.get_buds_status()
+        self._left_up = bool(st.get("left_connected"))
+        self._right_up = bool(st.get("right_connected"))
+        self._eeg_stream = EegStream(self.tx, self.log, simulation=False, expected_rate_hz=250)
         ok = await self.sdk.start_streaming()
         self._streaming = bool(ok)
         self.engine.set_signal_quality(0.9)
@@ -577,6 +589,7 @@ class ZoneSource:
 
     async def stop_session(self):
         self._session_active = False
+        self._eeg_stream = None   # ignore any raw callbacks that arrive after stop
         if self._streaming:
             try:
                 await self.sdk.stop_streaming()
@@ -623,6 +636,32 @@ class ZoneSource:
                 elif ev == "dip":
                     self.tx.send(OUT.DIP, tRel=frame["tRel"])
 
+    def _on_raw(self, raw):
+        """Phase 2A: forward raw per-channel ADC counts through EegStream (batched
+        transport + honest quality). raw.channels is 4 lists when both buds are up,
+        2 when a single bud streams. Labels are PROVISIONAL (see hardware doc); we
+        never subtract, re-reference, or average channels here."""
+        stream = self._eeg_stream
+        if stream is None:
+            return
+        chans = raw.channels
+        if not chans or not isinstance(chans[0], list):
+            return
+        n = len(chans)
+        if n >= 4:
+            labels, cols = ["Left-A", "Left-B", "Right-A", "Right-B"], chans[:4]
+        elif n == 2:
+            if self._right_up and not self._left_up:
+                labels, cols = ["Right-A", "Right-B"], chans
+            else:                              # left, or ambiguous → provisional left
+                labels, cols = ["Left-A", "Left-B"], chans
+        else:
+            return
+        try:
+            stream.ingest(cols, labels, sdk_rate=getattr(raw, "sample_rate", None))
+        except Exception as e:
+            self.log(f"eeg_stream ingest error: {e}")
+
     def _on_brainwaves(self, b):
         denom = (b.alpha + b.theta)
         eng_index = (b.beta / denom) if denom else 0.0
@@ -652,6 +691,9 @@ class ZoneSource:
         # float set, read on the main loop in engine.feed() — safe without a lock.
         self.engine.set_signal_quality(q)
         d1, d2 = s.get("dev1") or {}, s.get("dev2") or {}
+        # keep link-side state current for single-bud raw labelling
+        self._left_up = bool(d1.get("connected"))
+        self._right_up = bool(d2.get("connected"))
         # carry last-known battery so eeg/connection matches the sim shape
         self.tx.send(OUT.CONNECTION,
                      leftConnected=bool(d1.get("connected")),

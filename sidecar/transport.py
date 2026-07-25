@@ -54,8 +54,15 @@ class Transport:
         if self._sock is None or self._closed.is_set():
             return
         payload.setdefault("t", int(time.time() * 1000))
-        line = json.dumps({"type": type_, **payload}, separators=(",", ":")) + "\n"
-        data = line.encode("utf-8")
+        self.send_raw({"type": type_, **payload})
+
+    def send_raw(self, msg: dict) -> None:
+        """Send a pre-built message dict verbatim (already carries its own ``type``).
+        Used by the Phase 2A raw/quality path whose payloads are nested objects."""
+        if self._sock is None or self._closed.is_set():
+            return
+        msg.setdefault("t", int(time.time() * 1000))
+        data = (json.dumps(msg, separators=(",", ":")) + "\n").encode("utf-8")
         with self._send_lock:
             try:
                 self._sock.sendall(data)

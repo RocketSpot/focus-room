@@ -16,6 +16,7 @@ import time
 from datetime import datetime
 
 from protocol import OUT
+from eeg_stream import EegStream
 
 
 class SimSource:
@@ -33,6 +34,15 @@ class SimSource:
         self._rng = random.Random(7)
         # scenario knob for the edge-case runs: normal | flat | dropout
         self._scenario = os.environ.get("FOCUSROOM_SIM_SCENARIO", "normal").lower()
+        # Phase 2A: a LABELLED synthetic raw stream so the live-EEG pipeline can be
+        # exercised without hardware. It is a deterministic sum of sines at real
+        # ADC-count scale — NEVER passed off as real: every payload carries
+        # simulation:true and the screen shows a persistent SIMULATED badge.
+        self._eeg_stream = None
+        self._raw_i = 0
+
+    RAW_FS = 250.0
+    RAW_BATCH = 50            # 0.2 s of samples per emit → matches the 0.2 s loop
 
     # ---------------- pre-session fit check ----------------
     async def start_fit(self):
@@ -78,11 +88,54 @@ class SimSource:
         self._t_start = time.monotonic()
         self._interrupt_at = None
         self.engine.set_signal_quality(0.97)
+        self._eeg_stream = EegStream(self.tx, self.log, simulation=True, expected_rate_hz=int(self.RAW_FS))
+        self._raw_i = 0
         self._task = asyncio.create_task(self._session_loop())
         self.log("sim session started")
 
+    def _synth_raw_batch(self, n):
+        """Deterministic synthetic EEG-like batch: a sum of sines (10 Hz alpha,
+        20 Hz beta, 6 Hz theta, 2 Hz slow) at ADC-count scale, per channel with a
+        small phase/amplitude offset so the four traces differ. NOT random noise,
+        NOT passed off as real (simulation:true everywhere)."""
+        cols = [[], [], [], []]
+        for _ in range(n):
+            t = self._raw_i / self.RAW_FS
+            env = 1.0 + 0.15 * math.sin(2 * math.pi * 0.1 * t)   # slow breathing envelope
+            for c in range(4):
+                ph = c * 0.55
+                amp = 1.0 - 0.07 * c
+                v = amp * env * (
+                    820 * math.sin(2 * math.pi * 10.0 * t + ph)
+                    + 300 * math.sin(2 * math.pi * 20.0 * t + 0.7 + ph)
+                    + 250 * math.sin(2 * math.pi * 6.0 * t + 1.3 + ph)
+                    + 200 * math.sin(2 * math.pi * 2.0 * t + ph)
+                )
+                cols[c].append(v)
+            self._raw_i += 1
+        return cols
+
+    def _emit_synth_raw(self, te):
+        """Feed the synthetic batch through the SAME EegStream the real path uses.
+        The dropout scenario injects a genuine gap then a right-ear flatline so the
+        gap and partial-quality states are exercised honestly (never hidden)."""
+        if self._eeg_stream is None:
+            return
+        labels = ["Left-A", "Left-B", "Right-A", "Right-B"]
+        if self._scenario == "dropout" and 22.0 <= te < 26.0:
+            # a real packet gap — advance the sample phase but emit NOTHING, so the
+            # display shows a gap and continuity reports missing samples
+            self._raw_i += self.RAW_BATCH
+            return
+        cols = self._synth_raw_batch(self.RAW_BATCH)
+        if self._scenario == "dropout" and 26.0 <= te < 32.0:
+            cols[2] = [10.0] * self.RAW_BATCH    # Right-A flatline (dead contact)
+            cols[3] = [12.0] * self.RAW_BATCH    # Right-B flatline
+        self._eeg_stream.ingest(cols, labels, sdk_rate=int(self.RAW_FS))
+
     async def stop_session(self):
         self._running = False
+        self._eeg_stream = None
         await self._cancel(self._task)
         self._task = None
         if self.engine.samples:
@@ -145,6 +198,10 @@ class SimSource:
                 # signal-trouble scenario: a degraded window mid-read
                 dropout = self._scenario == "dropout" and 22.0 <= te <= 32.0
                 self.engine.set_signal_quality(0.35 if dropout else 0.97)
+
+                # Phase 2A: labelled synthetic raw EEG (250 Hz, batched) — the live
+                # signal-check screen renders THIS, not the ~1 Hz band lines.
+                self._emit_synth_raw(te)
 
                 frame = self.engine.feed(e, now_ms)
                 if frame is not None:

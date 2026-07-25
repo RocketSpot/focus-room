@@ -25,6 +25,11 @@ class OUT:
     DIP = "session/dip"
     ARCHETYPE = "session/archetype"
     SESSION_SAMPLES = "session/samples"
+    # Phase 2A — raw per-channel EEG transport + honest quality (versioned; see
+    # sidecar/eeg_stream.py). These carry ADC counts and continuity/quality, never µV.
+    EEG_CONFIG = "eeg/config-v1"
+    EEG_RAW = "eeg/raw-v1"
+    EEG_QUALITY = "eeg/quality-v1"
 
 
 class IN:
