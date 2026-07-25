@@ -424,7 +424,19 @@
     function connectLive() {
       if (!location.host) { setWord('Waiting for signal'); return; }
       var ws; try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'); } catch (e) { return; }
-      ws.onopen = function () { ws.send(JSON.stringify({ type: 'client/hello', role: 'tv', t: Date.now() })); connectLive._n = 0; };
+      ws.onopen = function () {
+        // Authenticated hello (finding #5): present the eeg-raw capability + the launcher-issued
+        // token so the SERVER can authorize raw delivery. The token comes only from the launcher
+        // preload (a function, never a readable string) and travels only inside this WS frame —
+        // never a URL, storage, or console. A plain browser has no preload → no token → no raw.
+        var hello = { type: 'client/hello', role: 'tv', t: Date.now() };
+        try {
+          var tk = (window.__FOCUSROOM__ && typeof window.__FOCUSROOM__.rawStreamToken === 'function')
+            ? window.__FOCUSROOM__.rawStreamToken() : '';
+          if (tk) { hello.capabilities = ['eeg-raw']; hello.rawStreamToken = tk; }
+        } catch (e) { /* no launcher → unauthenticated hello (no raw) */ }
+        ws.send(JSON.stringify(hello)); connectLive._n = 0;
+      };
       ws.onmessage = function (ev) {
         var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
         if (m.type === 'eeg/config-v1') {

@@ -11,7 +11,14 @@
 const { app, BrowserWindow, screen, globalShortcut, ipcMain, shell, Menu } = require('electron');
 const path = require('path');
 const config = require('./config');
+const crypto = require('crypto');
 const { createRoom } = require('./room-core');
+
+// EPHEMERAL raw-EEG capability token (finding #5): 256-bit cryptographically-random, generated
+// ONCE per launcher process and rotated every restart. NOT the staff token, NOT in source, config,
+// URL, storage, logs, or capture files. Handed to the server (to verify) and, via the preload's
+// private additionalArguments channel, to the authorized TV renderer (to present in its hello).
+const rawStreamToken = crypto.randomBytes(32).toString('hex');
 const { SIDECAR_IN } = require('./protocol');
 
 // Single instance only — one room, one brain.
@@ -60,6 +67,10 @@ const room = createRoom({
   },
 });
 const { supervisor, server, orchestrator } = room;
+// Configure server-side raw-EEG authorization: verify the launcher token, and in packaged
+// production ALSO require a loopback socket. Fail-closed — without this token no socket is
+// ever authorized for raw. (Headless web-main.js does not configure a token → raw stays closed.)
+server.configureRawAuth({ token: rawStreamToken, requireLoopback: config.isPackaged });
 
 // ---------------- TV surface switching ----------------
 function tvUrlFor(surface) {
@@ -75,13 +86,17 @@ function tvUrlFor(surface) {
   return `http://127.0.0.1:${config.net.LAN_PORT}/${file}${q}`;
 }
 
-// Per-window staff config handed to the preload via additionalArguments (base64 JSON, so
-// arg parsing is robust). Item 1: the PIN/credential is LOCALLY CONFIGURED (FOCUSROOM_STAFF_TOKEN),
-// never a hardcoded default — empty here disables PIN unlock entirely. Item 2: uiEnabled is
-// false in production guest builds, so ?staff=1 / ?dev=1 cannot activate staff mode there.
-function staffConfigArg() {
-  const cfg = { uiEnabled: !!config.isDev, pin: process.env.FOCUSROOM_STAFF_TOKEN || '' };
-  return '--focusroom-staff=' + Buffer.from(JSON.stringify(cfg)).toString('base64');
+// Per-window config handed to the preload via additionalArguments (base64 JSON, a private
+// process channel — not a URL/query param). Carries the staff config (item 1/2: uiEnabled is
+// false in production guest builds; the PIN is FOCUSROOM_STAFF_TOKEN, empty ⇒ disabled) AND the
+// per-launch raw-EEG capability token (finding #5). The preload exposes the raw token only via a
+// FUNCTION (not a globally readable string), used to build the authenticated WS hello.
+function windowConfigArg() {
+  const cfg = {
+    staff: { uiEnabled: !!config.isDev, pin: process.env.FOCUSROOM_STAFF_TOKEN || '' },
+    rawStreamToken: rawStreamToken,
+  };
+  return '--focusroom-cfg=' + Buffer.from(JSON.stringify(cfg)).toString('base64');
 }
 function navigateTv(surface) {
   if (!surface || surface === tvSurface) return;
@@ -108,7 +123,7 @@ function createTvWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      additionalArguments: [staffConfigArg()],   // build-gated staff/engineering access config
+      additionalArguments: [windowConfigArg()],   // build-gated staff config + raw-EEG capability token
     },
   });
   // Load the served TV surface for the current beat (idle → constellation). The

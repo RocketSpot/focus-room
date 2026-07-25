@@ -12,9 +12,14 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
+const { performance: perf } = require('perf_hooks');
 const { EventEmitter } = require('events');
 const { WebSocketServer } = require('ws');
 const config = require('./config');
+
+// Loopback forms accepted for the raw-EEG capability in packaged mode (item 3).
+const LOOPBACK_ADDRS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const { CLIENT } = require('./protocol');
 
 const MIME = {
@@ -50,9 +55,19 @@ class SurfaceServer extends EventEmitter {
     super();
     this.http = null;
     this.wss = null;
-    this.clients = new Set(); // each ws gets ws.role + ws.id
+    this.clients = new Set(); // each ws gets ws.role + ws.id + ws.authorization
     this._nextId = 1;
     this._heartbeat = null;
+    // Raw-EEG capability authorization (finding #5). Off until the launcher configures
+    // a per-launch token. FAIL-CLOSED: with no token, no socket can ever be authorized.
+    this._rawAuth = { token: null, requireLoopback: false };
+    this._rawFailWindow = new Map(); // remoteAddr → { count, first } — rate-limit failed attempts
+  }
+
+  // The launcher calls this once at startup with an EPHEMERAL, per-launch capability token
+  // (256-bit, distinct from the staff token). requireLoopback is true in packaged production.
+  configureRawAuth({ token, requireLoopback } = {}) {
+    this._rawAuth = { token: (typeof token === 'string' && token) ? token : null, requireLoopback: !!requireLoopback };
   }
 
   start() {
@@ -147,14 +162,25 @@ class SurfaceServer extends EventEmitter {
     ws.id = this._nextId++;
     ws.role = 'unknown';
     ws.isAlive = true;
+    ws.remoteAddress = (req && req.socket && req.socket.remoteAddress) || '';
+    // SERVER-OWNED authorization — the ONLY thing raw routing consults. A socket starts
+    // unauthenticated and can gain raw-EEG access exactly once (its first hello). A later
+    // message can never upgrade it, and a client-declared role never grants raw access.
+    ws.authorization = { authenticated: false, role: 'unknown', rawEeg: false, source: null, authenticatedAtMonotonicMs: null };
+    ws._helloSeen = false;
     this.clients.add(ws);
 
     ws.on('message', (buf) => {
       let msg;
       try { msg = JSON.parse(buf.toString()); } catch (_) { return; }
       if (msg.type === CLIENT.HELLO) {
+        const firstHello = !ws._helloSeen;
+        ws._helloSeen = true;
         ws.role = String(msg.role || 'unknown');
-        this.emit('client-hello', { id: ws.id, role: ws.role, clientTime: msg.clientTime });
+        // Raw-EEG authorization is decided ONCE, on the first hello, server-side. A second
+        // hello can update the display role but can NEVER promote an unauthenticated socket.
+        if (firstHello) this._authorizeRaw(ws, msg);
+        this.emit('client-hello', { id: ws.id, role: ws.role, rawEeg: ws.authorization.rawEeg, clientTime: msg.clientTime });
         return;
       }
       if (msg.type === CLIENT.PING) {
@@ -192,6 +218,76 @@ class SurfaceServer extends EventEmitter {
       if (role && ws.role !== role) continue;
       try { ws.send(frame); } catch (_) {}
     }
+  }
+
+  // ---- raw-EEG capability authorization (finding #5) ----
+  // Evaluate a socket's request for the raw-EEG capability at hello time. Grants ONLY when a
+  // valid launcher token is presented AND (in packaged mode) the socket is loopback. Fails
+  // closed on every other path. Never trusts the client-declared role. Never echoes the token.
+  _authorizeRaw(ws, msg) {
+    const wants = Array.isArray(msg.capabilities) && msg.capabilities.indexOf('eeg-raw') >= 0;
+    if (!wants) return;                                  // socket didn't ask for raw → stays unauthorized
+    const supplied = typeof msg.rawStreamToken === 'string' ? msg.rawStreamToken : '';
+    if (this._rawTokenMatches(supplied) && this._loopbackOk(ws.remoteAddress)) {
+      ws.authorization = {
+        authenticated: true, role: ws.role, rawEeg: true, source: 'launcher-token',
+        authenticatedAtMonotonicMs: +perf.now().toFixed(1),
+      };
+    } else {
+      this._rawAuthFailure(ws);                          // minimal event + rate-limit; no token, no reason
+    }
+  }
+
+  // Constant-time token comparison over fixed-length digests (no length leak, never throws).
+  // Fails closed when the server has no token configured or the client supplied none.
+  _rawTokenMatches(supplied) {
+    const expected = this._rawAuth && this._rawAuth.token;
+    if (!expected || !supplied) return false;
+    const a = crypto.createHash('sha256').update(String(supplied)).digest();
+    const b = crypto.createHash('sha256').update(String(expected)).digest();
+    return crypto.timingSafeEqual(a, b);
+  }
+
+  _loopbackOk(addr) {
+    if (!this._rawAuth.requireLoopback) return true;     // dev: token alone (dev is loopback anyway)
+    return LOOPBACK_ADDRS.has(String(addr || ''));
+  }
+
+  // Minimal local security event on a failed raw-auth attempt — NEVER the supplied token,
+  // NEVER a raw sample, NEVER which requirement failed. Rate-limited; closes after repeats.
+  _rawAuthFailure(ws) {
+    const key = ws.remoteAddress || 'unknown';
+    const now = Date.now();
+    let w = this._rawFailWindow.get(key);
+    if (!w || now - w.first > 60000) { w = { count: 0, first: now }; this._rawFailWindow.set(key, w); }
+    w.count += 1;
+    if (this._rawFailWindow.size > 1000) this._rawFailWindow.clear();   // bound memory
+    this.emit('raw-auth-failure', {
+      remoteCategory: LOOPBACK_ADDRS.has(String(ws.remoteAddress || '')) ? 'loopback' : 'remote',
+      count: w.count, t: now,
+    });
+    if (w.count >= 5) { try { ws.close(1008, 'unauthorized'); } catch (_) {} }   // policy violation
+  }
+
+  // Broadcast a raw-EEG-gated message ONLY to sockets the SERVER authorized (never by role).
+  broadcastRaw(type, payload = {}) {
+    const frame = JSON.stringify({ type, ...payload, t: payload.t ?? Date.now() });
+    for (const ws of this.clients) {
+      if (ws.readyState !== ws.OPEN) continue;
+      if (!ws.authorization || ws.authorization.rawEeg !== true) continue;   // server-owned flag ONLY
+      try { ws.send(frame); } catch (_) {}
+    }
+  }
+
+  // Raw-gated single-client send (late-TV replay of config/quality). No auth → no send.
+  sendRawTo(id, type, payload = {}) {
+    for (const ws of this.clients) {
+      if (ws.id !== id) continue;
+      if (!ws.authorization || ws.authorization.rawEeg !== true) return false;
+      if (ws.readyState !== ws.OPEN) return false;
+      try { ws.send(JSON.stringify({ type, ...payload, t: payload.t ?? Date.now() })); return true; } catch (_) { return false; }
+    }
+    return false;
   }
 
   // Send to ONE client by id (the id handed out in client-hello). Replays and

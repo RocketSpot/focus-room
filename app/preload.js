@@ -8,21 +8,32 @@
 // ============================================================
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Pre-merge hardening: the launcher hands each window a build-gated staff/engineering config
-// via additionalArguments (base64 JSON). uiEnabled is false in production guest builds; pin is a
-// locally configured credential (FOCUSROOM_STAFF_TOKEN), empty ⇒ PIN unlock disabled. A page with
-// no launcher (a plain browser hitting the LAN surface) gets the locked default {uiEnabled:false}.
-function staffConfig() {
+// The launcher hands each window a build-gated config via additionalArguments (base64 JSON, a
+// private process channel). staff.uiEnabled is false in production guest builds; staff.pin is a
+// locally configured credential (FOCUSROOM_STAFF_TOKEN), empty ⇒ PIN unlock disabled. rawStreamToken
+// is the per-launch raw-EEG capability token (finding #5). A page with no launcher (a plain browser
+// hitting the LAN surface) gets the locked default: no staff UI and no raw token.
+function windowConfig() {
   try {
-    const arg = (process.argv || []).find((a) => a.indexOf('--focusroom-staff=') === 0);
-    if (!arg) return { uiEnabled: false, pin: '' };
-    const c = JSON.parse(Buffer.from(arg.slice('--focusroom-staff='.length), 'base64').toString('utf8'));
-    return { uiEnabled: c.uiEnabled === true, pin: typeof c.pin === 'string' ? c.pin : '' };
+    const arg = (process.argv || []).find((a) => a.indexOf('--focusroom-cfg=') === 0);
+    if (!arg) return { staff: { uiEnabled: false, pin: '' }, rawStreamToken: '' };
+    const c = JSON.parse(Buffer.from(arg.slice('--focusroom-cfg='.length), 'base64').toString('utf8'));
+    const s = c.staff || {};
+    return {
+      staff: { uiEnabled: s.uiEnabled === true, pin: typeof s.pin === 'string' ? s.pin : '' },
+      rawStreamToken: typeof c.rawStreamToken === 'string' ? c.rawStreamToken : '',
+    };
   } catch (e) {
-    return { uiEnabled: false, pin: '' };
+    return { staff: { uiEnabled: false, pin: '' }, rawStreamToken: '' };
   }
 }
-contextBridge.exposeInMainWorld('__FOCUSROOM__', { staff: staffConfig() });
+const _cfg = windowConfig();
+contextBridge.exposeInMainWorld('__FOCUSROOM__', {
+  staff: _cfg.staff,
+  // Exposed as a FUNCTION, never a globally readable string: the authorized TV page calls it to
+  // build its authenticated WS hello. A non-launcher page has no preload, so this is absent.
+  rawStreamToken: function () { return _cfg.rawStreamToken || ''; },
+});
 
 const IN_CHANNELS = new Set([
   'sidecar:message',

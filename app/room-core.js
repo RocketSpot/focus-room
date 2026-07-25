@@ -112,18 +112,20 @@ function createRoom(hooks = {}) {
     });
 
     supervisor.on('message', (msg) => {
-      // Everything goes to the diagnostic view (the honest mirror).
-      pushDiag('sidecar:message', msg);
+      const isRaw = msg.type === SIDECAR_OUT.EEG_RAW
+        || msg.type === SIDECAR_OUT.EEG_CONFIG || msg.type === SIDECAR_OUT.EEG_QUALITY;
+      // Everything goes to the diagnostic view (the honest mirror) — EXCEPT the raw-EEG
+      // message types (finding #5): the ops/feed fanout goes to the self-declared 'ops'
+      // role, which is NOT raw-authorized, so raw ADC/channel/quality data must never ride it.
+      if (!isRaw) pushDiag('sidecar:message', msg);
       // The orchestrator maps frames onto the EEG timeline + reacts to plateau/archetype.
       orchestrator.onSidecar(msg);
-      // Phase 2A.1 raw-EEG routing (item 11): the raw per-channel stream is large
-      // and only the signal-check TV surface (and the engineering view it hosts)
-      // needs it — it is NOT sent to the iPad, reveal, audio, email, or analytics.
-      // Config + quality are small and TV-relevant, so they ride the TV role too.
-      // Everything else keeps the broadcast-to-all behavior.
-      if (msg.type === SIDECAR_OUT.EEG_RAW
-        || msg.type === SIDECAR_OUT.EEG_CONFIG || msg.type === SIDECAR_OUT.EEG_QUALITY) {
-        server.broadcast(msg.type, msg, 'tv');
+      // Phase 2A.1 raw-EEG routing (item 11) + finding #5: the raw per-channel stream (and its
+      // config/quality) is delivered ONLY to sockets the server AUTHENTICATED for the eeg-raw
+      // capability (launcher token + loopback in packaged mode) — never by the client-declared
+      // 'tv' role. It is NOT sent to the iPad, reveal, audio, ops, email, or analytics.
+      if (isRaw) {
+        server.broadcastRaw(msg.type, msg);
         if (msg.type === SIDECAR_OUT.EEG_CONFIG) lastEegConfig = msg;
         else if (msg.type === SIDECAR_OUT.EEG_QUALITY) lastEegQuality = msg;
       } else if (SURFACE_FORWARD.has(msg.type)) {
@@ -168,10 +170,14 @@ function createRoom(hooks = {}) {
       };
       // hand a freshly-loaded TV the whole constellation (+ a dot to land if pending)
       if (info.role === 'tv') {
-        // a TV that just loaded the signal-check surface mid-stream missed the
-        // one-shot EEG config (channel labels) and latest quality — replay them.
-        if (lastEegConfig && server.sendTo) server.sendTo(info.id, lastEegConfig.type, lastEegConfig);
-        if (lastEegQuality && server.sendTo) server.sendTo(info.id, lastEegQuality.type, lastEegQuality);
+        // a TV that just loaded the signal-check surface mid-stream missed the one-shot EEG
+        // config (channel labels) and latest quality — replay them, but ONLY to a socket the
+        // server AUTHENTICATED for raw (finding #5): a spoofed 'tv' hello with no launcher token
+        // is not raw-authorized (info.rawEeg false) and must not receive even the config/quality.
+        if (info.rawEeg && server.sendRawTo) {
+          if (lastEegConfig) server.sendRawTo(info.id, lastEegConfig.type, lastEegConfig);
+          if (lastEegQuality) server.sendRawTo(info.id, lastEegQuality.type, lastEegQuality);
+        }
         sendOr(SERVER.CONSTELLATION_DATA,
           { dots: store.list(), count: store.count(), joinId: pendingJoin ? pendingJoin.id : null }, 'tv');
         // a TV that just (re)loaded into the reveal missed the one-time reveal/data
