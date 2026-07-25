@@ -43,6 +43,32 @@ function buildData(reveal, answers, dateStr) {
   const door = DOORS[(answers && answers.closeDoor)] || DOORS.investor;
   const region = reveal && reveal.region ? reveal.region : 'your reading';
   const r = (i, fallback) => (reads[i] ? (reads[i].ledger ? reads[i].ledger.did : reads[i].sentence) : fallback);
+  // Phase 2A.2 correction 1: a staff/demonstration override marks the session invalid
+  // for EEG interpretation — the takeaway must not present any EEG-derived claim and
+  // must not read as "measured". "Signal ran light" would be a false claim about the
+  // signal (a demo can have a fine signal, just overridden), so it gets its own copy.
+  const demo = !!(reveal && reveal.dataQualityStatus === 'invalid-for-eeg-interpretation');
+  if (demo) {
+    return {
+      arch: arch.label, name: arch.name, date: dateStr,
+      samples: [], troughT: null,
+      caption: [
+        'This was a demonstration session.',
+        'No brain-signal reading was recorded or claimed.',
+        'Nothing here is measured or estimated.',
+      ].map((line, i) => honest(line, `card.cap${i + 1}`)),
+      desc: honest('A demonstration session — no EEG reading was claimed.', 'profile.desc'),
+      heroCaption: honest('A demonstration walk-through. No focus signal was measured.', 'email.caption'),
+      read_1: honest('This session ran in demonstration mode.', 'email.read1'),
+      read_2: honest('No brain-signal reading was recorded.', 'email.read2'),
+      read_3: honest('No notification response was measured.', 'email.read3'),
+      read_3_said: honest('', 'email.read3said'),
+      read_4: honest('Nothing here is measured or estimated.', 'email.read4'),
+      next_step: honest(door.next, 'email.next'),
+      cta_label: honest(door.cta, 'email.cta') + ' →',
+      cta_url: process.env.FOCUSROOM_CTA_URL || 'https://wear.zone/roadmap',
+    };
+  }
 
   // The card quotes the SAME measured figures the wall showed. It used to carry
   // only mood words ("a slow burn, then long steady stretches"), so a guest

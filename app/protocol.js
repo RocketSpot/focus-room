@@ -58,6 +58,11 @@ const CLIENT = Object.freeze({
   GUEST_INTAKE: 'guest/intake',
   // { type: <one of the GUEST_EVENT sub-types below>, payload, t }
   GUEST_EVENT: 'guest/event',
+  // Phase 2A.2 correction 2: the room-audio host (role 'audio') reports its interruption
+  // DUCK marker back — { kind:'ducked', payload:{scheduledAudioContextTime, requestMonotonicMs,
+  // estimatedStartMonotonicMs, clockDomain:'room-audio-browser'} }. Instrumentation only; the
+  // audio host never drives the FSM (room-core routes this to orchestrator.onRoomAudioEvent).
+  AUDIO_EVENT: 'audio/event',
   PING: 'ping',
 });
 

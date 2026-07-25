@@ -224,6 +224,14 @@ function createRoom(hooks = {}) {
           // only fires during the reading.
           const fired = orchestrator.forceInterruption();
           pushDiag('orch:log', fired ? 'ops → fired the interruption' : 'ops → interruption ignored (only valid while the guest is reading)');
+        } else if (cmd === 'staff_override') {
+          // Phase 2A.2 correction 1: explicit, staff-only demonstration override. Lets
+          // the room be walked through without valid EEG; the session is marked invalid
+          // for EEG interpretation (no EEG-derived guest claims) and shows a visible
+          // staff-mode indicator on every surface. Toggled from the operator console.
+          const on = !!(msg.payload && msg.payload.on);
+          const state = orchestrator.setStaffOverride(on, (msg.payload || {}).reason || 'ops console');
+          pushDiag('orch:log', `ops → staff override ${state ? 'ENABLED (session invalid-for-eeg-interpretation)' : 'cleared'}`);
         } else if (cmd === SIDECAR_IN.TEST_SIGNAL) {
           // The test signal injects a synthetic waveform THROUGH the real pipeline.
           // Fired mid-session it would blend fabricated samples into the guest's
@@ -241,6 +249,13 @@ function createRoom(hooks = {}) {
         } else {
           pushDiag('orch:log', `ops → refused command "${cmd}"`);
         }
+        return;
+      }
+      // Phase 2A.2 correction 2: the room-audio host reports its interruption DUCK
+      // marker (scheduled Web-Audio clock time). It is NOT a guest and must never drive
+      // the FSM — route only this one event to the timing instrumentation, then stop.
+      if (role === 'audio') {
+        if (msg && msg.type === 'audio/event' && msg.kind === 'ducked') orchestrator.onRoomAudioEvent(msg);
         return;
       }
       pushDiag('surface:client', { role, msg });

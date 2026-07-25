@@ -166,12 +166,20 @@
         else if (m.type === S.IMPEDANCE) setFitAllGood(!!m.allGood); // real-hardware fit path
         else if (m.type === S.INTERRUPT) {
           setInterruption({ onMind: m.onMind, t: m.t });
-          // Phase 2A event timing: report the ACTUAL rendered-frame time of the
-          // notification card back to the orchestrator (double-rAF ≈ committed
-          // paint), so event alignment stops relying only on the JS fire call.
+          // Phase 2A.2 correction 2: report the VISUAL marker back — the card's actual
+          // committed-paint time (double-rAF), with the iPad's OWN monotonic clock
+          // (performance.now, ipad-browser domain) alongside the master-clock wall time.
+          // This is the visual half of the multimodal event; the audio-duck marker is
+          // reported separately by room-audio. No sample-accurate claim is made.
+          var reqMono = (typeof performance !== 'undefined' ? performance.now() : null);
           requestAnimationFrame(function () { requestAnimationFrame(function () {
+            var renderedMono = (typeof performance !== 'undefined' ? performance.now() : null);
             bus.send({ type: C.EVENT, kind: 'notification_shown',
-              payload: { shownAt: masterNow(), fireT: m.t }, t: masterNow() });
+              payload: { shownAt: masterNow(), fireT: m.t,
+                requestMonotonicMs: reqMono != null ? +reqMono.toFixed(3) : null,
+                renderedMonotonicMs: renderedMono != null ? +renderedMono.toFixed(3) : null,
+                clockDomain: 'ipad-browser' },
+              t: masterNow() });
           }); });
         }
         else if (m.type === S.ARCHETYPE && m.label) setAnswers((a) => ({ ...a, archetype: m.label }));

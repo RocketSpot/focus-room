@@ -70,6 +70,7 @@
   var duckUntil = 0;
   var lastFrameAt = -1e9, nowMs = 0, running = false;
   var lastRevealIndex = 0;
+  var sock = null;                              // live WS, so the duck marker can report back
 
   // ---- scene levels per beat (menu lobby vs session bed) ---------------------
   var MENU_LVL = { idle: 0.32, welcome: 0.46, intake: 0.44, picker: 0.44,
@@ -395,10 +396,32 @@
   // fourth, struck (fast attack, short decay) with a slightly inharmonic upper
   // partial so it reads as a device, not as the room's music. The bed ducks
   // underneath so the ding cuts through the way a real notification does.
+  // Phase 2A.2 correction 2: report the audio-duck marker back to the orchestrator —
+  // the duck's scheduled Web-Audio clock time + a monotonic estimate of audible onset,
+  // in THIS page's (room-audio browser) clock domain. Kept separate from the iPad visual
+  // marker; never presented as a sample-accurate onset. Silent in the standalone preview.
+  function reportAudioDuck(schedT) {
+    if (!SERVED || !ctx || !sock || sock.readyState !== 1) return;
+    var mono = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    var lat = (ctx.baseLatency || 0) + (ctx.outputLatency || 0);     // seconds, if the browser exposes them
+    try {
+      sock.send(JSON.stringify({ type: 'audio/event', kind: 'ducked', role: 'audio', t: Date.now(),
+        payload: {
+          requestMonotonicMs: +mono.toFixed(3),
+          scheduledAudioContextTime: +schedT.toFixed(6),
+          estimatedStartMonotonicMs: +(mono + lat * 1000).toFixed(3),
+          baseLatency: ctx.baseLatency != null ? ctx.baseLatency : null,
+          outputLatency: ctx.outputLatency != null ? ctx.outputLatency : null,
+          clockDomain: 'room-audio-browser',
+        } }));
+    } catch (e) { /* reporting is best-effort; never let it affect the sound */ }
+  }
+
   function fireInterruption() {
     duckUntil = nowMs + 1900;
     if (!ctx) return;
     var t = ctx.currentTime;
+    reportAudioDuck(t);       // the duck begins now (this audio-clock time) — report it back
     function ding(freq, at, peak) {
       var o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
       var p = ctx.createOscillator(); p.type = 'sine'; p.frequency.value = freq * 2.74; // bell-ish partial
@@ -462,7 +485,7 @@
     // trigger the room's TV re-sends (tv-reveal re-ran its draw-in on the real
     // wall) and let the audio host satisfy any "is a TV connected" check. All
     // the messages this page consumes are broadcast role-free.
-    ws.onopen = function () { ws.send(JSON.stringify({ type: 'client/hello', role: 'audio', t: Date.now() })); connect._n = 0; };
+    ws.onopen = function () { sock = ws; ws.send(JSON.stringify({ type: 'client/hello', role: 'audio', t: Date.now() })); connect._n = 0; };
     ws.onmessage = function (ev) { var m; try { m = JSON.parse(ev.data); } catch (e) { return; } onMsg(m); };
     ws.onerror = function () { try { ws.close(); } catch (e) {} };
     // Reconnect forever, with capped jittered backoff. A fixed retry tick meant
@@ -470,6 +493,7 @@
     // the jitter spreads them out. This never gives up and never shows an error:
     // a Wi-Fi drop is a pause, not a failure.
     ws.onclose = function () {
+      if (sock === ws) sock = null;
       connect._n = (connect._n || 0) + 1;
       var b = Math.min(8000, 500 * Math.pow(2, Math.min(connect._n, 4)));
       setTimeout(connect, b + Math.random() * b * 0.4);

@@ -286,8 +286,13 @@ function bandFocusLine(bands, eventEegT) {
   return { line, flat: relSpread < 0.28, ei, shares: sm };
 }
 
-function computeReads({ samples, answers, interruptEegT, signalIssue, bands }) {
+function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eegClaimsAllowed, dataQualityStatus }) {
   answers = answers || {};
+  // Phase 2A.2 correction 1: when the session is NOT eligible for EEG-derived guest
+  // claims (a staff/demonstration override, or — in real mode — a session that never
+  // reached reveal eligibility), present the reveal WITHOUT any EEG-derived number and
+  // WITHOUT a "measured" archetype. The room still walks through; it just says less.
+  if (eegClaimsAllowed === false) return noClaimReveal(dataQualityStatus);
   // A recording can OPEN on a stray pre-anchor row (t≈2.4, then the clock
   // restarts at 0) — it corrupted the first seconds of everything derived from
   // the bands. Trim any leading rows that sit before a clock restart.
@@ -610,6 +615,31 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands }) {
     timing: { method: 'app_fire_call', confidence: 'low', firmwareMarker: false },
     meta: { settleFrac: +settleFrac.toFixed(3), variability: +variability.toFixed(3),
       rawRange: +rawRange.toFixed(3), rawDip: +rawDip.toFixed(3), sharp, modest, flat },
+  };
+}
+
+// A reveal that makes NO EEG-derived claim (correction 1). Used for a staff/
+// demonstration override (dataQualityStatus 'invalid-for-eeg-interpretation') or a
+// real session that never reached reveal eligibility ('insufficient-usable-data').
+// No stat blocks, no measured archetype, no interruption marker — the room says only
+// what is true. `lost:true` routes the card/profile/email to their honest fallbacks.
+function noClaimReveal(status) {
+  const staff = status === 'invalid-for-eeg-interpretation';
+  return {
+    reads: minimalReads(),
+    // never labelled "successfully measured": a neutral, honest name; label 'deep' only
+    // gives a downstream dot a valid (generic) position/colour — it is not a claim.
+    archetype: { label: 'deep', name: staff ? 'Demonstration session' : 'Not measured this session', measured: false },
+    flat: true, region: null, lost: true,
+    samplesForReveal: [],
+    interruptT: null,
+    stats: null,
+    metric: { name: 'betaAlphaThetaRatio', validated: false, kind: 'focus_indicator' },
+    timing: { method: 'app_fire_call', confidence: 'low', firmwareMarker: false },
+    eegDerivedClaimsAllowed: false,
+    revealEligible: false,
+    dataQualityStatus: status || 'invalid-for-eeg-interpretation',
+    staffOverride: staff,
   };
 }
 

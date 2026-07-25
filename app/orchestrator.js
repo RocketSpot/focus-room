@@ -10,6 +10,7 @@
 // archetype framing, and the edge cases.
 // ============================================================
 const { EventEmitter } = require('events');
+const { performance: perf } = require('perf_hooks');   // monotonic clock (core node; no electron)
 const { SERVER, CLIENT, GUEST_EVENT, SIDECAR_IN, SIDECAR_OUT } = require('./protocol');
 const { computeReads } = require('./reads');
 
@@ -110,6 +111,11 @@ class Orchestrator extends EventEmitter {
     this.log = log || (() => {});
     // sim demo autopilot state (persists across sessions; never touched by _clearSession)
     this._demoEnabled = false; this._demoActive = false; this._demoSending = false; this._demoTimers = [];
+    // staff/demonstration override (correction 1): an explicit, visible, staff-only
+    // switch that lets the room be walked through WITHOUT valid EEG. It persists across
+    // sessions until a staff member clears it (like the demo state) — the safe direction,
+    // since it only SUPPRESSES claims, never fabricates them. Set via setStaffOverride().
+    this._staffOverride = false;
     this.reset();
   }
 
@@ -143,6 +149,13 @@ class Orchestrator extends EventEmitter {
     this._eegQualitySeen = false;
     this._eegQualityStatus = null;
     this._fitQualityOk = false;
+    // Phase 2A.2 correction 1: the eligibility state machine (from eeg/quality-v1).
+    // transportReady (packets arriving) is NOT enough to advance — analysisEligible
+    // (a grossly-usable channel on EACH ear) is what unlocks the ready state.
+    this._eegEligibility = null;     // last eligibility object from the sidecar
+    this._eegSimulation = null;      // whether the quality stream is simulated
+    this._eegEligKey = null;         // change-detection so we only rebroadcast on a real change
+    this.sessionDataQualityStatus = null;   // 'ok' | 'insufficient-usable-data' | 'invalid-for-eeg-interpretation'
     this.sessionSamples = null;
     this.reveal = null;
     this.revealTimer = null;
@@ -175,6 +188,11 @@ class Orchestrator extends EventEmitter {
 
   // ---------------- master clock ----------------
   now() { return Date.now(); }
+  // A monotonic timestamp (ms) in the orchestrator's OWN clock domain, for event
+  // instrumentation. NOT comparable across process/clock domains (iPad, room-audio,
+  // sidecar) — each domain's monotonic clock is independent; alignment is via the
+  // shared master (wall) clock, with the documented uncertainty. Never Date.now-only.
+  _mono() { try { return +perf.now().toFixed(3); } catch (e) { return null; } }
 
   // map a master-clock timestamp onto the EEG session timeline (seconds)
   eegTimeOf(masterT) {
@@ -220,6 +238,10 @@ class Orchestrator extends EventEmitter {
       // rebroadcast (resync, supervisor-ready) must carry them while they hold.
       notice: this._notice(),
       link: this._linkState(),
+      // correction 1: honest signal eligibility (transport vs analysis vs one/both
+      // ears) + the visible staff-override flag. Never a number.
+      signal: this._signalEligibilitySummary(),
+      staffOverride: !!this._staffOverride,
       ...extra,
     });
   }
@@ -275,6 +297,25 @@ class Orchestrator extends EventEmitter {
   }
 
   _resync() { this._broadcastState(); }
+
+  // Phase 2A.2 correction 2: the room-audio host reports its DUCK marker back — the
+  // duck's scheduled Web-Audio clock time + a monotonic estimate of audible onset, in
+  // the room-audio browser's OWN clock domain. Kept SEPARATE from the visual marker;
+  // never merged into a single onset, never used to claim sample-accurate timing.
+  onRoomAudioEvent(msg) {
+    if (!this.interruptionTiming) return;              // only meaningful after the fire
+    const p = (msg && msg.payload) || msg || {};
+    const ad = this.interruptionTiming.audioDuck;
+    if (ad.scheduledAudioContextTime != null) return;  // first report wins (one duck per fire)
+    if (typeof p.scheduledAudioContextTime === 'number') ad.scheduledAudioContextTime = p.scheduledAudioContextTime;
+    if (typeof p.estimatedStartMonotonicMs === 'number') ad.estimatedStartMonotonicMs = p.estimatedStartMonotonicMs;
+    else if (typeof p.requestMonotonicMs === 'number') ad.estimatedStartMonotonicMs = p.requestMonotonicMs;
+    if (typeof p.baseLatency === 'number') ad.baseLatencySec = p.baseLatency;
+    if (typeof p.outputLatency === 'number') ad.outputLatencySec = p.outputLatency;
+    ad.reportReceivedMonotonicMs = this._mono();
+    this._record('audio_ducked', this.now(), { scheduledAudioContextTime: ad.scheduledAudioContextTime });
+    this.log(`room-audio duck reported (audio-clock ${ad.scheduledAudioContextTime}s) — separate marker, not a sample-accurate onset`);
+  }
 
   onClientMessage(msg, role) {
     // Only the guest's iPad drives the FSM — any other LAN client (a stray
@@ -387,10 +428,17 @@ class Orchestrator extends EventEmitter {
           const last = this.scrollTrack[this.scrollTrack.length - 1];
           this.scrollTrack.push({ t: this._streamT(), p: last ? Math.max(last.p, p) : p });
         } else if (kind === GUEST_EVENT.NOTIFICATION_SHOWN) {
-          // the iPad reports the actual rendered-frame time of the notification
-          // card — a real (if not sample-accurate) onset. Upgrade the timing.
+          // the iPad reports the actual rendered-frame time of the notification card
+          // — a real (if not sample-accurate) onset. Fills the VISUAL marker only;
+          // the audio-duck marker arrives separately (onRoomAudioEvent). The two are
+          // never merged into one "exact" timestamp.
           if (this.interruptionTiming && this.interruptionTiming.eventRenderedTime == null) {
-            const shown = (msg.payload && msg.payload.shownAt) || msg.t || this.now();
+            const p = msg.payload || {};
+            const shown = p.shownAt || msg.t || this.now();
+            const vis = this.interruptionTiming.visual;
+            if (typeof p.renderedMonotonicMs === 'number') vis.renderedFrameMonotonicMs = p.renderedMonotonicMs;
+            vis.renderReportReceivedMonotonicMs = this._mono();
+            vis.timingConfidence = 'low_medium';
             this.interruptionTiming.eventRenderedTime = shown;
             this.interruptionTiming.eventRenderedEegT = this.eegTimeOf(shown);
             this.interruptionTiming.timingMethod = 'ipad_render_report';
@@ -476,11 +524,30 @@ class Orchestrator extends EventEmitter {
     this.setBeat('standby');             // iPad → dark standby; TV → reveal
     // compute the four reads from the recorded session + the guest's answers
     const bandStream = (this.streamLog && this.streamLog.bands) || [];
+    // correction 1: EEG-derived guest claims require the session to be reveal-eligible
+    // AND not staff-overridden. A staff-overridden session (or, in REAL mode, one that
+    // never reached reveal eligibility) still walks the room, but the reveal presents
+    // NO EEG-derived numbers and no "measured" archetype. Simulation is exempt from the
+    // reveal-eligibility gate (a known-input demonstration of the room's output); staff
+    // override applies in every mode.
+    const revealElig = this._eegEligibility ? !!this._eegEligibility.revealEligible : true;
+    const realIneligible = !!(this._eegEligibility && this._eegSimulation === false && !revealElig);
+    const eegClaimsAllowed = !this._staffOverride && !realIneligible;
+    this.sessionDataQualityStatus = this._staffOverride
+      ? 'invalid-for-eeg-interpretation'
+      : (realIneligible ? 'insufficient-usable-data' : 'ok');
     this.reveal = computeReads({
       samples: this.sessionSamples, answers: this.answers,
       interruptEegT: this.interruptEegT, signalIssue: this.signalIssue,
       bands: bandStream,
+      eegClaimsAllowed, dataQualityStatus: this.sessionDataQualityStatus,
     });
+    // stamp the final policy decision on the reveal so every downstream surface
+    // (card, profile, email, record) honours it.
+    this.reveal.eegDerivedClaimsAllowed = eegClaimsAllowed;
+    this.reveal.revealEligible = eegClaimsAllowed;
+    this.reveal.dataQualityStatus = this.sessionDataQualityStatus;
+    this.reveal.staffOverride = !!this._staffOverride;
     if (this.reveal.archetype) {
       this.answers.archetype = this.reveal.archetype.label;
       this.answers.archetypeName = this.reveal.archetype.name;
@@ -617,6 +684,13 @@ class Orchestrator extends EventEmitter {
       email: a.email || null,
       flat: !!r.flat,
       signalIssue: !!this.signalIssue,
+      // correction 1: honest data-quality provenance for the whole session record.
+      // 'invalid-for-eeg-interpretation' ⇒ staff/demonstration override (never labelled
+      // "measured"); 'insufficient-usable-data' ⇒ real signal never reached reveal
+      // eligibility; 'ok' ⇒ reveal-eligible. staffOverride is the explicit flag.
+      dataQualityStatus: this.sessionDataQualityStatus || (r.dataQualityStatus || null),
+      staffOverride: !!this._staffOverride,
+      eegDerivedClaimsAllowed: r.eegDerivedClaimsAllowed !== false,
       interruptT: r.interruptT != null ? r.interruptT : null,
       interruptEegT: this.interruptEegT,
       interruptionTiming: this.interruptionTiming || null,   // Phase 2A event-timing record
@@ -994,13 +1068,45 @@ class Orchestrator extends EventEmitter {
     this.interruptionFired = true;
     this._clearReadingFallback();
     const t = this.now();
+    const reqMono = this._mono();
     this.interruptEegT = this.eegTimeOf(t); // anchor for the reveal's interruption read
-    // Phase 2A event-timing instrumentation: the interruption is a VISUAL event
-    // (the iPad card) + a room-audio duck — NOT earbud audio. We capture the app
-    // fire time now; the iPad reports its actual rendered-frame time back as
-    // `notification_shown` (upgrading method/confidence). No firmware onset marker
-    // exists (hardware doc Q23-24), so we never claim sample-accurate alignment.
+    // Phase 2A.2 event-timing (correction 2): the interruption is a MULTIMODAL event —
+    // a VISUAL notification card on the iPad + a ROOM-AUDIO duck. It is NOT earbud audio,
+    // so a firmware audio-onset marker is NOT relevant here (a device EEG SAMPLE COUNTER
+    // remains desirable for alignment, but the firmware exposes none — audit Q17/18/23).
+    // The two markers are captured and kept SEPARATE — never collapsed into one supposed
+    // exact timestamp, and never chosen to maximise an apparent EEG effect. The primary
+    // marker is PREDECLARED here, before any analysis. No sample-accurate claim is made.
     this.interruptionTiming = {
+      eventType: 'combined-visual-card-and-room-audio-duck',
+      // VISUAL marker (iPad browser clock): the card's committed paint, reported back
+      // by the iPad as `notification_shown` (double-rAF).
+      visual: {
+        requestWallMs: t, requestMonotonicMs: reqMono, requestClockDomain: 'orchestrator-node',
+        renderedFrameMonotonicMs: null, renderReportReceivedMonotonicMs: null,
+        renderedClockDomain: 'ipad-browser', clockDomain: 'ipad-browser',
+        timingConfidence: 'low',
+      },
+      // AUDIO-DUCK marker (room-audio browser clock): the duck's scheduled Web-Audio
+      // clock time, reported back by room-audio.html as `audio/event kind=ducked`.
+      audioDuck: {
+        requestWallMs: t, requestMonotonicMs: reqMono,
+        scheduledAudioContextTime: null, estimatedStartMonotonicMs: null,
+        reportReceivedMonotonicMs: null, clockDomain: 'room-audio-browser',
+        timingConfidence: 'low',
+      },
+      // EEG alignment: no device sample counter exists, so alignment is only the
+      // master-clock epoch mapping (eegTimeOf) — receive-time, not sample-accurate.
+      eegAlignment: {
+        deviceSampleCounterAvailable: false, deviceSampleIndex: null,
+        sdkCallbackTimeEstimate: null, sidecarMonotonicMs: null,
+        clockAlignmentMethod: 'master_clock_epoch_mapping',
+        estimatedUncertaintyMs: 1200, timingConfidence: 'low',
+      },
+      // PREDECLARED intervention marker (fixed before analysis; not cherry-picked):
+      primaryMarkerDefinition: 'visual.renderedFrameMonotonicMs — the iPad committed paint of the notification card',
+      secondaryMarkers: ['audioDuck.scheduledAudioContextTime', 'visual.requestMonotonicMs'],
+      // ---- legacy/compat fields the reveal + record already read ----
       eventRequestTime: t, eventRequestEegT: this.interruptEegT,
       eventRenderedTime: null, eventRenderedEegT: null,
       deviceSampleIndex: null, estimatedPhysicalOnset: null,
@@ -1027,28 +1133,74 @@ class Orchestrator extends EventEmitter {
     const sq = typeof frame.signalQuality === 'number' ? frame.signalQuality : 1;
     if (sq >= 0.5) {
       this._fitGood = (this._fitGood || 0) + 1;
-      // Phase 2A: "signal is clear" must not come from packet rate alone. When a
-      // real EEG-quality stream (eeg/quality-v1) is present this session, ALSO
-      // require its overallStatus to be 'clear'. When no quality stream exists
-      // (legacy/unit paths that inject frames directly), fall back to the frame
-      // signal-quality gate so nothing regresses.
+      // Phase 2A / 2A.2: "signal is clear" must not come from packet receipt alone.
+      // When a real EEG-quality stream (eeg/quality-v1) is present this session, ALSO
+      // require ANALYSIS ELIGIBILITY (both ears grossly usable) via _fitQualityOk —
+      // transportReady/'received' is not enough. Staff override also satisfies the gate
+      // (demo navigation). When no quality stream exists (legacy/unit paths that inject
+      // frames directly), fall back to the frame signal-quality gate so nothing regresses.
       const qualityOk = !this._eegQualitySeen || this._fitQualityOk;
-      if (this._fitGood >= 3 && qualityOk) { this._fitAllGood = true; this._clearFitHint(); this._broadcastState(); this.log('signal-check: live signal + EEG quality clean → ready'); }
+      if (this._fitGood >= 3 && qualityOk) { this._fitAllGood = true; this._clearFitHint(); this._broadcastState(); this.log('signal-check: live signal + analysis-eligible EEG → ready'); }
     } else { this._fitGood = 0; }
   }
 
-  // Phase 2A: consume the honest per-channel EEG quality (eeg/quality-v1). Drives
-  // the fit-ready gate above (real cleanliness, not packet rate) and lets the
-  // signal-check surface show a truthful partial/poor state.
+  // Phase 2A / 2A.2: consume the honest per-channel EEG quality (eeg/quality-v1).
+  // Drives the fit-ready gate above and lets the signal-check surface show a truthful
+  // partial/poor state.
+  //
+  // CORRECTION 1 — receiving raw callbacks alone is NOT sufficient to advance. The
+  // fit gate now keys on ANALYSIS ELIGIBILITY (a grossly-usable channel on each ear),
+  // not mere packet receipt (transportReady / 'received'). Staff override allows
+  // navigation without valid EEG, for demonstrations.
   _onEegQuality(msg) {
     this._eegQualitySeen = true;
     this._eegQualityStatus = msg.overallStatus;
-    // Advance-ready = both ears delivering usable channels. In REAL mode the final
-    // "clear" label is gated OFF until thresholds are validated (status caps at
-    // 'received'), so the FIT GATE accepts 'received' OR 'clear' — the guest still
-    // advances; only the guest-facing "Signal is clear" wording is withheld.
-    this._fitQualityOk = msg.overallStatus === 'clear' || msg.overallStatus === 'received';
+    this._eegEligibility = msg.eligibility || null;
+    if (typeof msg.simulation === 'boolean') this._eegSimulation = msg.simulation;
+    const analysisOk = !!(this._eegEligibility && this._eegEligibility.analysisEligible);
+    this._fitQualityOk = analysisOk || this._staffOverride;
     if (!this._fitQualityOk && this.beat === 'fit' && !this._fitAllGood) this._fitGood = 0;
+    // surface a truthful partial/one-ear/neither-ear state to the iPad + TV, but only
+    // when the summary actually changes (quality streams ~3×/s — don't spam state).
+    const e = this._eegEligibility;
+    const key = e ? `${e.transportReady}|${e.analysisEligible}|${e.eligibilityStatus}|${e.ears.left.usable}|${e.ears.right.usable}` : 'none';
+    if (key !== this._eegEligKey) { this._eegEligKey = key; if (this.beat === 'fit') this._broadcastState(); }
+  }
+
+  // A compact, honest signal-eligibility summary for the surfaces. Never a number —
+  // it tells the iPad/TV whether the room may advance and whether one/both ears read.
+  _signalEligibilitySummary() {
+    const e = this._eegEligibility;
+    if (!e) return this._staffOverride ? { staffOverride: true, status: 'staff-override' } : null;
+    return {
+      transportReady: !!e.transportReady,
+      analysisEligible: !!e.analysisEligible,
+      revealEligible: !!e.revealEligible,
+      status: e.eligibilityStatus,
+      ears: { left: !!(e.ears && e.ears.left && e.ears.left.usable),
+        right: !!(e.ears && e.ears.right && e.ears.right.usable) },
+      staffOverride: !!this._staffOverride,
+    };
+  }
+
+  // ---------------- staff / demonstration override (correction 1) ----------------
+  // An explicit, staff-only switch. When ON: the room may be walked through without
+  // valid EEG (navigation unblocked), but the session is marked invalid for EEG
+  // interpretation — it must NOT generate EEG-derived guest claims, and is never
+  // labelled "successfully measured". Visible on every surface via session/state.
+  setStaffOverride(on, reason) {
+    const was = this._staffOverride;
+    this._staffOverride = !!on;
+    if (this._staffOverride === was) return this._staffOverride;
+    this._record(this._staffOverride ? 'staff_override_on' : 'staff_override_off', this.now(), { reason: reason || null });
+    this.log(`staff override ${this._staffOverride
+      ? 'ENABLED — navigation allowed; session marked invalid-for-eeg-interpretation (no EEG-derived guest claims)'
+      : 'cleared — analysis eligibility required again to advance'}`);
+    // enabling unblocks the fit gate immediately; disabling re-requires analysis eligibility
+    this._fitQualityOk = this._staffOverride
+      || !!(this._eegEligibility && this._eegEligibility.analysisEligible);
+    this._broadcastState();
+    return this._staffOverride;
   }
 
   _watchSignal(frame) {

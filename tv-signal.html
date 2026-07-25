@@ -38,6 +38,14 @@
     background: rgba(224,166,87,0.06); }
   #simBadge.on { display: block; }
 
+  /* STAFF MODE indicator — shown whenever engineering access is unlocked. Distinct
+     from the amber SIMULATED badge (this is teal) so the two never read as one. */
+  #staffBadge { position: absolute; top: 66px; right: 120px; display: none;
+    font-family: var(--font-mono); font-size: 14px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: #5AC8C0; border: 1px solid rgba(90,200,192,0.55); border-radius: 6px; padding: 6px 12px;
+    background: rgba(90,200,192,0.06); }
+  #staffBadge.on { display: block; }
+
   .state { position: absolute; left: 120px; top: 146px; }
   .state .word { font-family: var(--font-display); font-weight: 400; font-size: 76px; line-height: 1; letter-spacing: -0.03em; color: var(--fg);
     transition: opacity 620ms var(--ease-in-out), transform 620ms var(--ease-in-out); }
@@ -78,6 +86,7 @@
         <div class="live"><span class="pip"></span><span>SIGNAL CHECK · LIVE</span></div>
       </div>
       <div id="simBadge">Simulated data</div>
+      <div id="staffBadge">Staff mode · engineering</div>
 
       <div class="state" id="stateWrap"><div class="word" id="stateWord"></div><div class="sub" id="stateSub"></div></div>
 
@@ -85,7 +94,7 @@
       <div class="earLabel" id="labL">L</div><div class="earState" id="stL"></div>
       <div class="earLabel" id="labR">R</div><div class="earState" id="stR"></div>
 
-      <div class="caption" id="caption">Live signal from the earbud · <span class="dim">relative display amplitude · press E for engineering view</span></div>
+      <div class="caption" id="caption">Live signal from the earbud · <span class="dim">relative display amplitude · uncalibrated</span></div>
       <div id="eng"></div>
     </div>
   </div>
@@ -450,8 +459,73 @@
       setWord('Waiting for signal'); setSub(''); document.getElementById('stL').textContent = ''; document.getElementById('stR').textContent = '';
     }
 
-    // engineering toggle — real data only, safe on any host (never synthetic)
-    document.addEventListener('keydown', function (e) { if (e.key === 'e' || e.key === 'E') { engOn = !engOn; } });
+    // ============================================================
+    // Engineering-view ACCESS CONTROL (Phase 2A.2 correction 3)
+    // ------------------------------------------------------------
+    // The engineering view exposes all four raw channels + detailed quality. An
+    // ordinary guest must NOT be able to open it with a stray 'E' keypress. It is
+    // gated behind STAFF / DEV mode, unlocked one of two documented ways:
+    //   • a protected URL parameter set by the launcher/ops   (?staff=1  or  ?dev=1)
+    //   • a local staff PIN entered on the TV                 (press 'S', then the PIN)
+    // Access is logged locally (timestamp + action ONLY — never raw samples). Leaving
+    // staff mode clears the engineering view + text and returns to the consumer view.
+    // NOTE: this is an operational gate to stop casual guest access on a kiosk TV, not a
+    // cryptographic control — the PIN lives in the page. Documented as such.
+    var Q = new URLSearchParams(location.search);
+    var STAFF_PIN = Q.get('pin') || '2468';          // launcher may override via ?pin=…
+    var staffMode = (Q.get('staff') === '1') || Q.has('dev');   // launcher-established access
+    function engToggleAllowed() { return staffMode === true; }   // the single gate the 'E' key honours
+
+    function logEngAccess(action, how) {
+      // local access log — NO raw EEG, ever. Just who/when/how the eng view was used.
+      var entry = { t: Date.now(), action: action, how: how || null, host: location.host || 'file' };
+      try {
+        var KEY = 'focusroom.eng.accessLog';
+        var log = JSON.parse(localStorage.getItem(KEY) || '[]');
+        if (!Array.isArray(log)) log = [];
+        log.push(entry); if (log.length > 200) log = log.slice(-200);   // bounded; access events only
+        localStorage.setItem(KEY, JSON.stringify(log));
+      } catch (e) { /* localStorage may be unavailable on file:// — access still works */ }
+      // console records the ACCESS EVENT only (never raw channel values)
+      try { console.info('[focusroom] engineering-view ' + action + (how ? ' (' + how + ')' : '')); } catch (e) {}
+    }
+
+    function setStaffMode(on, how) {
+      if (on === staffMode) return;
+      staffMode = !!on;
+      document.getElementById('staffBadge').classList.toggle('on', staffMode);
+      if (!staffMode) {
+        // leaving staff mode: clear the engineering view + its rendered buffer and
+        // return to the consumer view. (The shared signal rings keep feeding the
+        // consumer L/R trace — only the engineering EXPOSURE is torn down.)
+        engOn = false;
+        var el = document.getElementById('eng'); el.classList.remove('on'); el.innerHTML = '';
+        logEngAccess('staff-mode-off', how);
+      } else {
+        logEngAccess('staff-mode-on', how);
+      }
+    }
+    if (staffMode) { document.getElementById('staffBadge').classList.add('on'); logEngAccess('staff-mode-on', 'launcher-param'); }
+
+    document.addEventListener('keydown', function (e) {
+      // 'E' toggles the engineering view — ONLY when staff/dev mode is unlocked.
+      if (e.key === 'e' || e.key === 'E') {
+        if (!engToggleAllowed()) return;              // ordinary guest: no engineering view
+        engOn = !engOn;
+        logEngAccess(engOn ? 'eng-view-open' : 'eng-view-close', 'keypress');
+        return;
+      }
+      // 'S' opens the staff-PIN prompt (unlock). A wrong/blank PIN does nothing.
+      if ((e.key === 's' || e.key === 'S') && !staffMode) {
+        var pin = null;
+        try { pin = window.prompt('Staff PIN (engineering view):'); } catch (err) { pin = null; }
+        if (pin != null && pin === STAFF_PIN) setStaffMode(true, 'pin');
+        else if (pin != null) logEngAccess('staff-unlock-denied', 'pin');
+        return;
+      }
+      // Escape leaves staff mode (and the engineering view with it).
+      if (e.key === 'Escape' && staffMode) { setStaffMode(false, 'escape'); }
+    });
 
     var positions = [[60, 60], [1860, 60], [60, 1020], [1860, 1020]];
     positions.forEach(function (pos) { var d = document.createElement('div'); d.className = 'corner'; d.style.left = pos[0] + 'px'; d.style.top = pos[1] + 'px'; tv.appendChild(d); });
@@ -468,7 +542,12 @@
       return { count: count, lastIndex: lastIndex, haveData: haveData, selL: selL, selR: selR,
         sim: CFG.simulation, clearStateEnabled: CFG.clearStateEnabled,
         droppedDisplayBatches: droppedDisplayBatches, lastSeq: lastSeq,
-        selSwitchL: selSwitchL, selSwitchR: selSwitchR }; } };
+        selSwitchL: selSwitchL, selSwitchR: selSwitchR,
+        staffMode: staffMode, engOn: engOn }; },
+      // test/ops hooks: simulate the guarded 'E' toggle + staff (un)lock. Returns
+      // whether the engineering view is open after the attempt.
+      pressE: function () { if (engToggleAllowed()) engOn = !engOn; return engOn; },
+      setStaff: function (on) { setStaffMode(!!on, 'test'); return staffMode; } };
     // a lightweight foreground fps sampler for the perf harness (visible pane only)
     window.__fps = { frames: 0, t0: 0, start: function () { this.frames = 0; this.t0 = performance.now(); },
       read: function () { return this.frames / Math.max(0.001, (performance.now() - this.t0) / 1000); } };
