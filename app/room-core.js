@@ -125,6 +125,10 @@ function createRoom(hooks = {}) {
       // capability (launcher token + loopback in packaged mode) — never by the client-declared
       // 'tv' role. It is NOT sent to the iPad, reveal, audio, ops, email, or analytics.
       if (isRaw) {
+        // Electron: deliver to the AUTHORIZED TV renderer over IPC (finding #5 — the token stays
+        // in main; the renderer never holds it). WS: broadcastRaw stays as fail-closed defense for
+        // any future launcher-authenticated WebSocket client (a plain/LAN socket is never authorized).
+        if (hooks.onRawEeg) { try { hooks.onRawEeg(msg); } catch (_) {} }
         server.broadcastRaw(msg.type, msg);
         if (msg.type === SIDECAR_OUT.EEG_CONFIG) lastEegConfig = msg;
         else if (msg.type === SIDECAR_OUT.EEG_QUALITY) lastEegQuality = msg;
@@ -422,6 +426,8 @@ function createRoom(hooks = {}) {
     config, supervisor, server, store, orchestrator,
     pushDiag, wireSidecar, wireSurfaces, startServerWithRetry,
     cleanup, attachCrashGuard, banner, OPS_COMMANDS, SURFACE_FORWARD,
+    // last-known raw config/quality, replayed to a freshly-loaded signal surface over IPC (finding #5)
+    lastEegState: () => ({ config: lastEegConfig, quality: lastEegQuality }),
   };
 }
 

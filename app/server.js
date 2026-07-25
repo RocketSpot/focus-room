@@ -135,11 +135,25 @@ class SurfaceServer extends EventEmitter {
       fs.stat(filePath, (err, stat) => {
         if (err || !stat.isFile()) { res.writeHead(404); return res.end('not found'); }
         const ext = path.extname(filePath).toLowerCase();
-        res.writeHead(200, {
+        const headers = {
           'Content-Type': MIME[ext] || 'application/octet-stream',
           'Cache-Control': 'no-cache',
           'Access-Control-Allow-Origin': '*',
-        });
+        };
+        // Renderer containment (finding #5, §4): the TV surfaces host the raw-EEG scope, so
+        // they get a restrictive first-party CSP — no remote scripts/objects, no framing, no
+        // remote navigation. The app is local-first (no CDN), so 'self' + inline suffices; ws:
+        // is allowed for the LAN socket. Other surfaces keep their existing headers.
+        if (/^\/tv-[a-z-]+\.html$/.test(pathname)) {
+          headers['Content-Security-Policy'] = [
+            "default-src 'self'", "script-src 'self' 'unsafe-inline'", "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data:", "font-src 'self' data:", "media-src 'self' data: blob:",
+            "connect-src 'self' ws: wss:", "object-src 'none'", "base-uri 'self'",
+            "form-action 'self'", "frame-ancestors 'none'",
+          ].join('; ');
+          headers['X-Frame-Options'] = 'DENY';
+        }
+        res.writeHead(200, headers);
         fs.createReadStream(filePath).pipe(res);
       });
     } catch (e) {

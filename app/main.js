@@ -57,6 +57,14 @@ const room = createRoom({
   onDiag: (channel, payload) => {
     if (diagWindow && !diagWindow.isDestroyed()) diagWindow.webContents.send(channel, payload);
   },
+  // Deliver the live raw-EEG stream to the AUTHORIZED TV renderer over IPC (finding #5 containment) —
+  // and ONLY while the signal surface is shown, so raw never even enters the renderer on other beats.
+  // The token stays in main; the renderer receives only the config/raw/quality messages it renders.
+  onRawEeg: (msg) => {
+    if (tvSurface === 'signal' && tvWindow && !tvWindow.isDestroyed()) {
+      try { tvWindow.webContents.send('rawEeg:msg', msg); } catch (_) {}
+    }
+  },
   // The orchestrator drives which TV surface shows for the current beat.
   onBeat: ({ surface }) => navigateTv(surface),
   // a TV window that loaded before the bind is showing a URL nothing
@@ -67,10 +75,26 @@ const room = createRoom({
   },
 });
 const { supervisor, server, orchestrator } = room;
-// Configure server-side raw-EEG authorization: verify the launcher token, and in packaged
-// production ALSO require a loopback socket. Fail-closed — without this token no socket is
-// ever authorized for raw. (Headless web-main.js does not configure a token → raw stays closed.)
-server.configureRawAuth({ token: rawStreamToken, requireLoopback: config.isPackaged });
+// Configure server-side raw-EEG authorization: verify the launcher token, and require a loopback
+// socket (finding #5 §3: loopback-only by default — including during FOCUSROOM_VALIDATION=1 and any
+// packaged/guest/launcher-driven mode; a non-loopback raw connection needs the explicit dev opt-in
+// FOCUSROOM_ALLOW_REMOTE_RAW=1, which is ignored when packaged or validating). Fail-closed.
+server.configureRawAuth({ token: rawStreamToken, requireLoopback: config.RAW_REQUIRE_LOOPBACK });
+if (!config.RAW_REQUIRE_LOOPBACK) {
+  // dev-only, ignored in packaged/validation. Logged WITHOUT the token.
+  console.warn('[security] FOCUSROOM_ALLOW_REMOTE_RAW=1 — non-loopback raw connections permitted (dev only).');
+}
+
+// Raw EEG reaches the authorized TV renderer over Electron IPC (finding #5 containment): the token
+// NEVER leaves the main process — not additionalArguments, not process.argv, not the renderer. The
+// live raw stream is pushed from room-core's onRawEeg hook (below, gated to the signal surface); a
+// freshly-loaded signal surface asks for the last config/quality via this sender-gated handler.
+ipcMain.handle('rawEeg:last', (evt) => {
+  if (tvWindow && !tvWindow.isDestroyed() && evt.sender === tvWindow.webContents) {
+    try { return room.lastEegState ? room.lastEegState() : { config: null, quality: null }; } catch (_) { return { config: null, quality: null }; }
+  }
+  return { config: null, quality: null };
+});
 
 // ---------------- TV surface switching ----------------
 function tvUrlFor(surface) {
@@ -87,15 +111,13 @@ function tvUrlFor(surface) {
 }
 
 // Per-window config handed to the preload via additionalArguments (base64 JSON, a private
-// process channel — not a URL/query param). Carries the staff config (item 1/2: uiEnabled is
-// false in production guest builds; the PIN is FOCUSROOM_STAFF_TOKEN, empty ⇒ disabled) AND the
-// per-launch raw-EEG capability token (finding #5). The preload exposes the raw token only via a
-// FUNCTION (not a globally readable string), used to build the authenticated WS hello.
+// process channel — not a URL/query param). Carries ONLY the staff DISPLAY-gate config (item 1/2:
+// uiEnabled is false in production guest builds; the PIN is FOCUSROOM_STAFF_TOKEN, empty ⇒ disabled).
+// The raw-EEG capability token is NOT here (finding #5 containment): it must never appear in
+// additionalArguments / process.argv / the OS command line. It is delivered separately, on demand,
+// via sender-gated Electron IPC to the TV window's preload only, and never reaches page JavaScript.
 function windowConfigArg() {
-  const cfg = {
-    staff: { uiEnabled: !!config.isDev, pin: process.env.FOCUSROOM_STAFF_TOKEN || '' },
-    rawStreamToken: rawStreamToken,
-  };
+  const cfg = { staff: { uiEnabled: !!config.isDev, pin: process.env.FOCUSROOM_STAFF_TOKEN || '' } };
   return '--focusroom-cfg=' + Buffer.from(JSON.stringify(cfg)).toString('base64');
 }
 function navigateTv(surface) {
@@ -121,10 +143,18 @@ function createTvWindow() {
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      additionalArguments: [windowConfigArg()],   // build-gated staff config + raw-EEG capability token
+      contextIsolation: true,           // §4: renderer containment (already on)
+      nodeIntegration: false,           // §4
+      devTools: !config.isPackaged,     // §4: no DevTools in packaged guest mode
+      additionalArguments: [windowConfigArg()],   // build-gated staff DISPLAY config (NO raw token)
     },
+  });
+  // §4 renderer containment for the raw-EEG surface: deny remote navigation + window.open, so a
+  // compromised/opened page cannot exfiltrate raw EEG or load third-party script. Only the app's
+  // own local surfaces may load. (CSP is applied server-side to the tv-*.html responses.)
+  tvWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  tvWindow.webContents.on('will-navigate', (e, url) => {
+    if (!/^https?:\/\/(127\.0\.0\.1|localhost):/i.test(String(url || ''))) e.preventDefault();
   });
   // Load the served TV surface for the current beat (idle → constellation). The
   // orchestrator switches surfaces by beat via navigateTv(). Each surface renders

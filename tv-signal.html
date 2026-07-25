@@ -420,42 +420,42 @@
         + '<br>' + ['Left-A', 'Left-B', 'Right-A', 'Right-B'].map(badge).join(' &nbsp; ');
     }
 
-    // ---- WebSocket ----
+    // ---- EEG message handling (shared by the IPC relay + the WS fallback) ----
+    // Raw config/raw/quality normally arrive from the launcher's authenticated IPC relay (finding
+    // #5). The same handler also runs for any WS-delivered eeg message (a future launcher-authorized
+    // WebSocket client) — the plain page socket never receives eeg types, so this is defensive.
+    function handleEeg(m) {
+      if (m.type === 'eeg/config-v1') {
+        LABELS = m.channelLabels || LABELS;
+        CFG.expectedRate = m.expectedHardwareSampleRateHz || m.expectedSampleRateHz || 250;
+        CFG.simulation = !!m.simulation;
+        CFG.calibrationStatus = m.calibrationStatus || 'unverified';
+        CFG.mapping = m.channelMappingStatus || 'provisional';
+        CFG.clearStateEnabled = !!m.clearStateEnabled;
+        document.getElementById('simBadge').classList.toggle('on', CFG.simulation);
+        cf = [makeChannelFilter(), makeChannelFilter(), makeChannelFilter(), makeChannelFilter()];
+      } else if (m.type === 'eeg/raw-v1') {
+        if (m.simulation) { CFG.simulation = true; document.getElementById('simBadge').classList.add('on'); }
+        onRaw(m);
+      } else if (m.type === 'eeg/quality-v1') {
+        onQuality(m);
+      }
+    }
+
+    // ---- WebSocket (NON-raw surface state only) ----
     function connectLive() {
       if (!location.host) { setWord('Waiting for signal'); return; }
       var ws; try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'); } catch (e) { return; }
       ws.onopen = function () {
-        // Authenticated hello (finding #5): present the eeg-raw capability + the launcher-issued
-        // token so the SERVER can authorize raw delivery. The token comes only from the launcher
-        // preload (a function, never a readable string) and travels only inside this WS frame —
-        // never a URL, storage, or console. A plain browser has no preload → no token → no raw.
-        var hello = { type: 'client/hello', role: 'tv', t: Date.now() };
-        try {
-          var tk = (window.__FOCUSROOM__ && typeof window.__FOCUSROOM__.rawStreamToken === 'function')
-            ? window.__FOCUSROOM__.rawStreamToken() : '';
-          if (tk) { hello.capabilities = ['eeg-raw']; hello.rawStreamToken = tk; }
-        } catch (e) { /* no launcher → unauthenticated hello (no raw) */ }
-        ws.send(JSON.stringify(hello)); connectLive._n = 0;
+        // This page's own WebSocket carries only NON-raw surface state (session/state). Raw EEG does
+        // NOT travel over this socket (finding #5): it arrives via the launcher's authenticated IPC
+        // relay (see subscribeRawEeg below). So this hello carries no capability and no token.
+        ws.send(JSON.stringify({ type: 'client/hello', role: 'tv', t: Date.now() })); connectLive._n = 0;
       };
       ws.onmessage = function (ev) {
         var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
-        if (m.type === 'eeg/config-v1') {
-          LABELS = m.channelLabels || LABELS;
-          CFG.expectedRate = m.expectedHardwareSampleRateHz || m.expectedSampleRateHz || 250;
-          CFG.simulation = !!m.simulation;
-          CFG.calibrationStatus = m.calibrationStatus || 'unverified';
-          CFG.mapping = m.channelMappingStatus || 'provisional';
-          CFG.clearStateEnabled = !!m.clearStateEnabled;
-          document.getElementById('simBadge').classList.toggle('on', CFG.simulation);
-          cf = [makeChannelFilter(), makeChannelFilter(), makeChannelFilter(), makeChannelFilter()];
-        } else if (m.type === 'eeg/raw-v1') {
-          if (m.simulation) { CFG.simulation = true; document.getElementById('simBadge').classList.add('on'); }
-          onRaw(m);
-        } else if (m.type === 'eeg/quality-v1') {
-          onQuality(m);
-        } else if (m.type === 'session/state') {
-          if (m.beat === 'idle' || m.beat === 'welcome') resetScope();
-        }
+        if (m.type === 'eeg/config-v1' || m.type === 'eeg/raw-v1' || m.type === 'eeg/quality-v1') { handleEeg(m); return; }
+        if (m.type === 'session/state') { if (m.beat === 'idle' || m.beat === 'welcome') resetScope(); }
       };
       ws.onerror = function () { try { ws.close(); } catch (e) {} };
       ws.onclose = function () { connectLive._n = (connectLive._n || 0) + 1; var b = Math.min(8000, 500 * Math.pow(2, Math.min(connectLive._n, 4))); setTimeout(connectLive, b + Math.random() * b * 0.4); };
@@ -560,6 +560,13 @@
 
     setWord('Waiting for signal');
     connectLive();
+
+    // Raw EEG arrives via the launcher's authenticated IPC relay (finding #5), NOT this page's
+    // WebSocket. Only the authorized Electron TV window has the preload bridge; a plain browser on
+    // the LAN has no preload → no subscription → no raw. No token is ever exposed to this page.
+    if (window.__FOCUSROOM__ && typeof window.__FOCUSROOM__.subscribeRawEeg === 'function') {
+      window.__FOCUSROOM__.subscribeRawEeg(function (m) { handleEeg(m); });
+    }
 
     // Test/ops hooks (onRaw/onQuality injection, reset, and the staff-mode + eng-view
     // toggles) are exposed ONLY in a dev/staff build (STAFF_UI). In a production guest build

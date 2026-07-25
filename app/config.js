@@ -123,11 +123,27 @@ const dataDir = process.env.FOCUSROOM_DATA_DIR
     ? path.join(repoRoot, 'data')
     : path.join(app.getPath('userData'), 'data'));
 
+// Raw-EEG loopback policy (finding #5 credential-containment hardening). Loopback-only by
+// DEFAULT. A non-loopback raw connection needs an explicit dev opt-in (FOCUSROOM_ALLOW_REMOTE_RAW=1)
+// that is IGNORED in packaged production AND during validation (FOCUSROOM_VALIDATION=1). Pure +
+// exported so it is unit-testable independently of the launch environment.
+function rawLoopbackRequired({ isPackaged: pk, validation, allowRemote } = {}) {
+  const allow = allowRemote === true && pk !== true && validation !== true;
+  return !allow;   // secure default: loopback-only
+}
+const RAW_REQUIRE_LOOPBACK = rawLoopbackRequired({
+  isPackaged,
+  validation: process.env.FOCUSROOM_VALIDATION === '1',
+  allowRemote: process.env.FOCUSROOM_ALLOW_REMOTE_RAW === '1',
+});
+
 module.exports = {
   isDev,
   isPackaged,
   isWin,
   SIMULATE,
+  rawLoopbackRequired,
+  RAW_REQUIRE_LOOPBACK,
   repoRoot,
   resourcesPath,
   webRoot,
