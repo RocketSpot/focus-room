@@ -549,17 +549,21 @@
     setWord('Waiting for signal');
     connectLive();
 
-    // expose a tiny hook for the automated rendering tests (headless)
-    window.__scope = { onRaw: onRaw, onQuality: onQuality, reset: resetScope, state: function () {
-      return { count: count, lastIndex: lastIndex, haveData: haveData, selL: selL, selR: selR,
-        sim: CFG.simulation, clearStateEnabled: CFG.clearStateEnabled,
-        droppedDisplayBatches: droppedDisplayBatches, lastSeq: lastSeq,
-        selSwitchL: selSwitchL, selSwitchR: selSwitchR,
-        staffMode: staffMode, engOn: engOn }; },
-      // test/ops hooks: simulate the guarded 'E' toggle + staff (un)lock. Returns
-      // whether the engineering view is open after the attempt.
-      pressE: function () { if (engToggleAllowed()) engOn = !engOn; return engOn; },
-      setStaff: function (on) { setStaffMode(!!on, 'test'); return staffMode; } };
+    // Test/ops hooks (onRaw/onQuality injection, reset, and the staff-mode + eng-view
+    // toggles) are exposed ONLY in a dev/staff build (STAFF_UI). In a production guest build
+    // they must NOT exist: setStaff() would otherwise flip staff mode with no gate, and
+    // onRaw/onQuality would let a page-console attacker inject or read the raw scope. A plain
+    // browser on the LAN (no launcher → STAFF_UI false) gets no __scope at all.
+    if (STAFF_UI) {
+      window.__scope = { onRaw: onRaw, onQuality: onQuality, reset: resetScope, state: function () {
+        return { count: count, lastIndex: lastIndex, haveData: haveData, selL: selL, selR: selR,
+          sim: CFG.simulation, clearStateEnabled: CFG.clearStateEnabled,
+          droppedDisplayBatches: droppedDisplayBatches, lastSeq: lastSeq,
+          selSwitchL: selSwitchL, selSwitchR: selSwitchR,
+          staffMode: staffMode, engOn: engOn }; },
+        pressE: function () { if (engToggleAllowed()) engOn = !engOn; return engOn; },
+        setStaff: function (on) { setStaffMode(!!on, 'test'); return staffMode; } };
+    }
     // a lightweight foreground fps sampler for the perf harness (visible pane only)
     window.__fps = { frames: 0, t0: 0, start: function () { this.frames = 0; this.t0 = performance.now(); },
       read: function () { return this.frames / Math.max(0.001, (performance.now() - this.t0) / 1000); } };

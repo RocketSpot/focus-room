@@ -70,9 +70,12 @@ change independently produced a response.
 The engineering view (all four raw channels + detailed quality) is **no longer openable by a stray
 `E` keypress**. It is gated behind staff/dev mode (`tv-signal.html`):
 
-- unlock via a **protected URL param set by the launcher/ops** (`?staff=1` or `?dev=1`) or a **local
-  staff PIN** (press `S`, enter the PIN; default `2468`, overridable with `?pin=…`);
-- `E` toggles the view **only** when staff mode is unlocked; ordinary guests get nothing;
+- unlock only in a **dev/staff build** (the launcher's preload reports `staffUiEnabled=true`) via
+  `?staff=1`/`?dev=1`, or on any build via a **locally configured credential**
+  (`FOCUSROOM_STAFF_TOKEN`, entered with `S`). There is **no hardcoded PIN** and `?pin=` is not read
+  (see the pre-merge hardening section below — a production guest build ships locked);
+- `E` toggles the view **only** when staff mode is unlocked; ordinary guests get nothing; and the
+  `window.__scope` test hooks exist **only** in a dev/staff build, never in a production guest page;
 - **staff mode is visibly indicated** (a teal badge, distinct from the amber SIMULATED badge);
 - **engineering-view access is logged locally** (`localStorage['focusroom.eng.accessLog']` +
   `console.info`) with **timestamps + action only — never raw samples**;
@@ -134,8 +137,40 @@ methodology was touched.
    `containsParticipantIdentifiers: false` and no name/email/guest-id fields.
 
 Tests: `tests/eeg-display.test.js` (no hardcoded PIN; launcher-gated activation; guest-build params
-inert; launcher-issued credential unlocks) and `tests/eeg-validation-recorder.test.py` (app-data
-non-synced default dir; `0700`; label whitelist; retention policy; no identifiers).
+inert; launcher-issued credential unlocks; `window.__scope` hooks dev/staff-only) and
+`tests/eeg-validation-recorder.test.py` (app-data non-synced default dir; `0700` dir + `0600` files;
+label whitelist; annotation-kind whitelist + note dropped; retention policy; no identifiers).
+
+An adversarial verification pass (`workflows/verify-2a2-hardening`) found and we FIXED, in-scope:
+the `window.__scope.setStaff()/pressE()` bypass (now dev/staff-only), the un-whitelisted annotation
+`kind`/`note` (now a fixed vocabulary, note dropped), `0644→0600` capture files, and a stale `2468`
+reference in this doc.
+
+## OPEN pre-merge finding #5 — WS role is trusted from the client (raw stream reachable)
+
+Found by the same verification pass; **pre-existing** (not introduced by 2A/2A.2) and **not one of
+the four authorized config items**, so it is reported rather than silently expanded:
+
+- `app/server.js` sets a socket's role verbatim from the client-supplied `client/hello`
+  (`ws.role = String(msg.role || 'unknown')`) with **no authentication**, and `app/room-core.js`
+  broadcasts every `eeg/raw-v1` frame (all four per-channel sample arrays) to the `tv` role.
+- **Consequence:** a guest on the LAN can open `ws://<host>:4321/ws`, send
+  `{"type":"client/hello","role":"tv"}`, and receive the raw four-channel stream **directly — no
+  launcher, no staff mode, no engineering view**. The page-level access control is real but is only
+  a display toggle; it does not protect the data on the wire. This **defeats acceptance criterion 20**
+  ("raw EEG reaches only the authorized signal and engineering surfaces").
+
+**Status: OPEN — decision required; blocks production merge** (production merge is already blocked
+pending real-hardware validation). Candidate minimal fixes (each needs sign-off, as it changes
+transport/routing semantics — beyond the four config items):
+1. **Loopback-gate the raw stream** — only route `eeg/raw-v1` to `tv` sockets whose remote address is
+   loopback (the packaged kiosk TV window loads over `127.0.0.1`). Smallest change; a *separate-device*
+   browser TV would lose the raw waveform.
+2. **Launcher-token-gate the raw stream** — the Electron TV window includes the launcher token
+   (already available via preload) in its `client/hello`; the server routes raw only to token-verified
+   `tv` sockets. Preserves a separate-device TV that is given the token; slightly larger.
+
+Not implemented here — awaiting a scope decision.
 
 ## Hardware-blocked status (honest)
 

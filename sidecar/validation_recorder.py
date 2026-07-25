@@ -32,6 +32,23 @@ def enabled():
     return os.environ.get("FOCUSROOM_VALIDATION") == "1"
 
 
+# item 4: annotation kinds are restricted to a fixed, NON-identifying vocabulary so a stray
+# operator label (or anything name-like) can NEVER land in the metadata/log. Anything outside
+# the set is recorded as the generic "marker"; free-form notes are not recorded at all.
+_SAFE_KINDS = {
+    "still", "start", "end", "stability", "blink", "blinks", "eye_closure", "swallow",
+    "jaw", "jaw_clench", "clench", "head_turn", "head_left", "head_right", "look_down",
+    "center", "earbud_adjust", "reseat", "channel_disturb", "interruption", "marker",
+    "ear_left_out", "ear_left_in", "ear_right_out", "ear_right_in",
+    "l_out", "l_in", "r_out", "r_in", "disconnect", "reconnect", "recovery",
+}
+
+
+def _safe_kind(kind):
+    k = "".join(c for c in str(kind or "").strip().lower() if c.isalnum() or c in "_-")[:24]
+    return k if k in _SAFE_KINDS else "marker"
+
+
 def _default_dir():
     """A LOCAL, access-restricted, NON-synchronized default location for captures.
 
@@ -78,6 +95,11 @@ class ValidationRecorder:
             self.log_path = self.stem + ".log.txt"
             self._raw_f = open(self.raw_path, "w", encoding="utf-8")
             self._log_f = open(self.log_path, "w", encoding="utf-8")
+            for _pth in (self.raw_path, self.log_path):   # item 3: restrict the files too (0600)
+                try:
+                    os.chmod(_pth, 0o600)
+                except Exception:
+                    pass
             self.started_wall = time.time()
             self.started_mono = time.monotonic()
             self.enabled = True
@@ -116,20 +138,23 @@ class ValidationRecorder:
             self.counts["quality"] += 1
 
     def annotate(self, kind, t=None, note=None):
-        """A staff event annotation (blink, swallow, L-out, disconnect, …). NOT a classifier."""
+        """A staff event annotation (blink, swallow, L-out, disconnect, …). NOT a classifier.
+
+        item 4: the kind is reduced to a fixed NON-identifying vocabulary (unknown → "marker")
+        and any free-form note is DROPPED, so no participant identifier can enter the record.
+        """
         if not self.enabled:
             return
         entry = {
-            "kind": kind,
+            "kind": _safe_kind(kind),
             "wallMs": int(t if isinstance(t, (int, float)) else time.time() * 1000),
             "monotonicMs": round((time.monotonic() - self.started_mono) * 1000, 1),
             "rawBatchIndex": self.counts["raw"],
             "sampleIndexApprox": self.counts["samples"],
-            "note": note,
         }
         self.annotations.append(entry)
-        self._logline("ANNOTATION %s @ rawBatch=%s ~sample=%s%s"
-                      % (kind, entry["rawBatchIndex"], entry["sampleIndexApprox"], (" — " + note) if note else ""))
+        self._logline("ANNOTATION %s @ rawBatch=%s ~sample=%s"
+                      % (entry["kind"], entry["rawBatchIndex"], entry["sampleIndexApprox"]))
 
     def _logline(self, s):
         if not self._log_f:
@@ -164,6 +189,10 @@ class ValidationRecorder:
         try:
             with open(self.meta_path, "w", encoding="utf-8") as f:
                 json.dump(meta, f, indent=1)
+            try:
+                os.chmod(self.meta_path, 0o600)          # item 3: restrict the metadata file too
+            except Exception:
+                pass
         except Exception as e:
             self.log(f"validation meta write failed: {e}")
         self._logline("VALIDATION CAPTURE CLOSE (%s) — rawBatches=%s samples=%s quality=%s gaps=%s annotations=%s"

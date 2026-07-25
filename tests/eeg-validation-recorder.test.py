@@ -144,5 +144,32 @@ finally:
     os.environ.pop("FOCUSROOM_VALIDATION_DIR", None)
     shutil.rmtree(tmp2, ignore_errors=True)
 
+print("\n-- annotation hardening (item 4) + capture-file perms (item 3) --")
+tmp3 = tempfile.mkdtemp(prefix="focusroom-validation-")
+os.environ["FOCUSROOM_VALIDATION"] = "1"
+os.environ["FOCUSROOM_VALIDATION_DIR"] = tmp3
+try:
+    r = ValidationRecorder("real", simulation=False, log=lambda *_: None)
+    r.annotate("blink", t=1)
+    r.annotate("Jane Doe <jane@example.com>", t=2, note="participant Jane, age 30")   # hostile kind + note
+    r.close("test")
+    meta = json.load(open(glob.glob(os.path.join(tmp3, "*.meta.json"))[0], encoding="utf-8"))
+    kinds = [a["kind"] for a in meta["annotations"]]
+    ok("a known annotation kind is preserved", "blink" in kinds, kinds)
+    ok("item 4: a name-like kind is reduced to 'marker'", "marker" in kinds and not any("jane" in k.lower() for k in kinds), kinds)
+    ok("item 4: no free-form note is recorded in annotations", all("note" not in a for a in meta["annotations"]))
+    blob = (open(glob.glob(os.path.join(tmp3, "*.meta.json"))[0], encoding="utf-8").read()
+            + open(glob.glob(os.path.join(tmp3, "*.log.txt"))[0], encoding="utf-8").read())
+    ok("item 4: no identifier text leaks into meta/log", ("jane" not in blob.lower()) and ("age 30" not in blob.lower()))
+    if os.name == "posix":
+        files = (glob.glob(os.path.join(tmp3, "*.raw.ndjson")) + glob.glob(os.path.join(tmp3, "*.meta.json"))
+                 + glob.glob(os.path.join(tmp3, "*.log.txt")))
+        modes = [stat.S_IMODE(os.stat(f).st_mode) for f in files]
+        ok("item 3: all capture files are 0600 on posix", bool(modes) and all(m == 0o600 for m in modes), [oct(m) for m in modes])
+finally:
+    os.environ.pop("FOCUSROOM_VALIDATION", None)
+    os.environ.pop("FOCUSROOM_VALIDATION_DIR", None)
+    shutil.rmtree(tmp3, ignore_errors=True)
+
 print("\n" + ("all %d checks passed" % _pass if _fail == 0 else "%d FAILURE(S)" % _fail))
 sys.exit(0 if _fail == 0 else 1)

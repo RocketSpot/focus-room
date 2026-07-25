@@ -174,6 +174,12 @@ ok('staff activation is LAUNCHER-gated (item 2 — bare params dead in guest bui
   assert.ok(/if \(!STAFF_UI \|\| STAFF_PIN === ''\) return;/.test(html), 'PIN unlock not disabled without a staff build + configured credential');
 });
 ok('staff mode is visibly indicated', () => assert.ok(/staffBadge/.test(html)));
+ok('test/ops hooks (window.__scope setStaff/pressE) exist ONLY in a dev/staff build', () => {
+  // the ungated bypass — window.__scope.setStaff(true) flipping staff mode with no gate — must
+  // be behind the STAFF_UI build flag, so a plain-browser guest gets no __scope at all.
+  assert.ok(/if \(STAFF_UI\) \{[\s\S]{0,900}window\.__scope = \{/.test(html), 'window.__scope not gated behind STAFF_UI');
+  assert.ok(/if \(STAFF_UI\) \{[\s\S]{0,1200}setStaff:/.test(html), 'the setStaff hook is not gated behind STAFF_UI');
+});
 ok('engineering access is logged locally WITHOUT raw samples', () => {
   assert.ok(/focusroom\.eng\.accessLog/.test(html), 'no local access log');
   // the access log + any console line must never carry raw channel data
