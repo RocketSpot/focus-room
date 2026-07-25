@@ -265,5 +265,87 @@ ok("gap: samples MISSING (estimatedMissingSamples>0), distinct from flatline",
 ok("gap: continuity confidence is low + labelled inference",
    raw_gap["continuity"]["continuityConfidence"] == "low" and raw_gap["continuity"]["continuityMethod"] == "callback_timing_inference")
 
+print("\n-- 2A.2 correction 1: eligibility state machine (transport != analysis) --")
+
+
+def last_elig(tx):
+    q = tx.last("eeg/quality-v1")
+    return q["eligibility"] if q else None
+
+
+# 16) packet arrival alone (flatline both ears) → transportReady, but NOT analysisEligible
+tx = CaptureTx()
+s = EegStream(tx, lambda *_: None, simulation=False, expected_rate_hz=FS)
+for b in range(20):
+    s.ingest([[10.0] * 50] * 4, LABELS, now_monotonic=b * 0.2)
+e = last_elig(tx)
+ok("eligibility object present on quality message", e is not None)
+ok("packets arriving → transportReady true", e["transportReady"] is True, e)
+ok("flatline packets → analysisEligible false (receipt is not analysis)", e["analysisEligible"] is False, e)
+ok("flatline packets → displayEligible true (present, drawable)", e["displayEligible"] is True, e)
+ok("neither ear usable → status stays off provisional-pass", e["eligibilityStatus"] in ("failed", "checking"), e["eligibilityStatus"])
+
+# 17) one usable ear (right ear absent) cannot produce analysisEligible
+tx = CaptureTx()
+s = EegStream(tx, lambda *_: None, simulation=False, expected_rate_hz=FS)
+for b in range(30):
+    s.ingest([sine(10, 50, i0=b * 50), sine(10, 50, phase=.5, i0=b * 50)],
+             ["Left-A", "Left-B"], now_monotonic=b * 0.2)   # only the left ear present
+e = last_elig(tx)
+ok("one ear present → analysisEligible false", e["analysisEligible"] is False, e)
+ok("one ear present → eligibilityStatus 'limited'", e["eligibilityStatus"] == "limited", e)
+ok("left usable, right not usable", e["ears"]["left"]["usable"] is True and e["ears"]["right"]["usable"] is False, e["ears"])
+
+# 18) one usable CHANNEL on each ear (Left-A + Right-A) → PROVISIONAL analysis eligibility
+tx = CaptureTx()
+s = EegStream(tx, lambda *_: None, simulation=False, expected_rate_hz=FS)
+for b in range(40):
+    s.ingest([sine(10, 50, i0=b * 50), sine(11, 50, i0=b * 50)],
+             ["Left-A", "Right-A"], now_monotonic=b * 0.2)   # exactly one channel per ear
+e = last_elig(tx)
+ok("one clean channel per ear → analysisEligible true", e["analysisEligible"] is True, e)
+ok("one clean channel per ear → status 'provisional-pass'", e["eligibilityStatus"] == "provisional-pass", e)
+ok("eligibility is labelled provisional (not validated)", e["qualityThresholdStatus"] == "provisional", e)
+
+# 19) flatline on an ear's channels prevents analysisEligible
+tx = CaptureTx()
+s = EegStream(tx, lambda *_: None, simulation=False, expected_rate_hz=FS)
+for b in range(40):
+    dead = [10.0] * 50
+    s.ingest([sine(10, 50, i0=b * 50), sine(10, 50, phase=.5, i0=b * 50), dead, dead],
+             LABELS, now_monotonic=b * 0.2)               # right ear flatlined
+e = last_elig(tx)
+ok("flatlined ear → analysisEligible false", e["analysisEligible"] is False, e)
+ok("flatlined ear → that ear not usable", e["ears"]["right"]["usable"] is False, e["ears"])
+
+# 20) clipping on an ear's channels prevents analysisEligible
+tx = CaptureTx()
+s = EegStream(tx, lambda *_: None, simulation=False, expected_rate_hz=FS)
+for b in range(40):
+    clip = [float(ADC_MAX)] * 50
+    s.ingest([sine(10, 50, i0=b * 50), sine(10, 50, phase=.5, i0=b * 50), clip, clip],
+             LABELS, now_monotonic=b * 0.2)               # right ear clipping
+e = last_elig(tx)
+ok("clipping ear → analysisEligible false", e["analysisEligible"] is False, e)
+
+# 21) revealEligible is SEPARATE from analysisEligible — a HIGHER bar (sustained coverage)
+tx = CaptureTx()
+s = EegStream(tx, lambda *_: None, simulation=False, expected_rate_hz=FS)
+for b in range(6):                          # a few clean batches: analysis passes, reveal not yet
+    s.ingest([sine(10, 50, i0=b * 50), sine(10, 50, phase=.5, i0=b * 50),
+              sine(11, 50, i0=b * 50), sine(11, 50, phase=.5, i0=b * 50)], LABELS, now_monotonic=b * 0.2)
+e = last_elig(tx)
+ok("early clean session: analysisEligible true", e["analysisEligible"] is True, e)
+ok("early clean session: revealEligible STILL false (separate, higher bar)", e["revealEligible"] is False, e)
+ok("reveal + analysis are distinct fields", ("revealEligible" in e) and ("analysisEligible" in e))
+for b in range(6, 44):                       # sustain → reveal becomes eligible
+    s.ingest([sine(10, 50, i0=b * 50), sine(10, 50, phase=.5, i0=b * 50),
+              sine(11, 50, i0=b * 50), sine(11, 50, phase=.5, i0=b * 50)], LABELS, now_monotonic=b * 0.2)
+e2 = last_elig(tx)
+ok("sustained clean session: revealEligible becomes true", e2["revealEligible"] is True, e2)
+
+# 22) staffOverride defaults false at the signal layer (the app overlays a real override)
+ok("signal-layer staffOverride defaults false", e2["staffOverride"] is False, e2)
+
 print("\n" + ("all %d checks passed" % _pass if _fail == 0 else "%d FAILURE(S)" % _fail))
 sys.exit(0 if _fail == 0 else 1)

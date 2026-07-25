@@ -154,4 +154,47 @@ ok('carries a persistent SIMULATED badge and no µV unit on displayed amplitude'
   assert.ok(/relative display amplitude/i.test(html));
 });
 
+console.log('\n-- engineering-view access control (staff-gated) --');
+
+ok('the E-key engineering toggle is GATED (no unconditional engOn flip)', () => {
+  // the old unconditional single-line toggle must be gone
+  assert.ok(!/e\.key === 'E'\)\s*\{\s*engOn = !engOn;\s*\}/.test(html), 'unconditional E toggle still present');
+  assert.ok(/engToggleAllowed\(\)/.test(html), 'no engToggleAllowed gate');
+  assert.ok(/if \(!engToggleAllowed\(\)\) return;/.test(html), 'E key not guarded by engToggleAllowed');
+});
+ok('staff mode defaults OFF and is unlocked only by a protected param or PIN', () => {
+  assert.ok(/staffMode = \(Q\.get\('staff'\) === '1'\) \|\| Q\.has\('dev'\)/.test(html), 'staffMode not derived from a URL param');
+  assert.ok(/STAFF_PIN/.test(html) && /window\.prompt/.test(html), 'no PIN unlock path');
+});
+ok('staff mode is visibly indicated', () => assert.ok(/staffBadge/.test(html)));
+ok('engineering access is logged locally WITHOUT raw samples', () => {
+  assert.ok(/focusroom\.eng\.accessLog/.test(html), 'no local access log');
+  // the access log + any console line must never carry raw channel data
+  assert.ok(!/localStorage\.setItem\([^)]*(rawRing|filtRing|samples|adc)/i.test(html), 'raw data written to localStorage');
+  assert.ok(!/sessionStorage/.test(html), 'sessionStorage must not be used for raw EEG');
+  assert.ok(!/console\.(log|info|warn|debug)\([^)]*(rawRing|filtRing|\bsamples\b)/i.test(html), 'raw data written to console');
+});
+ok('leaving staff mode returns to consumer view + clears the eng buffer', () => {
+  assert.ok(/setStaffMode\(false/.test(html), 'no exit-staff path');
+  // the off-branch must turn engOn off and blank the engineering element
+  assert.ok(/engOn = false;[\s\S]{0,120}innerHTML = '';/.test(html), 'leaving staff mode does not clear the eng view');
+});
+
+// behavioural mirror of the gate: a guest cannot open the eng view; staff can
+function gate(staffMode) {
+  let engOn = false;
+  const engToggleAllowed = () => staffMode === true;
+  return { pressE: () => { if (engToggleAllowed()) engOn = !engOn; return engOn; } };
+}
+ok('ordinary guest mode: pressing E cannot open the engineering view', () => {
+  const g = gate(false);
+  assert.strictEqual(g.pressE(), false);
+  assert.strictEqual(g.pressE(), false);   // still closed after repeated presses
+});
+ok('staff mode: pressing E toggles the engineering view', () => {
+  const g = gate(true);
+  assert.strictEqual(g.pressE(), true);
+  assert.strictEqual(g.pressE(), false);
+});
+
 console.log('\n' + (process.exitCode ? 'FAILURES' : pass + ' checks passed'));

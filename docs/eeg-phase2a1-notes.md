@@ -134,23 +134,47 @@ so real guests still advance; only the validated wording is withheld. Enable wit
 - The ops diagnostic feed mirrors messages only when an operator console is open (authorised
   engineering diagnostics), and nothing is written to disk.
 
-## 8. Interruption medium (item 14)
+## 8. Interruption medium — multimodal event timing (item 14 / 2A.2 correction 2)
 
 The interruption is **two simultaneous app-side events, NOT earbud audio**:
-1. a **visual notification card on the iPad** (React card in `screens2.jsx`, shown on
-   `interruption/fire`), and
-2. a **room-audio duck** on the hidden audio host (`room-audio.html`).
+1. a **visual notification card on the iPad** (`ipad/controller.jsx`, shown on `interruption/fire`), and
+2. a **room-audio duck** on the hidden audio host (`room-audio.html`, `fireInterruption()`).
 
-Timing captured (`orchestrator.interruptionTiming`, folded into the session record + reveal):
-- `eventRequestTime` — the orchestrator's fire call (master clock ms).
-- `eventRenderedTime` — the iPad's **actual rendered-frame time** of the card, reported back
-  via `notification_shown` (double-rAF ≈ committed paint); upgrades `timingMethod` to
-  `ipad_render_report`.
-- `estimatedPhysicalOnset` — null (not yet measured).
-- `timingUncertaintyMs` — 1200 (fire-only) → 400 (render report); `timingConfidence` low.
-- `media` — `["ipad_visual_card","room_audio_duck"]`.
-No firmware onset marker exists; **no sample-accurate alignment is claimed.** The audio-duck
-scheduled time and a loopback calibration to the guest's actual perception are future work.
+Because the earbuds do not produce the interruption, a **firmware/earbud audio-onset marker is NOT
+relevant** and has been removed as an unresolved requirement (see `eeg-hardware-confirmations.md`
+Q23). A **device EEG sample counter remains desirable** for aligning EEG *samples* to any event, but
+its absence blocks only sample-accurate alignment, not the instrumentation.
+
+**The two markers are captured and kept SEPARATE** — never collapsed into one supposed exact onset,
+never chosen to maximise an apparent EEG effect. The intervention's **primary marker is PREDECLARED**
+(`orchestrator._fireInterruption`, `interruptionTiming`):
+
+- `eventType` — `"combined-visual-card-and-room-audio-duck"`.
+- `visual` — `requestWallMs` (master clock) + `requestMonotonicMs` (orchestrator-node clock) at the
+  fire call; `renderedFrameMonotonicMs` (the iPad's OWN `performance.now` at the card's double-rAF
+  committed paint, `clockDomain:"ipad-browser"`); `renderReportReceivedMonotonicMs` (orchestrator clock).
+- `audioDuck` — `requestWallMs`/`requestMonotonicMs`; `scheduledAudioContextTime` (room-audio's Web-Audio
+  clock at the duck); `estimatedStartMonotonicMs` (room-audio `performance.now` + `baseLatency`+`outputLatency`);
+  `clockDomain:"room-audio-browser"`. Reported back by `room-audio.html` as `audio/event kind=ducked`.
+- `eegAlignment` — `deviceSampleCounterAvailable:false`, `deviceSampleIndex:null`,
+  `clockAlignmentMethod:"master_clock_epoch_mapping"` (the `eegTimeOf` epoch map, receive-time only),
+  `estimatedUncertaintyMs`, `timingConfidence:"low"`.
+- `primaryMarkerDefinition` — `visual.renderedFrameMonotonicMs` (predeclared); `secondaryMarkers` —
+  `audioDuck.scheduledAudioContextTime`, `visual.requestMonotonicMs`.
+- Legacy/compat fields kept for the reveal + record: `eventRequestTime`, `eventRenderedTime`,
+  `timingMethod` (`app_fire_call` → `ipad_render_report`), `timingUncertaintyMs` (1200 → 400),
+  `timingConfidence` (low → low_medium), `media`.
+
+**Clock-domain alignment.** The iPad and room-audio each run an INDEPENDENT monotonic clock — not
+comparable to each other or to the sidecar. Cross-domain alignment is via the shared **master (wall)
+clock** (the iPad syncs to it through `session/sync`), so wall timestamps are comparable within the
+sync error; each domain's monotonic time is used only for within-domain precision. `Date.now()` is
+never the sole event clock. **No sample-accurate alignment is claimed.**
+
+**Guest-facing language** may refer only to *"the notification moment"* / *"the combined interruption"* /
+*"after the notification appeared and the room audio changed"*; it must **not** claim that the visual
+card or the audio change independently produced any response. (See `tests/eeg-event-timing.test.js`.)
+Loopback calibration to the guest's actual perception remains future work.
 
 ## 9. Real-hardware validation plan (item 8 — PENDING, no earbuds)
 
