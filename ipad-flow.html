@@ -38,6 +38,48 @@
   @keyframes cardDrop { from { transform: translateY(-18px); } to { transform: none; } }
   @keyframes introFade { from { opacity: 0; } to { opacity: 1; } }
 
+  /* ============================================================
+     CALM MOTION — the iPad should feel alive, never animated AT you.
+     Everything here is slow, low-amplitude and opacity/transform only, so it
+     reads as the room breathing rather than a slideshow clicking forward.
+     Nothing loops fast enough to catch the eye of someone trying to read.
+     ============================================================ */
+  /* the orb's halo, and the motes drifting off its rim */
+  @keyframes orbBreathe { 0%,100% { transform: scale(1); opacity: 0.88; }
+                          50%     { transform: scale(1.055); opacity: 1; } }
+  @keyframes orbMote {
+    0%   { transform: translate(0,0) scale(0.7); opacity: 0; }
+    18%  { opacity: 0.75; }
+    100% { transform: translate(var(--mx, 14px), -46px) scale(1.5); opacity: 0; } }
+
+  /* a screen arriving: a whisper of a rise, never a slide */
+  @keyframes calmIn { from { opacity: 0; transform: translateY(10px); }
+                      to   { opacity: 1; transform: none; } }
+  /* content settling in sequence, so a screen assembles instead of appearing */
+  @keyframes calmLift { from { opacity: 0; transform: translateY(14px); }
+                        to   { opacity: 1; transform: none; } }
+
+  /* every screen fades up on arrival */
+  .screenwrap > * { animation: calmIn 760ms var(--ease-out) both; }
+  /* and its blocks follow, barely staggered — the eye lands on one thing at a time */
+  .calm-stagger > * { animation: calmLift 640ms var(--ease-out) both; }
+  .calm-stagger > *:nth-child(1) { animation-delay: 60ms; }
+  .calm-stagger > *:nth-child(2) { animation-delay: 150ms; }
+  .calm-stagger > *:nth-child(3) { animation-delay: 240ms; }
+  .calm-stagger > *:nth-child(4) { animation-delay: 330ms; }
+  .calm-stagger > *:nth-child(5) { animation-delay: 420ms; }
+
+  /* touch feedback that feels like pressing something soft, not clicking a button */
+  button { transition: transform 240ms var(--ease-out), opacity 240ms var(--ease-out); }
+  button:active { transform: scale(0.976); }
+
+  /* Someone who asked the system for less motion gets less motion. The room
+     still works exactly the same — it just stops moving on its own. */
+  @media (prefers-reduced-motion: reduce) {
+    .screenwrap > *, .calm-stagger > * { animation: introFade 260ms linear both; }
+    [style*="orbBreathe"], [style*="orbMote"] { animation: none !important; }
+  }
+
   /* review controls (outside the iPad) — auto-hidden with ?kiosk=1 */
   #controls { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center;
     gap: 9px; z-index: 80; background: rgba(20,20,20,0.85); border: 1px solid var(--hair-strong); backdrop-filter: blur(12px);

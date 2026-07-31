@@ -3,106 +3,334 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#141414">
 <title>Focus Room · Operator</title>
 <style>
+  /* ============================================================
+     ZONE — THE FOCUS ROOM · OPERATOR CONSOLE
+     ------------------------------------------------------------
+     The operator glances at this on a laptop or a phone, in a dim
+     room, while a guest is mid-session. So: dark, warm, spare,
+     editorial. One accent (the flow gold). Motion is slow and
+     never asks for attention.
+
+     TOKENS: this console must stay ONE self-contained file (it is
+     opened from any device on the room network, offline-first), so
+     the tokens.css variables it uses are MIRRORED below rather than
+     linked. Same names, same values — keep in sync with tokens.css.
+     Departures from the token sheet are marked OPS-LOCAL.
+     ============================================================ */
   :root{
-    --bg:#0f0f0e; --card:#171716; --card2:#1d1c1a; --hair:rgba(230,228,220,.08);
-    --fg:#e9e7e0; --fg-mut:#a5a096; --fg-faint:#807b72;
-    --ok:#6fcf7f; --info:#e8d79a; --warn:#f0a44a; --bad:#ff6a4d; --accent:#ddca8e;
-    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    /* ---- mirrored from tokens.css ---- */
+    --c-signal:#DDCA8E;                      /* the flow gold — the one accent */
+    --c-signal-soft:rgba(221,202,142,.16);
+    --c-signal-faint:rgba(221,202,142,.06);
+    --c-signal-glow:rgba(221,202,142,.5);
+    --c-signal-dim:#8C8463;
+    --bg:#141414;                            /* warm-gray-700 — the console field */
+    --bg-room:#0B0B0A;
+    --bg-elevated:#201F1D;
+    --bg-elevated-2:#262421;
+    --fg:#D6D4C9;
+    --fg-strong:#F3F2EE;
+    --fg-muted:#7A7873;
+    --fg-faint:rgba(214,212,201,.45);
+    --hair:rgba(214,212,201,.10);
+    --hair-strong:rgba(214,212,201,.18);
+    --font-display:"PP Neue Montreal","Space Grotesk","Helvetica Neue",Arial,sans-serif;
+    --font-sans:"Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --font-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    --tr-mono:.12em; --tr-mono-sm:.18em; --tr-display:-.02em;
+    --r-sm:8px; --r-md:12px; --r-lg:20px; --r-pill:9999px;
+    --ease-out:cubic-bezier(.22,1,.36,1);
+    --ease-in-out:cubic-bezier(.65,0,.35,1);
+    --dur-fast:120ms; --dur-base:240ms; --dur-slow:600ms;
+
+    /* ---- OPS-LOCAL: two readable secondary greys ----
+       tokens' --fg-muted (#7A7873) is tuned for print/card fields; at
+       12–14px on the dark console, in a dim room, it reads too low.
+       These sit between --fg and --fg-muted and are used for copy. */
+    --fg-2:rgba(214,212,201,.72);
+    --fg-3:rgba(214,212,201,.52);
+
+    /* ---- OPS-LOCAL: status palette ----
+       Kept on the room's warm axis (DS band colours) rather than the
+       usual dashboard red/green. --bad is the DS orange softened for
+       long looks; alarm-orange proper stays the interruption's alone.
+       NOTE: paintBanner() reads --ok/--info/--warn/--bad by name. */
+    --ok:#8CB16A;   --ok-soft:rgba(140,177,106,.11); --ok-line:rgba(140,177,106,.38);
+    --info:#DDCA8E; --info-soft:rgba(221,202,142,.10); --info-line:rgba(221,202,142,.30);
+    --warn:#E0A657; --warn-soft:rgba(224,166,87,.11); --warn-line:rgba(224,166,87,.40);
+    --bad:#E4593A;  --bad-soft:rgba(228,89,58,.11);   --bad-line:rgba(228,89,58,.44);
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:16px;line-height:1.5}
-  body{max-width:760px;margin:0 auto;padding:20px 20px 60px}
-  a{color:var(--accent)}
+  html{background:var(--bg);-webkit-text-size-adjust:100%}
+  body{background:var(--bg);color:var(--fg);font-family:var(--font-sans);font-size:16px;line-height:1.5;
+    max-width:900px;margin:0 auto;padding:0 clamp(15px,4vw,28px) calc(72px + env(safe-area-inset-bottom));
+    -webkit-font-smoothing:antialiased}
+  a{color:var(--c-signal)}
 
-  /* header */
-  .top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:-.01em}
-  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent)}
-  .badges{display:flex;gap:8px;align-items:center}
-  .badge{font:600 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;padding:6px 10px;border-radius:999px;border:1px solid var(--hair);color:var(--fg-mut)}
-  .badge.sim{color:var(--warn);border-color:var(--warn)}
-  .badge.real{color:var(--ok);border-color:var(--ok)}
-  .badge.link-off{color:var(--bad);border-color:var(--bad)}
-  .badge.link-on{color:var(--ok);border-color:transparent;background:rgba(111,207,127,.12)}
+  /* the room's ambient light — one oversized, very faint gold ellipse */
+  .ambient{position:fixed;left:50%;top:-20vh;width:min(820px,132vw);height:52vh;transform:translateX(-50%);
+    border-radius:50%;pointer-events:none;z-index:0;opacity:.62;
+    background:radial-gradient(closest-side,rgba(221,202,142,.11),transparent 72%);
+    filter:blur(50px);animation:drift 16s var(--ease-in-out) infinite}
+  .top,.banner,#fixes,.sec,.chips,.btns,.logwrap,details,.foot{position:relative;z-index:1}
 
-  /* the one big health line */
-  .banner{border-radius:16px;padding:20px 22px;margin-bottom:18px;border:1px solid var(--hair);background:var(--card);display:flex;gap:16px;align-items:flex-start}
-  .banner .glyph{font-size:26px;line-height:1.1}
-  .banner h1{font-size:23px;font-weight:600;letter-spacing:-.02em}
-  .banner p{color:var(--fg-mut);font-size:14px;margin-top:2px}
-  .banner.ok{border-color:rgba(111,207,127,.35);background:linear-gradient(180deg,rgba(111,207,127,.08),transparent)}
-  .banner.info{border-color:rgba(232,215,154,.3)}
-  .banner.warn{border-color:rgba(240,164,74,.45);background:linear-gradient(180deg,rgba(240,164,74,.08),transparent)}
-  .banner.bad{border-color:rgba(255,106,77,.5);background:linear-gradient(180deg,rgba(255,106,77,.1),transparent)}
+  /* ---------- header ---------- */
+  .top{position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;gap:12px;
+    flex-wrap:wrap;padding:16px 0 13px;z-index:40;
+    background:linear-gradient(180deg,rgba(20,20,20,.97) 0%,rgba(20,20,20,.93) 62%,rgba(20,20,20,0) 100%);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    animation:fadeIn 620ms var(--ease-out) both}
+  .brand{display:flex;align-items:baseline;gap:10px;min-width:0}
+  .brand .dot{width:7px;height:7px;border-radius:50%;background:var(--c-signal);flex:none;
+    align-self:center;box-shadow:0 0 0 4px var(--c-signal-faint),0 0 14px var(--c-signal-glow)}
+  .brand .bname{font-family:var(--font-display);font-weight:500;font-size:17px;letter-spacing:var(--tr-display);
+    color:var(--fg-strong);white-space:nowrap}
+  .brand .btag{font:500 9px/1 var(--font-mono);letter-spacing:var(--tr-mono-sm);text-transform:uppercase;
+    color:var(--fg-3);white-space:nowrap}
+  .badges{display:flex;gap:7px;align-items:center;flex:none}
+  .badge{display:inline-flex;align-items:center;gap:7px;font:500 9.5px/1 var(--font-mono);
+    letter-spacing:var(--tr-mono);text-transform:uppercase;padding:7px 12px;border-radius:var(--r-pill);
+    border:1px solid var(--hair);color:var(--fg-3);white-space:nowrap;
+    transition:color var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),
+      background-color var(--dur-base) var(--ease-out)}
+  .badge.sim{color:var(--warn);border-color:var(--warn-line);background:var(--warn-soft)}
+  .badge.real{color:var(--ok);border-color:var(--ok-line);background:var(--ok-soft)}
+  .badge.link-on,.badge.link-off{padding-left:10px}
+  .badge.link-on::before,.badge.link-off::before{content:'';width:5px;height:5px;border-radius:50%;flex:none}
+  .badge.link-on{color:var(--ok);border-color:transparent;background:var(--ok-soft)}
+  .badge.link-on::before{background:var(--ok);animation:breathe 3.4s var(--ease-in-out) infinite}
+  .badge.link-off{color:var(--bad);border-color:var(--bad-line);background:var(--bad-soft)}
+  .badge.link-off::before{background:var(--bad);animation:blinkSoft 2.4s var(--ease-in-out) infinite}
 
-  h2.sec{font:600 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--fg-mut);margin:22px 2px 10px}
+  /* ---------- the one big health line ---------- */
+  .banner{border-radius:var(--r-lg);padding:clamp(17px,3.2vw,24px) clamp(18px,3.4vw,26px);margin-bottom:6px;
+    border:1px solid var(--hair);background:var(--bg-elevated);display:flex;gap:clamp(13px,2.4vw,18px);
+    align-items:flex-start;overflow:hidden;
+    animation:riseIn 720ms var(--ease-out) 80ms both;
+    transition:border-color var(--dur-slow) var(--ease-out),background-color var(--dur-slow) var(--ease-out)}
+  .banner .glyph{flex:none;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:16px;line-height:1;border:1px solid var(--hair-strong);
+    background:rgba(214,212,201,.04);
+    transition:border-color var(--dur-slow) var(--ease-out),background-color var(--dur-slow) var(--ease-out)}
+  .banner .btext{min-width:0}
+  .banner h1{font-family:var(--font-display);font-weight:500;font-size:clamp(20px,4.2vw,27px);line-height:1.06;
+    letter-spacing:var(--tr-display);color:var(--fg-strong);text-wrap:balance}
+  .banner p{color:var(--fg-2);font-size:13.5px;line-height:1.45;margin-top:7px}
+  .banner p:empty{display:none}
+  .banner.ok{border-color:var(--ok-line);background:var(--ok-soft)}
+  .banner.ok .glyph{border-color:var(--ok-line);background:var(--ok-soft)}
+  .banner.info{border-color:var(--info-line);background:var(--info-soft)}
+  .banner.info .glyph{border-color:var(--info-line);background:var(--info-soft)}
+  .banner.warn{border-color:var(--warn-line);background:var(--warn-soft)}
+  .banner.warn .glyph{border-color:var(--warn-line);background:var(--warn-soft)}
+  .banner.bad{border-color:var(--bad-line);background:var(--bad-soft)}
+  .banner.bad .glyph{border-color:var(--bad-line);background:var(--bad-soft)}
 
-  /* assistant cards — what's wrong + how to fix */
-  .fix{background:var(--card);border:1px solid var(--hair);border-left-width:3px;border-radius:12px;padding:15px 17px;margin-bottom:10px}
-  .fix.warn{border-left-color:var(--warn)} .fix.bad{border-left-color:var(--bad)}
-  .fix.info{border-left-color:var(--info)} .fix.ok{border-left-color:var(--ok)}
-  .fix h3{font-size:16px;font-weight:600;display:flex;align-items:center;gap:9px}
-  .fix .plain{color:var(--fg-mut);font-size:14px;margin:5px 0 0}
-  .fix ol{margin:11px 0 0;padding-left:4px;list-style:none;counter-reset:s}
-  .fix ol li{counter-increment:s;position:relative;padding:5px 0 5px 30px;font-size:14px;color:var(--fg)}
-  .fix ol li::before{content:counter(s);position:absolute;left:0;top:5px;width:20px;height:20px;border-radius:50%;
-    background:var(--card2);border:1px solid var(--hair);color:var(--fg-mut);font:600 11px/20px var(--mono);text-align:center}
-  .lvl-dot{width:8px;height:8px;border-radius:50%;flex:none}
-  .lvl-dot.ok{background:var(--ok)} .lvl-dot.info{background:var(--info)}
-  .lvl-dot.warn{background:var(--warn)} .lvl-dot.bad{background:var(--bad)}
+  /* ---------- section rules ---------- */
+  h2.sec{display:flex;align-items:center;gap:14px;font:500 9.5px/1 var(--font-mono);
+    letter-spacing:var(--tr-mono-sm);text-transform:uppercase;color:var(--fg-3);
+    margin:clamp(24px,4.4vw,34px) 2px 12px;animation:fadeIn 700ms var(--ease-out) 200ms both}
+  h2.sec::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--hair),transparent)}
 
-  /* status chips */
-  .chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
-  .chip{background:var(--card);border:1px solid var(--hair);border-radius:11px;padding:11px 13px}
-  .chip .k{font:600 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--fg-mut)}
-  .chip .v{font-size:16px;font-weight:600;margin-top:5px}
-  .chip .v small{font-weight:400;color:var(--fg-mut);font-size:13px}
-  .v.ok{color:var(--ok)} .v.warn{color:var(--warn)} .v.bad{color:var(--bad)} .v.mut{color:var(--fg-mut)}
+  /* ---------- assistant cards — what's wrong + how to fix ---------- */
+  #fixes{margin-top:12px}
+  .fix{position:relative;background:var(--bg-elevated);border:1px solid var(--hair);border-radius:var(--r-md);
+    padding:16px 18px 16px 20px;margin-bottom:9px;overflow:hidden;
+    animation:riseIn 620ms var(--ease-out) both}
+  .fix:nth-child(2){animation-delay:70ms} .fix:nth-child(3){animation-delay:140ms}
+  .fix:nth-child(n+4){animation-delay:200ms}
+  .fix::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--fg-faint)}
+  .fix.warn::before{background:var(--warn)} .fix.bad::before{background:var(--bad)}
+  .fix.info::before{background:var(--info)} .fix.ok::before{background:var(--ok)}
+  .fix.bad{background:linear-gradient(180deg,var(--bad-soft),transparent 70%),var(--bg-elevated);
+    border-color:rgba(228,89,58,.22)}
+  .fix.warn{background:linear-gradient(180deg,var(--warn-soft),transparent 70%),var(--bg-elevated)}
+  .fix h3{font-size:15.5px;font-weight:600;letter-spacing:-.01em;color:var(--fg-strong);
+    display:flex;align-items:center;gap:9px;line-height:1.3}
+  .fix .plain{color:var(--fg-2);font-size:13.5px;line-height:1.5;margin:6px 0 0}
+  .fix ol{margin:12px 0 0;padding-left:0;list-style:none;counter-reset:s}
+  .fix ol li{counter-increment:s;position:relative;padding:6px 0 6px 32px;font-size:13.5px;line-height:1.5;color:var(--fg)}
+  .fix ol li::before{content:counter(s);position:absolute;left:0;top:6px;width:20px;height:20px;border-radius:50%;
+    background:var(--bg-elevated-2);border:1px solid var(--hair);color:var(--fg-3);
+    font:500 10px/19px var(--font-mono);text-align:center}
+  .lvl-dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .lvl-dot.ok{background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft)}
+  .lvl-dot.info{background:var(--info);box-shadow:0 0 0 3px var(--info-soft)}
+  .lvl-dot.warn{background:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)}
+  .lvl-dot.bad{background:var(--bad);box-shadow:0 0 0 3px var(--bad-soft)}
 
-  /* controls */
-  .btns{display:flex;flex-wrap:wrap;gap:8px}
-  button{font:600 13px/1 var(--sans);color:var(--fg);background:var(--card2);border:1px solid var(--hair);
-    border-radius:10px;padding:12px 16px;min-height:44px;cursor:pointer;transition:border-color .15s,background .15s}
-  button:hover{border-color:var(--accent)} button:active{transform:translateY(1px)}
-  button.go{border-color:rgba(221,202,142,.4)}
-  button.warnbtn{border-color:rgba(240,164,74,.4);color:var(--warn)}
+  /* ---------- at a glance ---------- */
+  /* six equal readings — three across on a laptop, two on a phone. Wide cards
+     keep every value on one line, which is the whole point of "at a glance". */
+  .chips{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:9px}
+  .chip{position:relative;background:var(--bg-elevated);border:1px solid var(--hair);border-radius:var(--r-md);
+    padding:13px 14px 14px;overflow:hidden;
+    transition:border-color 500ms var(--ease-out),background-color 500ms var(--ease-out)}
+  .chip.enter{animation:riseIn 640ms var(--ease-out) both;animation-delay:calc(var(--i,0)*70ms + 260ms)}
+  .chip::after{content:'';position:absolute;inset:0;pointer-events:none;opacity:0;
+    background:linear-gradient(180deg,var(--c-signal-soft),transparent 78%)}
+  .chip.bump::after{animation:wash 1100ms var(--ease-out)}
+  .chip[data-lvl="warn"]{border-color:rgba(224,166,87,.26)}
+  .chip[data-lvl="bad"]{border-color:rgba(228,89,58,.32);
+    background:linear-gradient(180deg,var(--bad-soft),transparent 70%),var(--bg-elevated)}
+  .chip .k{font:500 9px/1.2 var(--font-mono);letter-spacing:var(--tr-mono);text-transform:uppercase;color:var(--fg-3)}
+  .chip .v{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:17px;font-weight:600;
+    letter-spacing:-.01em;line-height:1.2;color:var(--fg-strong);
+    font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+  .chip .v .vdot{width:6px;height:6px;border-radius:50%;flex:none;background:currentColor;opacity:.9}
+  .chip .v .vt{min-width:0;overflow-wrap:anywhere}
+  .chip.bump .v{animation:valueIn 560ms var(--ease-out)}
+  .chip .v small{font-weight:400;color:var(--fg-3);font-size:13px}
+  .v.ok{color:var(--ok)} .v.warn{color:var(--warn)} .v.bad{color:var(--bad)}
+  .v.mut{color:var(--fg-2)} .v.mut .vdot{background:var(--fg-3)}
 
-  /* activity log */
-  .logwrap{background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
-  .log{max-height:260px;overflow:auto}
-  .line{display:flex;gap:11px;align-items:baseline;padding:8px 14px;border-top:1px solid var(--hair);font-size:14px}
+  /* ---------- controls ---------- */
+  .btns{display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+  .btns + .btns{margin-top:12px;padding-top:13px;border-top:1px solid var(--hair)}
+  .btns-note{font:500 9px/1 var(--font-mono);letter-spacing:var(--tr-mono-sm);text-transform:uppercase;
+    color:var(--fg-3);flex:none;margin-right:2px}
+  button{position:relative;font:500 13.5px/1 var(--font-sans);color:var(--fg);background:var(--bg-elevated-2);
+    border:1px solid var(--hair-strong);border-radius:var(--r-pill);padding:13px 19px;min-height:46px;
+    flex:1 1 auto;min-width:136px;cursor:pointer;-webkit-tap-highlight-color:transparent;
+    transition:transform 200ms var(--ease-out),border-color var(--dur-base) var(--ease-out),
+      background-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),
+      box-shadow var(--dur-base) var(--ease-out)}
+  button:hover{transform:translateY(-1px);border-color:rgba(214,212,201,.3);
+    background:#2C2A26;color:var(--fg-strong)}
+  button:active{transform:translateY(0) scale(.985);transition-duration:80ms}
+  button:focus-visible{outline:none;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--c-signal-glow)}
+  button.go{color:var(--c-signal);border-color:rgba(221,202,142,.32);background:var(--c-signal-faint)}
+  button.go:hover{border-color:var(--c-signal-glow);background:var(--c-signal-soft);color:var(--c-signal)}
+  button.warnbtn{color:var(--warn);border-color:var(--warn-line);background:transparent}
+  button.warnbtn:hover{background:var(--warn-soft);color:var(--warn);border-color:rgba(224,166,87,.6)}
+  button.danger{color:var(--bad);border-color:var(--bad-line)}
+  button.danger:hover{background:var(--bad-soft);color:var(--bad);border-color:rgba(228,89,58,.66)}
+  button.sent{animation:sentRing 700ms var(--ease-out)}
+
+  /* ---------- activity log ---------- */
+  .logwrap{background:var(--bg-elevated);border:1px solid var(--hair);border-radius:var(--r-md);overflow:hidden}
+  .log{max-height:min(48vh,300px);overflow-y:auto;overscroll-behavior:contain;
+    scrollbar-width:thin;scrollbar-color:var(--hair-strong) transparent}
+  .log::-webkit-scrollbar{width:9px}
+  .log::-webkit-scrollbar-thumb{background:var(--hair-strong);border-radius:var(--r-pill);
+    border:3px solid var(--bg-elevated)}
+  .log:empty::after{content:'Nothing yet — the room’s messages land here.';display:block;padding:16px 15px;
+    color:var(--fg-3);font-size:13.5px}
+  .line{display:flex;gap:12px;align-items:baseline;padding:9px 15px;border-top:1px solid var(--hair);
+    font-size:13.5px;line-height:1.45;animation:lineIn 460ms var(--ease-out) both;
+    transition:background-color var(--dur-base) var(--ease-out)}
   .line:first-child{border-top:none}
-  .line .ts{font:11px/1.4 var(--mono);color:var(--fg-mut);flex:none;width:44px}
-  .line .d{width:7px;height:7px;border-radius:50%;flex:none;margin-top:6px}
-  .line .d.ok{background:var(--ok)}.line .d.info{background:var(--info)}.line .d.warn{background:var(--warn)}.line .d.bad{background:var(--bad)}.line .d.muted{background:var(--fg-faint)}
-  .line .t{flex:1}.line.muted .t{color:var(--fg-mut);font-family:var(--mono);font-size:12px}
+  .line:hover{background:rgba(214,212,201,.03)}
+  .line .ts{font:500 10px/1.6 var(--font-mono);letter-spacing:.05em;color:var(--fg-3);flex:none;width:44px;
+    text-align:right;font-variant-numeric:tabular-nums}
+  .line .d{width:6px;height:6px;border-radius:50%;flex:none;margin-top:6px}
+  .line .d.ok{background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft)}
+  .line .d.info{background:var(--info);box-shadow:0 0 0 3px var(--info-soft)}
+  .line .d.warn{background:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)}
+  .line .d.bad{background:var(--bad);box-shadow:0 0 0 3px var(--bad-soft)}
+  .line .d.muted{background:var(--fg-faint)}
+  .line .t{flex:1;min-width:0;overflow-wrap:anywhere;color:var(--fg)}
+  .line.muted .t{color:var(--fg-3);font-family:var(--font-mono);font-size:11.5px;letter-spacing:.02em}
 
-  /* collapsible raw numbers */
-  details{margin-top:12px} summary{cursor:pointer;color:var(--fg-mut);font:600 12px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:8px 2px;list-style:none}
-  summary::-webkit-details-marker{display:none} summary::before{content:'▸ ';color:var(--fg-faint)}
-  details[open] summary::before{content:'▾ '}
-  .nums{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin-top:8px}
-  .num{background:var(--card);border:1px solid var(--hair);border-radius:8px;padding:8px 10px}
-  .num .k{font:10px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--fg-mut)}
-  .num .v2{font:600 15px/1.2 var(--mono);margin-top:4px;font-variant-numeric:tabular-nums}
-  .foot{margin-top:26px;color:var(--fg-mut);font:12px/1.6 var(--mono);text-align:center}
+  /* ---------- collapsible raw numbers ---------- */
+  details{margin-top:16px;border-top:1px solid var(--hair);padding-top:6px}
+  summary{display:flex;align-items:center;gap:10px;cursor:pointer;color:var(--fg-3);
+    font:500 9.5px/1 var(--font-mono);letter-spacing:var(--tr-mono-sm);text-transform:uppercase;
+    padding:11px 2px;list-style:none;transition:color var(--dur-base) var(--ease-out)}
+  summary:hover{color:var(--fg-2)}
+  summary::-webkit-details-marker{display:none}
+  summary .chev{width:0;height:0;flex:none;border-left:5px solid currentColor;
+    border-top:3.5px solid transparent;border-bottom:3.5px solid transparent;
+    transition:transform var(--dur-base) var(--ease-out)}
+  details[open] summary .chev{transform:rotate(90deg)}
+  details[open] .nums{animation:fadeIn 420ms var(--ease-out) both}
+  .nums{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:7px;margin:6px 0 4px}
+  .num{background:var(--bg-elevated);border:1px solid var(--hair);border-radius:var(--r-sm);padding:9px 11px}
+  .num .k{font:400 9px/1.2 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3)}
+  .num .v2{font:500 14px/1.2 var(--font-mono);margin-top:6px;color:var(--fg-strong);
+    font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+  .foot{margin-top:30px;color:var(--fg-3);font:400 10px/1.7 var(--font-mono);letter-spacing:var(--tr-mono);
+    text-transform:uppercase;text-align:center}
+
+  /* ---------- operator bud-coaching popup ---------- */
+  #coach{position:fixed;right:clamp(12px,3vw,20px);bottom:clamp(12px,3vw,20px);z-index:200;
+    width:min(340px,calc(100vw - 24px));background:rgba(32,31,29,.95);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border:1px solid rgba(224,166,87,.42);border-radius:var(--r-md);padding:15px 17px;
+    box-shadow:0 18px 46px rgba(0,0,0,.5);font-family:var(--font-sans);color:var(--fg-strong);
+    opacity:0;transform:translateY(12px) scale(.985);pointer-events:none;
+    transition:opacity 460ms var(--ease-out),transform 460ms var(--ease-out)}
+  #coach.show{opacity:1;transform:none;pointer-events:auto}
+  #coach .ctag{display:flex;align-items:center;gap:7px;font:500 9px/1 var(--font-mono);
+    letter-spacing:var(--tr-mono-sm);text-transform:uppercase;color:var(--warn);margin-bottom:9px}
+  #coach .ctag::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--warn);
+    animation:breathe 3.4s var(--ease-in-out) infinite}
+  #coach .cside{font-size:15px;font-weight:600;letter-spacing:-.01em;margin-bottom:6px}
+  #coach .csay{font-size:13px;line-height:1.55;color:rgba(240,238,232,.82)}
+  #coach .cfoot{font:400 9px/1.4 var(--font-mono);letter-spacing:var(--tr-mono);text-transform:uppercase;
+    color:rgba(240,238,232,.38);margin-top:11px;padding-top:9px;border-top:1px solid rgba(240,238,232,.1)}
+
+  /* ---------- motion ---------- */
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes riseIn{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+  @keyframes lineIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+  @keyframes textSwap{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  @keyframes valueIn{from{opacity:.45;transform:translateY(3px)}to{opacity:1;transform:none}}
+  @keyframes wash{0%{opacity:0}16%{opacity:1}100%{opacity:0}}
+  @keyframes breathe{0%,100%{opacity:.42;transform:scale(.9)}50%{opacity:1;transform:scale(1)}}
+  @keyframes blinkSoft{0%,100%{opacity:.3}50%{opacity:.95}}
+  @keyframes sentRing{from{box-shadow:0 0 0 0 var(--c-signal-glow)}to{box-shadow:0 0 0 9px rgba(221,202,142,0)}}
+  @keyframes drift{0%,100%{opacity:.5}50%{opacity:.78}}
+  .swap{animation:textSwap 460ms var(--ease-out) both}
+
+  /* An operator may be sensitive to motion, or watching this beside a
+     guest. Under reduce, everything settles instantly — nothing moves. */
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{
+      animation-duration:1ms!important;animation-delay:0ms!important;animation-iteration-count:1!important;
+      transition-duration:1ms!important;scroll-behavior:auto!important}
+    .ambient{opacity:.62}
+    .badge.link-on::before,.badge.link-off::before,#coach .ctag::before{opacity:1;transform:none}
+    button:hover{transform:none}
+  }
+
+  /* ---------- small screens ---------- */
+  @media (max-width:560px){
+    .top{padding:13px 0 11px}
+    .brand .bname{font-size:16px}
+    .chips{grid-template-columns:repeat(auto-fit,minmax(min(146px,100%),1fr));gap:8px}
+    .chip .v{font-size:16px}
+    .banner{gap:13px}
+    .banner .glyph{width:34px;height:34px;font-size:14px}
+    button{flex:1 1 calc(50% - 9px);min-width:0;padding:13px 14px}
+    .btns-note{flex:1 0 100%;margin-bottom:2px}
+    .nums{grid-template-columns:repeat(auto-fill,minmax(102px,1fr))}
+    #coach{width:calc(100vw - 24px)}
+  }
 </style>
 </head>
 <body>
+  <div class="ambient" aria-hidden="true"></div>
+
   <div class="top">
-    <div class="brand"><span class="dot"></span> Focus Room · Operator</div>
+    <div class="brand">
+      <span class="dot"></span>
+      <span class="bname">Focus Room</span>
+      <span class="btag">Operator</span>
+    </div>
     <div class="badges">
       <span class="badge" id="modeBadge">—</span>
       <span class="badge" id="linkBadge">connecting…</span>
     </div>
   </div>
 
-  <div class="banner" id="banner">
+  <div class="banner" id="banner" role="status" aria-live="polite">
     <span class="glyph" id="bannerGlyph">•</span>
-    <div><h1 id="bannerHead">Connecting to the room…</h1><p id="bannerSub"></p></div>
+    <div class="btext"><h1 id="bannerHead">Connecting to the room…</h1><p id="bannerSub"></p></div>
   </div>
 
   <div id="fixes"></div>
@@ -111,21 +339,24 @@
   <div class="chips" id="chips"></div>
 
   <h2 class="sec">Controls</h2>
-  <div class="btns">
+  <div class="btns" role="group" aria-label="Room controls">
     <button class="go" data-cmd="discover">Find earbuds</button>
     <button class="go" data-cmd="connect">Connect</button>
     <button data-cmd="disconnect">Disconnect</button>
     <button data-cmd="start_session">Start session</button>
     <button data-cmd="stop_session">Stop session</button>
+  </div>
+  <div class="btns" role="group" aria-label="Manual triggers">
+    <span class="btns-note">Manual triggers</span>
     <button class="warnbtn" data-cmd="test_signal">Inject test signal</button>
-    <button class="warnbtn" data-cmd="mark" data-kind="interruption">Fire the interruption</button>
+    <button class="warnbtn danger" data-cmd="mark" data-kind="interruption">Fire the interruption</button>
   </div>
 
   <h2 class="sec">What's happening</h2>
-  <div class="logwrap"><div class="log" id="log"></div></div>
+  <div class="logwrap"><div class="log" id="log" role="log" aria-live="polite"></div></div>
 
   <details>
-    <summary>Live numbers (for the curious)</summary>
+    <summary><span class="chev" aria-hidden="true"></span>Live numbers (for the curious)</summary>
     <div class="nums" id="nums"></div>
   </details>
 
@@ -143,6 +374,14 @@
             lastError:null, lastFrameAt:0 };
   var live = { bands:{}, metrics:{}, frame:{} };   // for the "live numbers" panel
 
+  // ---- tiny DOM helpers ----------------------------------------------------
+  // The console repaints twice a second. Anything that rewrites unchanged DOM
+  // would restart its entrance animation every tick and flicker in the corner of
+  // the operator's eye — so every painter below writes ONLY on change, and the
+  // change itself is what animates.
+  function restart(el, cls){ el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+  function setText(el, s){ if(el.textContent===s) return; el.textContent=s; restart(el,'swap'); }
+
   // ---- activity log ----
   var startedAt = Date.now();
   function rel(){ var s=Math.floor((Date.now()-startedAt)/1000); return (s<60? s+'s' : Math.floor(s/60)+'m'+(s%60)+'s'); }
@@ -153,7 +392,8 @@
     if(key===lastLog) return;            // collapse immediate repeats
     lastLog = key;
     var line = document.createElement('div'); line.className='line'+(level==='muted'?' muted':'');
-    line.innerHTML = '<span class="ts">'+rel()+'</span><span class="d '+level+'"></span><span class="t"></span>';
+    line.innerHTML = '<span class="ts"></span><span class="d '+level+'"></span><span class="t"></span>';
+    line.querySelector('.ts').textContent = rel();
     line.querySelector('.t').textContent = text;
     logEl.insertBefore(line, logEl.firstChild);
     while(logEl.children.length>80) logEl.removeChild(logEl.lastChild);
@@ -195,12 +435,19 @@
   // ---- render (throttled) ----
   var GLYPH={ok:'✓',info:'•',warn:'▲',bad:'✕'};
   function paintBanner(level, glyph, head, sub){
-    var b=$('banner'); b.className='banner '+level;
-    $('bannerGlyph').textContent=glyph; $('bannerGlyph').style.color='var(--'+level+')';
-    $('bannerHead').textContent=head; $('bannerSub').textContent=sub||'';
+    var b=$('banner'), cls='banner '+level;
+    if(b.className!==cls) b.className=cls;
+    var g=$('bannerGlyph');
+    if(g.textContent!==glyph) g.textContent=glyph;
+    g.style.color='var(--'+level+')';
+    setText($('bannerHead'), head); setText($('bannerSub'), sub||'');
   }
+  // fix cards are rewritten only when their content actually changes, so the
+  // entrance animation reads as "this is new advice", never as a flicker
+  var lastFixes='';
+  function setFixes(html){ if(html===lastFixes) return; lastFixes=html; $('fixes').innerHTML=html; }
   function oneFix(level, head, plain){
-    $('fixes').innerHTML='<div class="fix '+level+'"><h3><span class="lvl-dot '+level+'"></span>'+esc(head)+'</h3><p class="plain">'+esc(plain)+'</p></div>';
+    setFixes('<div class="fix '+level+'"><h3><span class="lvl-dot '+level+'"></span>'+esc(head)+'</h3><p class="plain">'+esc(plain)+'</p></div>');
   }
   function render(){
     S.lastFrameAgo = S.lastFrameAt ? (Date.now()-S.lastFrameAt) : null;
@@ -228,23 +475,22 @@
       (S.sidecar.ready? 'Everything is running normally.' : 'Waiting for the signal engine…'));
 
     // fix cards
-    var fx=$('fixes'); fx.innerHTML='';
     var actionable=r.alerts.filter(function(a){return a.level==='warn'||a.level==='bad'||a.id==='sim';});
     if(!actionable.length){
-      var okc=document.createElement('div'); okc.className='fix ok';
-      okc.innerHTML='<h3><span class="lvl-dot ok"></span>Nothing needs your attention</h3>'+
-        '<p class="plain">'+(D.BEAT_PLAIN[S.beat]||'The room is healthy and idle.')+'</p>';
-      fx.appendChild(okc);
-    } else actionable.forEach(function(a){
-      var c=document.createElement('div'); c.className='fix '+a.level;
+      setFixes('<div class="fix ok"><h3><span class="lvl-dot ok"></span>Nothing needs your attention</h3>'+
+        '<p class="plain">'+esc(D.BEAT_PLAIN[S.beat]||'The room is healthy and idle.')+'</p></div>');
+    } else setFixes(actionable.map(function(a){
       var steps=a.fix.length? '<ol>'+a.fix.map(function(s){return '<li>'+esc(s)+'</li>';}).join('')+'</ol>':'';
-      c.innerHTML='<h3><span class="lvl-dot '+a.level+'"></span>'+esc(a.headline)+'</h3>'+
-        '<p class="plain">'+esc(a.plain)+'</p>'+steps;
-      fx.appendChild(c);
-    });
+      return '<div class="fix '+a.level+'"><h3><span class="lvl-dot '+a.level+'"></span>'+esc(a.headline)+'</h3>'+
+        '<p class="plain">'+esc(a.plain)+'</p>'+steps+'</div>';
+    }).join(''));
 
     paintChips(); paintNums();
   }
+  // chips are built once and then updated in place, so a value that changes can
+  // announce itself with one soft gold wash — the only thing on the page that
+  // ever calls for a glance
+  var chipEls=null, chipPrev=[];
   function paintChips(){
     var eng = S.sidecar.running===false?['Stopped','bad'] : S.sidecar.ready?['Ready','ok'] : S.sidecar.running?['Starting','warn']:['—','mut'];
     var buds = (function(){ var l=S.buds.left,rr=S.buds.right;
@@ -256,16 +502,48 @@
     var sq = S.signalQuality==null?['—','mut'] : S.signalQuality>=0.7?['Good','ok'] : S.signalQuality>=0.5?['Fair','warn']:['Poor','bad'];
     var beat = [D.BEAT_PLAIN[S.beat]||'—','mut'];
     var chips=[['Signal engine',eng],['Earbuds',buds],['Battery L/R',bat],['Contact',contact],['Signal quality',sq],['Room',beat]];
-    $('chips').innerHTML = chips.map(function(c){
-      return '<div class="chip"><div class="k">'+c[0]+'</div><div class="v '+c[1][1]+'">'+esc(c[1][0])+'</div></div>';
-    }).join('');
+    var host=$('chips');
+    if(!chipEls || chipEls.length!==chips.length){
+      host.innerHTML=''; chipEls=[]; chipPrev=[];
+      chips.forEach(function(c,i){
+        var el=document.createElement('div'); el.className='chip enter'; el.style.setProperty('--i',i);
+        el.innerHTML='<div class="k"></div><div class="v"><span class="vdot"></span><span class="vt"></span></div>';
+        el.querySelector('.k').textContent=c[0];
+        host.appendChild(el);
+        chipEls.push({root:el, v:el.querySelector('.v'), t:el.querySelector('.vt')});
+      });
+    }
+    chips.forEach(function(c,i){
+      var el=chipEls[i], text=String(c[1][0]), lvl=c[1][1], sig=text+'|'+lvl;
+      if(chipPrev[i]===sig) return;
+      var first = chipPrev[i]===undefined;
+      chipPrev[i]=sig;
+      el.t.textContent=text;
+      el.v.className='v '+lvl;
+      el.root.setAttribute('data-lvl',lvl);
+      if(!first) restart(el.root,'bump');
+    });
   }
+  // the raw numbers move ~10× a second: update text in place, never flash them
+  var numEls=null, numPrev=[];
   function paintNums(){
     var nb=live.bands, nm=live.metrics, nf=live.frame;
     var nums=[['δ delta',fx3(nb.delta)],['θ theta',fx3(nb.theta)],['α alpha',fx3(nb.alpha)],['β beta',fx3(nb.beta)],['γ gamma',fx3(nb.gamma)],
       ['β/(α+θ)',fx3(nb.engIndex)],['engagement',fx3(nf.engagementRel)],['state',nf.stateWord||'—'],
       ['focus',fx3(nm.focus)],['stress',fx3(nm.stress)],['drowsiness',fx3(nm.drowsiness)]];
-    $('nums').innerHTML = nums.map(function(n){return '<div class="num"><div class="k">'+n[0]+'</div><div class="v2">'+esc(String(n[1]))+'</div></div>';}).join('');
+    var host=$('nums');
+    if(!numEls || numEls.length!==nums.length){
+      host.innerHTML=''; numEls=[]; numPrev=[];
+      nums.forEach(function(n){
+        var el=document.createElement('div'); el.className='num';
+        el.innerHTML='<div class="k"></div><div class="v2"></div>';
+        el.querySelector('.k').textContent=n[0];
+        host.appendChild(el); numEls.push(el.querySelector('.v2'));
+      });
+    }
+    nums.forEach(function(n,i){
+      var t=String(n[1]); if(numPrev[i]===t) return; numPrev[i]=t; numEls[i].textContent=t;
+    });
   }
   function fx3(x){ return (x==null||isNaN(x))?'—':Number(x).toFixed(3); }
   function esc(s){ return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
@@ -300,28 +578,24 @@
   // ---- operator bud-coaching popup ----------------------------------------
   // A small, quiet card in the corner. It names the side to help with and gives a
   // line to say that never mentions the signal — the guest's experience stays
-  // free of signal talk while the operator still knows what to do.
+  // free of signal talk while the operator still knows what to do. It arrives on
+  // a slow fade-and-rise (see #coach in the stylesheet), never a pop.
   function paintCoach(m){
     var el=$('coach');
     if(!el){
       el=document.createElement('div'); el.id='coach';
-      el.style.cssText='position:fixed;right:18px;bottom:18px;z-index:200;max-width:330px;'
-        +'background:rgba(28,26,22,0.96);border:1px solid rgba(224,166,87,0.5);border-radius:12px;'
-        +'padding:14px 16px;box-shadow:0 10px 34px rgba(0,0,0,0.45);'
-        +'font-family:var(--font-sans),system-ui,sans-serif;color:#F0EEE8;'
-        +'opacity:0;transform:translateY(8px);transition:opacity 260ms ease,transform 260ms ease;';
       document.body.appendChild(el);
     }
-    if(!m || !m.active){ el.style.opacity='0'; el.style.transform='translateY(8px)'; return; }
+    if(!m || !m.active){ el.classList.remove('show'); return; }
     var side = m.side==='left' ? 'LEFT earbud' : m.side==='right' ? 'RIGHT earbud' : 'BOTH earbuds';
     el.innerHTML =
-      '<div style="font-family:var(--font-mono),monospace;font-size:10px;letter-spacing:0.16em;'
-      +'text-transform:uppercase;color:#E0A657;margin-bottom:7px;">Quiet nudge · operator only</div>'
-      +'<div style="font-size:15px;font-weight:600;margin-bottom:6px;">'+esc(side)+'</div>'
-      +'<div style="font-size:13px;line-height:1.5;color:rgba(240,238,232,0.8);">'+esc(m.say||'')+'</div>'
-      +'<div style="font-family:var(--font-mono),monospace;font-size:10px;letter-spacing:0.1em;'
-      +'text-transform:uppercase;color:rgba(240,238,232,0.42);margin-top:9px;">The guest is never shown this</div>';
-    el.style.opacity='1'; el.style.transform='translateY(0)';
+      '<div class="ctag">Quiet nudge · operator only</div>'
+      +'<div class="cside">'+esc(side)+'</div>'
+      +'<div class="csay">'+esc(m.say||'')+'</div>'
+      +'<div class="cfoot">The guest is never shown this</div>';
+    // one frame of settle so the transition runs even on the first appearance
+    void el.offsetWidth;
+    el.classList.add('show');
   }
 
   function schedule(){ var base=Math.min(8000,500*Math.pow(2,Math.min(attempt,4))); attempt++; setTimeout(connect, base+Math.random()*base*0.4); }
@@ -337,6 +611,9 @@
       var payload = btn.dataset.kind? {kind:btn.dataset.kind}:{};
       bus.send({type:'ops/cmd', cmd:btn.dataset.cmd, payload:payload, t:Date.now()});
       pushLog('info','You: '+btn.textContent);
+      // a single soft gold ring: the command left the console
+      restart(btn,'sent');
+      setTimeout(function(){ btn.classList.remove('sent'); }, 720);
     });
   });
 

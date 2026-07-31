@@ -7,15 +7,60 @@
 
   const wrap = (extra) => ({ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', ...extra });
 
-  /* The real orb — the same gold state video the TV runs, so the object the
-     guest meets on the iPad is the object they watch on the wall. Loops
-     continuously and is never cropped (contain). Falls back to the soft glow
-     alone if the asset can't load (e.g. the iPad opened straight off disk). */
-  function Orb({ size = 320 }) {
+  /* The real orb — the same state videos the TV runs, so the object the guest
+     meets on the iPad is the object they watch on the wall. It carries the TV's
+     AURA and drifting motes, and slowly turns through every brain state (one
+     every ~10s) so the guest sees the range of what the room can show before
+     their own session picks one. Falls back to the aura alone if a clip can't
+     load (e.g. the iPad opened straight off disk). */
+  const ORB_STATES = [
+    { src: 'assets/orb/gold.mp4',      tint: '220,202,161' },
+    { src: 'assets/orb/locked-in.mp4', tint: '104,187,220' },
+    { src: 'assets/orb/drifting.mp4',  tint: '220,165,208' },
+    { src: 'assets/orb/depleted.mp4',  tint: '158,159,170' },
+    { src: 'assets/orb/red.mp4',       tint: '230,147,114' },
+  ];
+  const ORB_HOLD_MS = 10000;   // one state every ten seconds
+
+  function Orb({ size = 320, cycle = true }) {
     const [failed, setFailed] = useState(false);
+    const [i, setI] = useState(0);
+    // turn through the states; the crossfade itself is CSS (opacity, 2.4s)
+    useEffect(() => {
+      if (!cycle) return;
+      const t = setInterval(() => setI((n) => (n + 1) % ORB_STATES.length), ORB_HOLD_MS);
+      return () => clearInterval(t);
+    }, [cycle]);
+    const tint = ORB_STATES[i].tint;
+    // motes: a few soft specks drifting off the rim, tinted with the live state
+    const motes = React.useMemo(() => Array.from({ length: 9 }, (_, k) => ({
+      k,
+      a: (k / 9) * Math.PI * 2 + 0.4,
+      d: 11 + (k % 4) * 2.5,          // duration
+      delay: -(k * 1.7),
+      r: 3 + (k % 3),
+    })), []);
+
     return e('div', { style: { position: 'relative', width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
-      e('div', { style: { position: 'absolute', width: size * 1.25, height: size * 1.25, borderRadius: '50%',
-        filter: 'blur(60px)', background: 'radial-gradient(50% 50% at 50% 45%, rgba(221,202,142,0.34), transparent 70%)' } }),
+      // AURA — the same breathing halo the wall carries, tinted to the state
+      e('div', { style: {
+        position: 'absolute', width: size * 1.5, height: size * 1.5, borderRadius: '50%',
+        filter: 'blur(58px)', pointerEvents: 'none',
+        background: `radial-gradient(closest-side, rgba(${tint},0.40), rgba(${tint},0.13) 52%, rgba(${tint},0) 74%)`,
+        transition: 'background 2400ms var(--ease-in-out)',
+        animation: 'orbBreathe 7.5s var(--ease-in-out) infinite'
+      } }),
+      // MOTES — lit vapour drifting off the orb, never fast enough to pull the eye
+      e('div', { style: { position: 'absolute', inset: 0, pointerEvents: 'none' } },
+        motes.map((m) => e('span', { key: m.k, style: {
+          position: 'absolute', left: `${50 + Math.cos(m.a) * 34}%`, top: `${50 + Math.sin(m.a) * 34}%`,
+          width: m.r, height: m.r, borderRadius: '50%',
+          background: `rgba(${tint},0.55)`, filter: 'blur(1.5px)',
+          transition: 'background 2400ms var(--ease-in-out)',
+          '--mx': `${(m.k % 2 ? 1 : -1) * (8 + (m.k % 3) * 7)}px`,
+          animation: `orbMote ${m.d}s ${m.delay}s var(--ease-in-out) infinite`
+        } }))),
+      // the clips themselves, stacked and crossfaded
       failed ? null : e('div', {
         // circular crop + radial mask: the clip is 16:9 with a not-quite-black
         // field, so contain left the orb tiny inside a visible grey rectangle.
@@ -28,12 +73,17 @@
           maskImage: 'radial-gradient(circle, #000 66%, transparent 82%)'
         }
       },
-        e('video', {
-          src: 'assets/orb/gold.mp4', muted: true, loop: true, autoPlay: true, playsInline: true,
-          onError: () => setFailed(true),
-          style: { width: '100%', height: '100%', objectFit: 'cover',
-            transform: 'scale(1.9)', mixBlendMode: 'screen' }
-        }))
+        ORB_STATES.map((st, k) => e('video', {
+          key: st.src,
+          src: st.src, muted: true, loop: true, autoPlay: true, playsInline: true,
+          onError: () => { if (k === 0) setFailed(true); },
+          style: {
+            position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
+            transform: 'scale(1.9)', mixBlendMode: 'screen',
+            opacity: k === i ? 1 : 0,
+            transition: 'opacity 2400ms var(--ease-in-out)'
+          }
+        })))
     );
   }
 
@@ -45,11 +95,11 @@
 
   // the five rhythms, in the room's shared band colours + the plain-word key
   const RHYTHMS = [
-    { gl: 'δ', nm: 'Delta', ds: 'slow activity',        v: 'var(--w-delta)', hz: 6 },
-    { gl: 'θ', nm: 'Theta', ds: 'internal attention', v: 'var(--w-theta)', hz: 10 },
-    { gl: 'α', nm: 'Alpha', ds: 'calm alertness', v: 'var(--w-alpha)', hz: 15 },
-    { gl: 'β', nm: 'Beta',  ds: 'active engagement',  v: 'var(--w-beta)',  hz: 22 },
-    { gl: 'γ', nm: 'Gamma', ds: 'high-frequency activity',   v: 'var(--w-gamma)', hz: 30 },
+    { gl: 'δ', nm: 'Delta', ds: 'slow waves',        v: 'var(--w-delta)', hz: 6 },
+    { gl: 'θ', nm: 'Theta', ds: 'internal thinking', v: 'var(--w-theta)', hz: 10 },
+    { gl: 'α', nm: 'Alpha', ds: 'relaxed alertness', v: 'var(--w-alpha)', hz: 15 },
+    { gl: 'β', nm: 'Beta',  ds: 'focused thinking',  v: 'var(--w-beta)',  hz: 22 },
+    { gl: 'γ', nm: 'Gamma', ds: 'peak processing',   v: 'var(--w-gamma)', hz: 30 },
   ];
   // a little wave glyph whose frequency matches the band it labels
   function WaveGlyph({ color, cycles, w = 76, h = 20 }) {
