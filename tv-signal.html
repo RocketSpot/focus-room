@@ -83,7 +83,7 @@
 
       <div class="head">
         <div class="brand"><span class="mark"></span><span class="label">ZONE — THE FOCUS ROOM</span></div>
-        <div class="live"><span class="pip"></span><span>SIGNAL CHECK · LIVE</span></div>
+        <div class="live"><span class="pip"></span><span>LIVE</span></div>
       </div>
       <div id="simBadge">Simulated data</div>
       <div id="staffBadge">Staff mode · engineering</div>
@@ -94,7 +94,7 @@
       <div class="earLabel" id="labL">L</div><div class="earState" id="stL"></div>
       <div class="earLabel" id="labR">R</div><div class="earState" id="stR"></div>
 
-      <div class="caption" id="caption">Live signal from the earbud · <span class="dim">relative display amplitude · uncalibrated</span></div>
+      <div class="caption" id="caption">Live from your earbuds</div>
       <div id="eng"></div>
     </div>
   </div>
@@ -209,13 +209,15 @@
       }
     }
 
-    // ---- quality → status copy + channel selection ----
+    // ---- quality → channel selection (NO guest-facing signal state) ----
+    // The room NEVER tells a guest the state of their signal. No "clear / received /
+    // limited / poor", no "reseat that side", no "settling", no per-channel reasons —
+    // judging someone's signal at them is not the experience, and the guest can do
+    // nothing useful with it. The heading is a CONSTANT welcome; the waveform speaks
+    // for itself. Quality still arrives and still drives channel selection + the
+    // engineering view + the operator's coaching prompt — it just never reaches the wall.
     var QUAL = null, selL = 'Left-A', selR = 'Right-A', selSwitchL = null, selSwitchR = null;
-    // 'clear' (validated) only appears in simulation until real-hardware thresholds are
-    // approved; real mode caps at 'received'. See clearStateEnabled / qualityThresholdStatus.
-    var STATUS_WORD = { receiving: 'Waiting for signal', received: 'Signal received',
-                        checking: 'Checking signal', clear: 'Signal is clear',
-                        limited: 'Signal limited', poor: 'Adjusting the fit' };
+    var GUEST_WORD = 'This is you', GUEST_SUB = 'live from your earbuds';
     function onQuality(m) {
       QUAL = m;
       var sel = m.selectedConsumerChannels || {};
@@ -225,19 +227,9 @@
       if (sel.switched && sel.switched.right && sel.right && sel.right !== selR) selSwitchR = lastIndex;
       selL = sel.left || selL;
       selR = sel.right || selR;
-      setWord(STATUS_WORD[m.overallStatus] || 'Checking signal');
-      setSub(subFor(m));
-      updateEarStates(m);
+      updateEarStates();
     }
-    function subFor(m) {
-      if (!m) return '';
-      if (m.overallStatus === 'clear') return 'clean signal on both ears';
-      if (m.overallStatus === 'received') return 'both ears delivering · cleanliness thresholds provisional';
-      if (m.overallStatus === 'limited') return 'one ear is not reading cleanly — reseat that side';
-      if (m.overallStatus === 'poor') return 'settle the earbud and hold still';
-      if (m.overallStatus === 'receiving') return 'waiting for a clean read';
-      return 'reading the last few seconds';
-    }
+    // Engineering-only per-channel state — rendered ONLY in staff mode, never for a guest.
     function chanState(ch) {
       if (!QUAL || !QUAL.channels || !QUAL.channels[ch]) return '';
       var q = QUAL.channels[ch];
@@ -246,11 +238,13 @@
       var r = (q.reasons || []).filter(function (x) { return x !== 'stabilising'; });
       return r.length ? r.join(' · ') : 'settling';
     }
-    function updateEarStates(m) {
-      document.getElementById('labL').textContent = 'L' + (selL ? '  ·  ' + selL : '');
-      document.getElementById('labR').textContent = 'R' + (selR ? '  ·  ' + selR : '');
-      document.getElementById('stL').textContent = selL ? chanState(selL) : 'no usable channel';
-      document.getElementById('stR').textContent = selR ? chanState(selR) : 'no usable channel';
+    function updateEarStates() {
+      // Guest: a bare L / R. Staff: the selected channel + its engineering state.
+      var staff = (typeof staffMode !== 'undefined') && staffMode;
+      document.getElementById('labL').textContent = 'L' + (staff && selL ? '  ·  ' + selL : '');
+      document.getElementById('labR').textContent = 'R' + (staff && selR ? '  ·  ' + selR : '');
+      document.getElementById('stL').textContent = staff ? (selL ? chanState(selL) : 'no usable channel') : '';
+      document.getElementById('stR').textContent = staff ? (selR ? chanState(selR) : 'no usable channel') : '';
     }
 
     // ---- big status word (keeps the existing swap animation) ----
@@ -311,7 +305,20 @@
         if (!col) cols[px] = { min: v, max: v, last: v, idx: gi };
         else { if (v < col.min) col.min = v; if (v > col.max) col.max = v; col.last = v; col.idx = gi; }
       }
-      var yOf = function (v) { return Math.max(yTop + 2, Math.min(yBot - 2, yc - v * gain)); };
+      // SOFT LIMIT — never a hard clamp. Clamping pinned every large artifact (a blink,
+      // an electrode step, a bud being touched) flat against the panel edge and drew it
+      // as a FLAT-TOPPED SQUARE — a shape the signal never made. Instead the drawn
+      // offset stays linear (honest 1:1) inside the knee and compresses asymptotically
+      // toward the edge beyond it, so a big excursion TAPERS and keeps its shape rather
+      // than railing. Monotonic, continuous, slope 1 at the knee: no sample is dropped,
+      // nothing is hidden, and the compression only ever affects how far it is drawn.
+      var half = Math.max(1, (yBot - yTop) / 2 - 2), knee = half * 0.68;
+      var room = Math.max(1e-6, half - knee);
+      var yOf = function (v) {
+        var d = v * gain, a = Math.abs(d);
+        if (a > knee) d = (d < 0 ? -1 : 1) * (knee + room * (1 - Math.exp(-(a - knee) / room)));
+        return yc - d;
+      };
       // connect column representatives with straight segments; break on gaps
       ctx.strokeStyle = color; ctx.lineWidth = 2.4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       ctx.beginPath();
@@ -360,20 +367,28 @@
         var ra = selR ? { 'Right-A': 2, 'Right-B': 3 }[selR] : null;
         var ampL = (la != null) ? robustAmp(la, leftIdx) : null;
         var ampR = (ra != null) ? robustAmp(ra, leftIdx) : null;
-        // shared gain policy so L and R amplitudes are directly comparable (same units)
+        // shared gain policy so L and R amplitudes are directly comparable (same units).
+        // robustAmp is ~1 SD of the trace, and ordinary EEG regularly reaches ~3 SD — so
+        // the old CH*0.20 (≈112px for 1 SD in a 123px half-lane) put NORMAL signal at the
+        // panel edge and made every artifact rail into a flat-topped square. CH*0.05 puts
+        // 1 SD at ~28px, so a ~3 SD swing still lands inside the soft knee and only a true
+        // artifact reaches the compressing region. Same data, honestly scaled — it is only
+        // how far the trace is drawn, never which samples are drawn.
         var ampShared = Math.max(ampL || 0, ampR || 0, GAIN_FLOOR);
-        var targetGain = (CH * 0.20) / ampShared;
+        var targetGain = (CH * 0.05) / ampShared;
         if (gainShared == null) gainShared = targetGain;
         else { var rate = targetGain < gainShared ? 0.10 : 0.03; gainShared += (targetGain - gainShared) * rate; } // faster attack (shrink) than release
         if (la != null && ampL != null) drawTrace(la, 0, CW, 20, 270, leftIdx, rightIdx, gainShared, 'var(--c-signal)', selSwitchL);
-        else drawUnavailable(20, 270, 'left ear — no usable channel');
+        else drawUnavailable(20, 270, staffMode ? 'left ear — no usable channel' : '');
         if (ra != null && ampR != null) drawTrace(ra, 0, CW, 290, 540, leftIdx, rightIdx, gainShared, '#CBB26A', selSwitchR);
-        else drawUnavailable(290, 540, 'right ear — no usable channel');
+        else drawUnavailable(290, 540, staffMode ? 'right ear — no usable channel' : '');
       } else {
         // --- engineering: all four transmitted channels, same time axis ---
         var order = [0, 1, 2, 3], amps = [];
         for (var k = 0; k < 4; k++) amps.push(robustAmp(k, leftIdx) || GAIN_FLOOR);
-        var gEng = (CH * 0.11) / Math.max.apply(null, amps.concat([GAIN_FLOOR]));
+        // same scaling logic as the consumer lanes, for the shorter engineering lane
+        // (half ≈ 57px): 1 SD at ~13px keeps a ~3 SD swing inside the soft knee.
+        var gEng = (CH * 0.024) / Math.max.apply(null, amps.concat([GAIN_FLOOR]));
         for (var q = 0; q < 4; q++) {
           var yt = 10 + q * 138, yb = yt + 118;
           var anyPresent = false;
@@ -444,7 +459,7 @@
 
     // ---- WebSocket (NON-raw surface state only) ----
     function connectLive() {
-      if (!location.host) { setWord('Waiting for signal'); return; }
+      if (!location.host) { setWord(GUEST_WORD); setSub(GUEST_SUB); return; }
       var ws; try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'); } catch (e) { return; }
       ws.onopen = function () {
         // This page's own WebSocket carries only NON-raw surface state (session/state). Raw EEG does
@@ -468,7 +483,7 @@
       lastSeq = 0; droppedDisplayBatches = 0; selSwitchL = null; selSwitchR = null;
       for (var i = 0; i < 4; i++) { rawRing[i].fill(0); filtRing[i].fill(0); presentRing[i].fill(0); }
       cf = [makeChannelFilter(), makeChannelFilter(), makeChannelFilter(), makeChannelFilter()];
-      setWord('Waiting for signal'); setSub(''); document.getElementById('stL').textContent = ''; document.getElementById('stR').textContent = '';
+      setWord(GUEST_WORD); setSub(GUEST_SUB); document.getElementById('stL').textContent = ''; document.getElementById('stR').textContent = '';
     }
 
     // ============================================================
@@ -515,6 +530,12 @@
       if (on === staffMode) return;
       staffMode = !!on;
       document.getElementById('staffBadge').classList.toggle('on', staffMode);
+      // the guest-facing surface carries NO signal state: entering staff mode reveals the
+      // engineering caption + per-channel labels, leaving it takes them away again.
+      try {
+        document.getElementById('caption').innerHTML = captionFor(staffMode);
+        updateEarStates();
+      } catch (e) {}
       if (!staffMode) {
         // leaving staff mode: clear the engineering view + its rendered buffer and
         // return to the consumer view. (The shared signal rings keep feeding the
@@ -558,7 +579,13 @@
       document.getElementById('glowB').style.transform = 'translate(' + (Math.cos(t / 13) * 18).toFixed(1) + 'px,' + (Math.sin(t / 10) * 12).toFixed(1) + 'px)';
       requestAnimationFrame(idleGlow); })();
 
-    setWord('Waiting for signal');
+    setWord(GUEST_WORD); setSub(GUEST_SUB);
+    // Staff caption carries the engineering wording (relative display amplitude ·
+    // uncalibrated); the guest just sees where it comes from, never a signal verdict.
+    function captionFor(staff) {
+      return staff ? 'Live signal from the earbud · <span class="dim">relative display amplitude · uncalibrated</span>'
+                   : 'Live from your earbuds';
+    }
     connectLive();
 
     // Raw EEG arrives via the launcher's authenticated IPC relay (finding #5), NOT this page's
