@@ -11,6 +11,35 @@
 // ============================================================
 const path = require('path');
 const os = require('os');
+const fs = require('fs');
+
+// --- local secrets (.env) -------------------------------------------------
+// Reads a gitignored .env next to the project root into process.env, so keys
+// like POSTMARK_API_KEY never live in source or in a committed config file.
+// Deliberately dependency-free: the room is local-first and offline, and this
+// is ~15 lines — not worth a runtime package (dotenv is only ever present here
+// as a transitive dev dependency, so requiring it would break a clean install).
+// A REAL environment variable always wins, so a launcher or CI can override.
+// Never logs a value: a missing or malformed file is silently skipped.
+(function loadDotEnv() {
+  try {
+    const envPath = path.join(path.resolve(__dirname, '..'), '.env');
+    if (!fs.existsSync(envPath)) return;
+    for (const raw of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#')) continue;
+      const eq = line.indexOf('=');
+      if (eq < 1) continue;
+      const key = line.slice(0, eq).trim();
+      if (key in process.env) continue;                  // the real environment wins
+      let val = line.slice(eq + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      process.env[key] = val;
+    }
+  } catch (e) { /* a bad .env must never stop the room from starting */ }
+})();
 
 // Electron is optional: present in the room build, absent on the web host.
 let app = null;
