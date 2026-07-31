@@ -4,118 +4,189 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
 <title>Your Focus Room read</title>
-<link rel="stylesheet" href="assets/fonts/fonts.css">
 </head>
-<body style="margin:0; padding:0; background:#E7E5DF; -webkit-text-size-adjust:100%;">
+<!-- ============================================================
+     THE REPORT EMAIL — the room, in an inbox.
+     ------------------------------------------------------------
+     Deliberately the SAME object the guest just sat in front of: the room's
+     black field (#060605), the flow gold (#DDCA8E), the display face for the
+     archetype, IBM Plex Mono micro-labels at wide tracking, and the reveal's
+     own "READ 01 / 04" structure. The notification read keeps the amber the
+     room reserves for that one moment.
+
+     EMAIL-CLIENT DISCIPLINE (why this reads like 2004 HTML):
+     • tables + inline styles only — Gmail strips <style>, Outlook ignores flex
+     • no web fonts: PP Neue Montreal cannot load in an inbox, so the display
+       stack falls back to Space Grotesk / Helvetica Neue and keeps the tight
+       negative tracking that carries the look
+     • every colour is explicit, and color-scheme is declared, so dark-mode
+       clients don't re-invert a design that is already dark
+     • nothing load-bearing is a gradient or a shadow: Outlook degrades to flat
+       panels rather than white boxes
+     • bgcolor attributes sit alongside CSS for the oldest clients
+
+     TEMPLATE: filled by app/outputs.js. Slots: {{archetype}} {{caption}} {{date}}
+     {{focus_line_svg}} {{read_1..4}} {{read_3_said}} {{next_step}} {{cta_label}}
+     {{cta_url}}. {{focus_line_svg}} becomes <img src="cid:focusline"> at send
+     (Gmail/Outlook strip SVG). All copy is routed through the honesty layer.
+     ============================================================ -->
+<body style="margin:0; padding:0; background:#060605; -webkit-text-size-adjust:100%;">
   <!-- preheader (hidden) -->
-  <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:#E7E5DF; font-size:1px; line-height:1px;">
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:#060605; font-size:1px; line-height:1px;">
     Your focus, in one reading — you read as a {{archetype}} today. {{date}}
   </div>
 
-  <!-- TEMPLATE: filled by app/outputs.js. Slots: {{archetype}} {{caption}} {{date}}
-       {{focus_line_svg}} {{read_1..4}} {{read_3_said}} {{next_step}} {{cta_label}}
-       {{cta_url}}. {{focus_line_svg}} is replaced with an <img src="cid:focusline">
-       at send (Gmail/Outlook strip SVG). All copy is routed through the honesty
-       layer before it lands here. -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#060605" style="background:#060605;">
+    <tr><td align="center" style="padding:32px 14px 44px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#141414" style="width:600px; max-width:600px; background:#141414; border-radius:20px; overflow:hidden;">
 
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#E7E5DF;">
-    <tr><td align="center" style="padding:36px 16px;">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px; max-width:600px; background:#F3F2EE; border-radius:14px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.10);">
-
-        <!-- header strip -->
-        <tr><td style="background:#141414; padding:22px 36px;">
+        <!-- header strip — the room's brand line -->
+        <tr><td style="padding:24px 34px 22px; border-bottom:1px solid rgba(214,212,201,0.10);">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:12px; letter-spacing:2.2px; color:#D6D4C9;">
+            <td style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:11px; letter-spacing:2.4px; color:#D6D4C9; text-transform:uppercase;">
               <span style="display:inline-block; width:9px; height:9px; background:#DDCA8E; border-radius:50%; vertical-align:middle;">&nbsp;</span>
-              <span style="vertical-align:middle; padding-left:9px;">ZONE</span>
+              <span style="vertical-align:middle; padding-left:10px;">Zone</span>
+              <span style="vertical-align:middle; padding-left:8px; color:#7A7873;">— The Focus Room</span>
             </td>
-            <td align="right" style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:11px; letter-spacing:2.4px; color:#7A7873;">THE FOCUS ROOM</td>
+            <td align="right" style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2.2px; color:#7A7873; text-transform:uppercase;">{{date}}</td>
           </tr></table>
         </td></tr>
 
-        <!-- hero -->
-        <tr><td style="padding:44px 36px 8px;">
-          <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:11px; letter-spacing:3px; color:#7A7873; text-transform:uppercase;">Your session · {{date}}</div>
-          <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-size:16px; color:#7A7873; margin-top:22px;">You read as a</div>
-          <div style="font-family:'PP Neue Montreal','Space Grotesk','Helvetica Neue',Arial,sans-serif; font-size:52px; line-height:1; font-weight:500; color:#141414; letter-spacing:-1.5px; margin-top:6px;">{{archetype}}</div>
-          <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:18px; line-height:1.5; color:#1E1D1C; margin-top:20px; max-width:480px;">
+        <!-- hero — the archetype, the way the wall says it -->
+        <tr><td style="padding:46px 34px 6px;">
+          <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:3px; color:#7A7873; text-transform:uppercase;">Your session</div>
+          <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-size:15px; color:#7A7873; margin-top:26px;">You read as a</div>
+          <div style="font-family:'PP Neue Montreal','Space Grotesk','Helvetica Neue',Arial,sans-serif; font-size:54px; line-height:1.02; font-weight:500; color:#F3F2EE; letter-spacing:-1.6px; margin-top:8px;">{{archetype}}</div>
+          <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:17px; line-height:1.55; color:#D6D4C9; margin-top:20px; max-width:470px;">
             {{caption}}
           </div>
         </td></tr>
 
-        <!-- the annotated focus line (rasterized to PNG at send) -->
-        <tr><td style="padding:26px 36px 6px;">
-          <div style="background:#FFFFFF; border-radius:16px; padding:22px 16px 14px;">
-            {{focus_line_svg}}
-          </div>
+        <!-- the annotated focus line, on the room's darker field -->
+        <tr><td style="padding:28px 34px 4px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#0B0B0A" style="background:#0B0B0A; border:1px solid rgba(214,212,201,0.10); border-radius:16px;">
+            <tr><td style="padding:20px 16px 14px;">
+              {{focus_line_svg}}
+              <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:9px; letter-spacing:2px; color:#7A7873; text-transform:uppercase; padding:10px 4px 0;">Your reading, start to finish</div>
+            </td></tr>
+          </table>
         </td></tr>
 
-        <!-- the four reads -->
-        <tr><td style="padding:26px 36px 8px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:22px;"><tr>
-            <td width="34" valign="top" style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:bold; font-size:13px; color:#141414; padding-top:2px;">1</td>
-            <td valign="top">
-              <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2px; color:#7A7873; text-transform:uppercase;">How you settled</div>
-              <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:17px; line-height:1.5; color:#1E1D1C; margin-top:7px;">{{read_1}}</div>
-            </td>
-          </tr></table>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:22px;"><tr>
-            <td width="34" valign="top" style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:bold; font-size:13px; color:#141414; padding-top:2px;">2</td>
-            <td valign="top">
-              <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2px; color:#7A7873; text-transform:uppercase;">Your attention rhythm</div>
-              <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:17px; line-height:1.5; color:#1E1D1C; margin-top:7px;">{{read_2}}</div>
-            </td>
-          </tr></table>
-          <!-- read 3 — the headline -->
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:22px; background:#FBF3EC; border-radius:14px;"><tr>
-            <td width="44" valign="top" style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:bold; font-size:13px; color:#FF5714; padding:18px 0 18px 18px;">3</td>
-            <td valign="top" style="padding:18px 18px 18px 0;">
-              <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2px; color:#FF5714; text-transform:uppercase;">The notification · the headline</div>
-              <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:400; font-size:17px; line-height:1.5; color:#141414; margin-top:7px;">{{read_3}}</div>
-              <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-style:italic; font-size:15px; line-height:1.45; color:#7A7873; margin-top:10px;">{{read_3_said}}</div>
-            </td>
-          </tr></table>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:6px;"><tr>
-            <td width="34" valign="top" style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:bold; font-size:13px; color:#141414; padding-top:2px;">4</td>
-            <td valign="top">
-              <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2px; color:#7A7873; text-transform:uppercase;">Your strongest stretch</div>
-              <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:17px; line-height:1.5; color:#1E1D1C; margin-top:7px;">{{read_4}}</div>
-            </td>
-          </tr></table>
+        <!-- ---------------- the four reads ---------------- -->
+        <tr><td style="padding:34px 34px 0;">
+          <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2.6px; color:#7A7873; text-transform:uppercase; padding-bottom:8px; border-bottom:1px solid rgba(214,212,201,0.10);">The four reads</div>
+        </td></tr>
+
+        <!-- 01 -->
+        <tr><td style="padding:26px 34px 0;">
+          <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2.4px; color:#DDCA8E; text-transform:uppercase;">Read 01 / 04</div>
+          <div style="font-family:'PP Neue Montreal','Space Grotesk','Helvetica Neue',Arial,sans-serif; font-size:21px; font-weight:500; letter-spacing:-0.3px; color:#F3F2EE; margin-top:8px;">How you settled</div>
+          <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:16px; line-height:1.6; color:#D6D4C9; margin-top:9px;">{{read_1}}</div>
+        </td></tr>
+
+        <!-- 02 -->
+        <tr><td style="padding:26px 34px 0;">
+          <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2.4px; color:#DDCA8E; text-transform:uppercase;">Read 02 / 04</div>
+          <div style="font-family:'PP Neue Montreal','Space Grotesk','Helvetica Neue',Arial,sans-serif; font-size:21px; font-weight:500; letter-spacing:-0.3px; color:#F3F2EE; margin-top:8px;">Your attention rhythm</div>
+          <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:16px; line-height:1.6; color:#D6D4C9; margin-top:9px;">{{read_2}}</div>
+        </td></tr>
+
+        <!-- 03 — the notification. Amber is the room's, and only the room's, for this moment. -->
+        <tr><td style="padding:26px 34px 0;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#1B1712" style="background:#1B1712; border:1px solid rgba(224,166,87,0.34); border-radius:16px;">
+            <tr><td style="padding:22px 22px 24px;">
+              <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2.4px; color:#E0A657; text-transform:uppercase;">
+                <span style="display:inline-block; width:7px; height:7px; background:#E0A657; border-radius:50%; vertical-align:middle;">&nbsp;</span>
+                <span style="vertical-align:middle; padding-left:9px;">Read 03 / 04 · The notification</span>
+              </div>
+              <div style="font-family:'PP Neue Montreal','Space Grotesk','Helvetica Neue',Arial,sans-serif; font-size:21px; font-weight:500; letter-spacing:-0.3px; color:#F3F2EE; margin-top:10px;">The one interruption</div>
+              <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:400; font-size:16px; line-height:1.6; color:#F3F2EE; margin-top:9px;">{{read_3}}</div>
+              <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-style:italic; font-size:15px; line-height:1.5; color:#7A7873; margin-top:12px;">{{read_3_said}}</div>
+            </td></tr>
+          </table>
+        </td></tr>
+
+        <!-- 04 -->
+        <tr><td style="padding:26px 34px 0;">
+          <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2.4px; color:#DDCA8E; text-transform:uppercase;">Read 04 / 04</div>
+          <div style="font-family:'PP Neue Montreal','Space Grotesk','Helvetica Neue',Arial,sans-serif; font-size:21px; font-weight:500; letter-spacing:-0.3px; color:#F3F2EE; margin-top:8px;">Your strongest stretch</div>
+          <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:16px; line-height:1.6; color:#D6D4C9; margin-top:9px;">{{read_4}}</div>
+        </td></tr>
+
+        <!-- the five rhythms — the same key the iPad and the wall show -->
+        <tr><td style="padding:34px 34px 0;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#0B0B0A" style="background:#0B0B0A; border:1px solid rgba(214,212,201,0.10); border-radius:16px;">
+            <tr><td style="padding:20px 22px 6px;">
+              <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2.6px; color:#7A7873; text-transform:uppercase;">The five rhythms</div>
+            </td></tr>
+            <tr><td style="padding:2px 22px 20px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="32" style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:17px; color:#9D93D6; padding:7px 0;">&#948;</td>
+                  <td width="84" style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-size:14px; color:#F3F2EE; padding:7px 0;">Delta</td>
+                  <td style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:14px; color:#7A7873; padding:7px 0;">Slow waves</td>
+                </tr>
+                <tr>
+                  <td style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:17px; color:#4FA69A; padding:7px 0;">&#952;</td>
+                  <td style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-size:14px; color:#F3F2EE; padding:7px 0;">Theta</td>
+                  <td style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:14px; color:#7A7873; padding:7px 0;">Internal thinking</td>
+                </tr>
+                <tr>
+                  <td style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:17px; color:#8CB16A; padding:7px 0;">&#945;</td>
+                  <td style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-size:14px; color:#F3F2EE; padding:7px 0;">Alpha</td>
+                  <td style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:14px; color:#7A7873; padding:7px 0;">Relaxed alertness</td>
+                </tr>
+                <tr>
+                  <td style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:17px; color:#DDCA8E; padding:7px 0;">&#946;</td>
+                  <td style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-size:14px; color:#F3F2EE; padding:7px 0;">Beta</td>
+                  <td style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:14px; color:#7A7873; padding:7px 0;">Focused thinking</td>
+                </tr>
+                <tr>
+                  <td style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:17px; color:#E0A657; padding:7px 0;">&#947;</td>
+                  <td style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-size:14px; color:#F3F2EE; padding:7px 0;">Gamma</td>
+                  <td style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:14px; color:#7A7873; padding:7px 0;">Peak processing</td>
+                </tr>
+              </table>
+            </td></tr>
+          </table>
         </td></tr>
 
         <!-- honest note -->
-        <tr><td style="padding:18px 36px 8px;">
-          <div style="border-top:1px solid rgba(20,20,20,0.10); padding-top:24px; font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:16px; line-height:1.55; color:#42413E;">
+        <tr><td style="padding:32px 34px 0;">
+          <div style="border-top:1px solid rgba(214,212,201,0.10); padding-top:26px; font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:16px; line-height:1.6; color:#D6D4C9;">
             One session is a snapshot. The real pattern — how you settle, your rhythm, and the exact moment your focus starts to break — only shows up over many. That is precisely what the earbud does, every workday.
           </div>
         </td></tr>
 
         <!-- matched next step -->
-        <tr><td style="padding:24px 36px 40px;">
-          <div style="background:#141414; border-radius:18px; padding:30px 30px 32px;">
-            <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2.4px; color:#7A7873; text-transform:uppercase;">Where this goes</div>
-            <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:19px; line-height:1.5; color:#F3F2EE; margin-top:12px; max-width:460px;">
-              {{next_step}}
-            </div>
-            <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;"><tr><td style="background:#F3F2EE; border-radius:9999px;">
-              <a href="{{cta_url}}" style="display:inline-block; font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:600; font-size:16px; color:#141414; text-decoration:none; padding:16px 30px;">{{cta_label}}</a>
-            </td></tr></table>
-          </div>
+        <tr><td style="padding:28px 34px 40px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#1C1B18" style="background:#1C1B18; border:1px solid rgba(221,202,142,0.20); border-radius:18px;">
+            <tr><td style="padding:28px 28px 30px;">
+              <div style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2.6px; color:#DDCA8E; text-transform:uppercase;">Where this goes</div>
+              <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:18px; line-height:1.55; color:#F3F2EE; margin-top:13px; max-width:450px;">
+                {{next_step}}
+              </div>
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;"><tr><td bgcolor="#DDCA8E" style="background:#DDCA8E; border-radius:9999px;">
+                <a href="{{cta_url}}" style="display:inline-block; font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:600; font-size:15px; color:#141414; text-decoration:none; padding:15px 30px;">{{cta_label}}</a>
+              </td></tr></table>
+            </td></tr>
+          </table>
         </td></tr>
 
         <!-- footer -->
-        <tr><td style="background:#EDEBE5; padding:26px 36px;">
+        <tr><td bgcolor="#0B0B0A" style="background:#0B0B0A; padding:26px 34px 30px; border-top:1px solid rgba(214,212,201,0.10);">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:11px; letter-spacing:1.6px; color:#7A7873;">
-              <span style="display:inline-block; width:8px; height:8px; background:#141414; border-radius:50%; vertical-align:middle;">&nbsp;</span>
-              <span style="vertical-align:middle; padding-left:8px;">ZONE · THE FOCUS ROOM</span>
+            <td style="font-family:'IBM Plex Mono','Courier New',monospace; font-size:10px; letter-spacing:2px; color:#7A7873; text-transform:uppercase;">
+              <span style="display:inline-block; width:7px; height:7px; background:#DDCA8E; border-radius:50%; vertical-align:middle;">&nbsp;</span>
+              <span style="vertical-align:middle; padding-left:9px;">Zone · The Focus Room</span>
             </td>
-            <td align="right" style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-size:12px; color:#A6A49C;">Sent from the room</td>
+            <td align="right" style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-size:12px; color:#5E5C58;">Sent from the room</td>
           </tr></table>
-          <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:1.5; color:#A6A49C; margin-top:14px;">
-            This read is relative to your own session today — not a clinical score. Reply to this note if you’d like to come back.
+          <div style="font-family:'Inter','Helvetica Neue',Arial,sans-serif; font-weight:300; font-size:12px; line-height:1.6; color:#5E5C58; margin-top:15px;">
+            This read is relative to your own session today — not a clinical score, and never compared to anyone else. Reply to this note if you’d like to come back.
           </div>
         </td></tr>
 
