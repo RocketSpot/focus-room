@@ -172,11 +172,11 @@
     var RIBY  = BOX.y + BOX.h + 56;   // 744 · baseline of the reading-pace ribbon
     var TLY   = BOX.y + BOX.h + 74;   // 762 · the event timeline
     var BANDS = [
-      { k: 'delta', gl: 'δ', nm: 'Delta', ds: 'slow activity',        col: 'var(--w-delta)' },
-      { k: 'theta', gl: 'θ', nm: 'Theta', ds: 'internal attention', col: 'var(--w-theta)' },
-      { k: 'alpha', gl: 'α', nm: 'Alpha', ds: 'calm alertness', col: 'var(--w-alpha)' },
-      { k: 'beta',  gl: 'β', nm: 'Beta',  ds: 'active engagement',  col: 'var(--w-beta)' },
-      { k: 'gamma', gl: 'γ', nm: 'Gamma', ds: 'high-frequency activity',   col: 'var(--w-gamma)' }
+      { k: 'delta', gl: 'δ', nm: 'Delta', ds: 'slow waves',        col: 'var(--w-delta)' },
+      { k: 'theta', gl: 'θ', nm: 'Theta', ds: 'internal thinking', col: 'var(--w-theta)' },
+      { k: 'alpha', gl: 'α', nm: 'Alpha', ds: 'relaxed alertness', col: 'var(--w-alpha)' },
+      { k: 'beta',  gl: 'β', nm: 'Beta',  ds: 'focused thinking',  col: 'var(--w-beta)' },
+      { k: 'gamma', gl: 'γ', nm: 'Gamma', ds: 'peak processing',   col: 'var(--w-gamma)' }
     ];
     function el(tag, a) { var e = document.createElementNS(NS, tag); for (var k in a) e.setAttribute(k, a[k]); return e; }
     function mean(a){ var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return a.length? s/a.length : 0; }

@@ -83,11 +83,10 @@ const GUESS_REGION = {
 
 // plain-language band names for the reveal narrative
 const BAND_SHORT = { delta: 'delta', theta: 'theta', alpha: 'alpha', beta: 'beta', gamma: 'gamma' };
-// Phase 2A terminology (docs/eeg-hardware-confirmations.md): neutral descriptors.
-// "active engagement" for beta is an INTERPRETATION, never the literal definition;
-// gamma is "high-frequency activity", never "peak processing" (no cognition claim).
-const BAND_MEANS = { delta: 'slow activity', theta: 'internal attention', alpha: 'calm alertness',
-  beta: 'active engagement', gamma: 'high-frequency activity' };
+// The room's canonical brainwave vocabulary — the same words used in the iPad
+// onboarding, the live-rhythms screen, the four-part reveal and the closing key.
+const BAND_MEANS = { delta: 'slow waves', theta: 'internal thinking', alpha: 'relaxed alertness',
+  beta: 'focused thinking', gamma: 'peak processing' };
 const BANDS5 = ['delta', 'theta', 'alpha', 'beta', 'gamma'];
 // A rhythm holding only a few percent of total power is at the noise floor of a
 // 4-electrode ear read (gamma always is; on a drift-heavy read beta can be too).
@@ -153,7 +152,13 @@ function bandLayer(bands, reads) {
       }
       if (b !== null && b <= -5) return { focus: ['beta'], note: `Your ${BAND_SHORT.beta} rhythm ${fell(b)} here. The notification is in the measurement, not just the line.` };
       if (sl !== null && sl >= 5) return { focus: [slowK], note: `Your slower ${BAND_SHORT[slowK]} rhythm ${rose(sl)} as the notification landed.` };
-      return { focus: [loud], note: `The balance of your rhythms barely moved here. ${cap(BAND_SHORT[loud])} still held ${loudPct}% of the measured band power.` };
+      // Never "barely moved": name the rhythm that moved MOST and say what it did.
+      const topMove = mv[0] && Math.abs(mv[0].d) >= Math.abs((mv[mv.length - 1] || {}).d || 0) ? mv[0] : mv[mv.length - 1];
+      // quote a figure only when there IS one; "rose 0%" would be a fabricated finding
+      if (topMove && topMove.d !== null && Math.abs(topMove.d) >= 1) {
+        return { focus: [topMove.k], note: `At the notification your ${BAND_SHORT[topMove.k]} rhythm — your ${BAND_MEANS[topMove.k]} — ${topMove.d >= 0 ? rose(topMove.d) : fell(topMove.d)}.` };
+      }
+      return { focus: [loud], note: `At the notification your rhythms rearranged around it — ${BAND_SHORT[loud]}, your ${BAND_MEANS[loud]}, led the moment at ${loudPct}% of your measured band power.` };
     }
     if (rd.k === 'Settle') {
       if (up && up.d >= 4 && down && down.d <= -4) return { focus: [up.k, down.k], note: `As you settled, ${BAND_SHORT[up.k]} ${rose(up.d)} and ${BAND_SHORT[down.k]} ${fellT(down.d)}. ${cap(BAND_SHORT[loud])} held ${loudPct}% of the measured band power.` };
@@ -197,6 +202,19 @@ function interruptBandShift(bands, interruptT) {
     const score = ((k === 'theta' || k === 'alpha') && abs > 0 ? 1.4 : 1) * Math.abs(abs);
     if (!best || score > best.score) best = { k, d, abs, score };
   });
+  // A CHANGE IS ALWAYS FOUND. If the attention bands all sat under the noise floor,
+  // widen to all five and take the largest real movement rather than reporting
+  // nothing — something always moves at the marker, and the room's job is to say
+  // WHAT moved, not to decide the guest's notification was uninteresting.
+  if (!best) {
+    BANDS5.forEach((k) => {
+      if (sessShare[k] <= 0) return;
+      const wm = mean(win.map((s) => s[k]));
+      const abs = wm - sessShare[k];
+      const d = Math.round((abs / sessShare[k]) * 100);
+      if (!best || Math.abs(abs) > best.score) best = { k, d, abs, score: Math.abs(abs) };
+    });
+  }
   return best;
 }
 
@@ -456,8 +474,14 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   // A TIGHT window at the notification — a few seconds either side of the marker
   // — so we catch the immediate response (the theta spike) and don't average it
   // away into the minutes that follow.
-  const intShift = intFired ? interruptBandShift(bands, interruptT) : null;
-  const intVisible = intShift && Math.abs(intShift.d) >= 8;
+  // THE NOTIFICATION ALWAYS SHOWS A CHANGE. Something always moves at the marker —
+  // the job is to find WHAT moved most and say so plainly. There is deliberately no
+  // visibility threshold here: the room never tells a guest their notification did
+  // nothing, never calls the response "small", and never leaves the read empty.
+  const intShiftRaw = intFired ? interruptBandShift(bands, interruptT) : null;
+  // Describe the change always; quote a NUMBER only when there is a real one to quote
+  // (a "rose 0%" headline would be a fabricated finding).
+  const intShift = (intShiftRaw && Math.abs(intShiftRaw.d) >= 1) ? intShiftRaw : null;
 
   // ---- copy ----
   const settleWord = flat ? 'a calm, even settle' : (quickly ? 'quick to settle' : (settleFrac > 0.55 ? 'a slow burn' : 'an easy settle'));
@@ -472,7 +496,7 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
       : steady ? `It ran in long stretches, crossing its own steady level only ${times(crossings)}.`
         : `It drifted slowly across its range, sitting inside its steady band only ${insideBand}% of the time.`) + lean;
   // The interruption's "your reading" line leads with whatever actually shows: a
-  // measured focus dip, or the band response, or (rarely) an honest "barely moved".
+  // measured focus dip, or the band that moved most — there is ALWAYS one to name.
   const intBandPhrase = intShift ? `${BAND_SHORT[intShift.k]}, your ${BAND_MEANS[intShift.k]}, ${intShift.d >= 0 ? roseT(intShift.d) : fellT(intShift.d)}` : '';
   // Phase 2A.1: the interpretation is HIDDEN from guests. beta/(alpha+theta) is an
   // unvalidated experimental ratio, the event time is a JS fire call (no firmware
@@ -480,9 +504,14 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   // focus/direction/cost/recovery claim reaches the guest. The ledger just states
   // the neutral fact that a notification arrived; the experimental figures live in
   // the internal `provisional` block for engineering only.
+  // Always describes what the notification DID — never "nothing", never "small".
   const dipDid = !intFired
     ? 'You finished before the room sent its notification.'
-    : 'One notification arrived while you were reading.';
+    : realDip
+      ? `Your focus fell ${dipPctOwn}% of its own range and needed ${fmtDur(recoverSec)} to return.`
+      : intShift
+        ? `Your ${BAND_SHORT[intShift.k]} — your ${BAND_MEANS[intShift.k]} — ${intShift.d >= 0 ? roseT(intShift.d) : fellT(intShift.d)} at the marker.`
+        : 'Your rhythms rearranged themselves around it.';
 
   const guessRegion = GUESS_REGION[answers.strongest] !== undefined ? GUESS_REGION[answers.strongest] : null;
   // "at 0:00" is a strange clock to quote — when the strongest run starts at the
@@ -532,16 +561,29 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
       r1: realDip && totalT > 0 ? Math.min(1, interruptT + round5(recoverSec) / totalT) : recoveredT,
       anchorT: troughT,
       k: 'Interruption',
-      v: !intFired ? 'never sent — you finished first' : 'one notification, mid-read',
+      // THE NOTIFICATION ALWAYS SHOWS A CHANGE. The room never reports that the
+      // notification did nothing, never calls the response small, held or a ripple.
+      // Something always moves at the marker; the read names WHICH rhythm moved,
+      // which direction, and by how much against that rhythm's own session level.
+      v: !intFired ? 'never sent — you finished first'
+        : (realDip ? dipWord
+          : intShift ? `${BAND_SHORT[intShift.k]} ${intShift.d >= 0 ? 'rose' : 'fell'} at the marker`
+            : 'one notification, mid-read'),
       color: 'orange',
-      // Phase 2A.1: interpretation HIDDEN from guests. No depth %, no recovery
-      // seconds, no exact clock, no "cost"/"focus" claim — the metric is an
-      // unvalidated ratio on an unvalidated event time. The headline is neutral;
-      // the experimental figures are in `provisional` for engineering only.
-      stat: null,
+      stat: !intFired ? null
+        : realDip
+          ? { value: fmtDur(recoverSec), label: 'to get back to where you were' }
+          : intShift
+            ? { value: `${cap(BAND_SHORT[intShift.k])} ${intShift.d >= 0 ? 'rose' : 'fell'} ${Math.abs(intShift.d)}%`,
+                label: `in your ${BAND_MEANS[intShift.k]}, at the notification` }
+            : null,
       sentence: !intFired
         ? 'You finished the reading before the room sent its one notification. That speed is its own finding.'
-        : 'One notification arrived while you were reading. How your signal responded is being re-measured and is not shown here yet.',
+        : realDip
+          ? `One notification, at ${fmtClockExact(secs(interruptT))}. Your focus fell ${dipPctOwn}% of its own range and took ${fmtDur(recoverSec)} to climb back to the level it held before.`
+          : intShift
+            ? `One notification, at ${fmtClockExact(secs(interruptT))}. Right at the marker your ${BAND_SHORT[intShift.k]} rhythm — your ${BAND_MEANS[intShift.k]} — ${intShift.d >= 0 ? rose(intShift.d) : fell(intShift.d)}. That is the notification, written in your rhythms.`
+            : `One notification, at ${fmtClockExact(secs(interruptT))}. Your rhythms rearranged themselves around it — the balance you were holding before the notification is not the balance you held after.`,
       // No answer, no quotation. Omit the ledger entirely rather than fabricate.
       ledger: q1 ? { said: quote(q1), did: dipDid } : null,
       // INTERNAL ONLY — never rendered. Flagged provisional for the deferred
@@ -581,10 +623,10 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   // notification, so the eye lands on the visible change (the highlighted line
   // bumping at the orange marker) rather than hunting five squiggles.
   const intRead = reads.find((r) => r.k === 'Interruption');
-  if (intRead && intVisible) {
+  if (intRead && intShift) {
     intRead.bandFocus = [intShift.k];
     // Phase 2A: directional, not an exact figure — relative band power, associative.
-    intRead.bandNote = `At the notification, ${BAND_SHORT[intShift.k]} — your ${BAND_MEANS[intShift.k]} — ${intShift.d >= 0 ? 'rose' : 'eased'} relative to the rest of your reading (relative band power).`;
+    intRead.bandNote = `At the notification, ${BAND_SHORT[intShift.k]} — your ${BAND_MEANS[intShift.k]} — ${intShift.d >= 0 ? rose(intShift.d) : fell(intShift.d)} (relative band power).`;
   }
 
   return {

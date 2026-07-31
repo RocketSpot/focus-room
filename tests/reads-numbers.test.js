@@ -86,12 +86,13 @@ const allText = (r) => r.reads.map((x) =>
 
 console.log('\n-- reveal numbers: the honesty guards --');
 
-ok('a real dip keeps recovery INTERNAL + provisional (Phase 2A safety patch)', () => {
+ok('a real dip is SHOWN with its recovery time (the notification always shows a change)', () => {
   const r = run(dippy());
   assert.strictEqual(r.stats.realDip, true, 'expected a measurable dip');
   assert.ok(r.stats.recoverSec > 0, 'recoverSec still computed internally');
-  // guest headline must NOT show an exact recovery time any more
-  assert.strictEqual(r.reads[2].stat, null, 'interruption interpretation is HIDDEN from guests (no stat)');
+  // the notification ALWAYS shows a change — a real dip reports its recovery time
+  assert.ok(r.reads[2].stat && r.reads[2].stat.value, 'interruption must carry a measured figure');
+  assert.ok(/sec|min/.test(r.reads[2].stat.value), 'a real dip shows the recovery time: ' + r.reads[2].stat.value);
   // the exact figure is retained internally, flagged provisional/not-validated
   const p = r.reads[2].provisional;
   assert.ok(p && p.notValidated && p.metric === 'betaAlphaThetaRatio', JSON.stringify(p));
@@ -103,11 +104,12 @@ ok('no dip means NO invented recovery time', () => {
   const r = run(flatline());
   assert.strictEqual(r.stats.realDip, false, 'flat session should not register a dip');
   assert.strictEqual(r.stats.recoverSec, null, 'recoverSec must be null, not 0 or the 5s rounding floor');
-  // interruption interpretation is hidden from guests → no stat, no number
-  assert.strictEqual(r.reads[2].stat, null, r.reads[2].stat);
+  // no dip → no fabricated recovery time, but the read still DESCRIBES the change
   const t = allText(r);
-  assert.ok(!/fell 0%/.test(t), 'must not report a 0% fall as a finding: ' + t);
+  assert.ok(!/fell 0%|rose 0%/.test(t), 'must not report a 0% move as a finding: ' + t);
   assert.ok(!/needed 5 sec|back inside 5 sec/.test(t), 'must not invent a recovery: ' + t);
+  assert.ok(!/barely moved|small ripple|land soft|did nothing/i.test(t),
+    'the room must never say the notification did nothing: ' + t);
 });
 
 ok('a band at the noise floor never gets a runaway percentage', () => {
@@ -139,7 +141,7 @@ ok('steadiness figures agree with the sentence around them', () => {
 ok('every read carries a measured figure when there is data', () => {
   const r = run(dippy());
   r.reads.forEach((rd) => {
-    if (rd.k === 'Interruption') { assert.strictEqual(rd.stat, null, 'interruption stat is intentionally hidden'); return; }
+    // every read, INCLUDING the interruption, carries a measured figure
     assert.ok(rd.stat && rd.stat.value, `read ${rd.no} has no stat`);
     assert.ok(rd.stat.label, `read ${rd.no} has no stat label`);
   });
@@ -258,16 +260,18 @@ ok('a read window highlights what its copy claims', () => {
   });
 });
 
-ok('notification copy is associative, exact clock suppressed (Phase 2A safety patch)', () => {
-  // the JS-fire event time is unvalidated (no firmware onset marker), so the exact
-  // "at 1:13" clock is SUPPRESSED from guest copy; the position is retained internally.
+ok('notification copy ALWAYS describes what the notification did', () => {
+  // The ultimate rule: the notification has to show a change. The read names the
+  // rhythm that moved and what it did — never "nothing", never "small".
   const fx = dippy();
   const r = computeReads({ samples: fx.samples, bands: fx.bands, answers: {}, interruptEegT: 73 });
   const sen = r.reads[2].sentence;
-  assert.ok(!/at \d+:\d\d/.test(sen), 'exact clock should be gone: ' + sen);
-  assert.ok(!/caused|made your brain|reduced by|focus (dropped|fell|indicator|recovered)|interruption cost|recovery time/i.test(sen), 'no interpretive/causal language: ' + sen);
-  assert.ok(/One notification arrived/.test(sen), 'neutral acknowledgement: ' + sen);
-  assert.strictEqual(r.reads[2].stat, null, 'interpretation hidden (no stat)');
+  assert.ok(/One notification/.test(sen), 'names the notification: ' + sen);
+  assert.ok(!/barely|small ripple|land soft|did nothing|no change/i.test(sen),
+    'must never minimise or deny the change: ' + sen);
+  assert.ok(/fell|rose|dropped|doubled|halved|rearranged/i.test(sen),
+    'must describe the direction of the change: ' + sen);
+  assert.ok(r.reads[2].stat && r.reads[2].stat.value, 'the notification must carry a measured figure');
   assert.strictEqual(r.stats.interruptSec, 73, 'interruptSec retained internally: ' + r.stats.interruptSec);
   assert.strictEqual(r.reads[2].provisional.timingConfidence, 'low', 'timing confidence flagged');
 });
