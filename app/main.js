@@ -29,6 +29,61 @@ if (!app.requestSingleInstanceLock()) { app.quit(); }
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 const ROOM_AUDIO = process.env.FOCUSROOM_NO_AUDIO !== '1';
 
+// The room is an installation, not an app window. It runs fullscreen unless a
+// developer explicitly asks otherwise.
+const WINDOWED = process.env.FOCUSROOM_WINDOWED === '1';
+
+// ============================================================
+// DO NOT DISTURB, the room fires exactly ONE notification, on purpose
+// ------------------------------------------------------------
+// The whole measurement rests on a single planned interruption at a known moment.
+// A Slack ping or a calendar alert landing mid-reading does not just annoy the
+// guest, it corrupts the one thing the session exists to measure, and we would
+// have no idea it happened. So the room asks macOS for silence while a guest is
+// in it, and hands it back afterwards.
+//
+// macOS has NO public API for Focus modes. The only supported, non-hacky way to
+// toggle one is the built-in `shortcuts` CLI (macOS 12+) running a Shortcut the
+// operator has made. So the room calls two Shortcuts by name:
+//
+//   "Focus Room DND On"    ->  Set Focus: Do Not Disturb, On
+//   "Focus Room DND Off"   ->  Set Focus: Do Not Disturb, Off
+//
+// (override the names with FOCUSROOM_DND_SHORTCUT_ON / _OFF, disable with
+// FOCUSROOM_DND=0.) If the Shortcuts do not exist we say so ONCE and carry on:
+// the room must never fail to start, or interrupt a guest, because it could not
+// silence a notification.
+//
+// NOTE for anyone tempted to "just brew install do-not-disturb": that Homebrew
+// cask is Objective-See's evil-maid attack detector, an entirely different tool.
+// It does not toggle Focus.
+// ============================================================
+const { execFile } = require('child_process');
+const DND_ENABLED = process.env.FOCUSROOM_DND !== '0' && process.platform === 'darwin';
+const DND_ON_NAME = process.env.FOCUSROOM_DND_SHORTCUT_ON || 'Focus Room DND On';
+const DND_OFF_NAME = process.env.FOCUSROOM_DND_SHORTCUT_OFF || 'Focus Room DND Off';
+let dndActive = false;
+let dndWarned = false;
+
+function setDoNotDisturb(on) {
+  if (!DND_ENABLED || on === dndActive) return;
+  dndActive = on;
+  const name = on ? DND_ON_NAME : DND_OFF_NAME;
+  execFile('shortcuts', ['run', name], { timeout: 8000 }, (err) => {
+    if (err) {
+      if (!dndWarned) {
+        dndWarned = true;
+        console.warn(`[dnd] could not run the Shortcut "${name}", so notifications may interrupt a `
+          + 'session. Create two Shortcuts in the Shortcuts app, each a single "Set Focus" action: '
+          + `"${DND_ON_NAME}" (Do Not Disturb, On) and "${DND_OFF_NAME}" (Do Not Disturb, Off). `
+          + 'Set FOCUSROOM_DND=0 to stop trying.');
+      }
+      return;
+    }
+    console.log(`[dnd] Do Not Disturb ${on ? 'ON, the room is protecting the session' : 'OFF'}`);
+  });
+}
+
 // The shipped app carries ZERO framework chrome: no stock menu (its Help links
 // would be the only "Electron" a guest could ever find). macOS keeps a minimal
 // named menu, Cmd+Q, copy/paste for the ops pages, and the native fullscreen
@@ -66,7 +121,12 @@ const room = createRoom({
     }
   },
   // The orchestrator drives which TV surface shows for the current beat.
-  onBeat: ({ surface }) => navigateTv(surface),
+  onBeat: ({ surface, beat }) => {
+    navigateTv(surface);
+    // Silence the Mac for the whole time a guest is in the room, and hand it back
+    // the moment they are done. 'idle' is the only beat with nobody in the chair.
+    setDoNotDisturb(beat !== 'idle');
+  },
   // a TV window that loaded before the bind is showing a URL nothing
   // served, (re)navigate it to the correct surface now.
   onServerUp: () => {
@@ -138,7 +198,13 @@ function createTvWindow() {
     width: config.isDev && !external ? 1280 : target.bounds.width,
     height: config.isDev && !external ? 720 : target.bounds.height,
     backgroundColor: '#0B0B0A', // room-black around the TV
-    fullscreen: !!external,    // fullscreen the real 100" TV; windowed in dev
+    // FULLSCREEN ALWAYS, unless a developer explicitly asks for a window. This used
+    // to be `!!external`, so on a single-screen Mac (no TV plugged in) the room came
+    // up in a 1280x720 window with the menu bar and Dock visible around it, which is
+    // not an installation. FOCUSROOM_WINDOWED=1 gets the old dev behaviour back.
+    fullscreen: !WINDOWED,
+    simpleFullscreen: process.platform === 'darwin' && !WINDOWED,
+    kiosk: !WINDOWED && config.isPackaged,   // packaged installs cannot be escaped by a guest
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -286,7 +352,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-const cleanup = () => room.cleanup(async () => globalShortcut.unregisterAll());
+const cleanup = () => room.cleanup(async () => {
+  globalShortcut.unregisterAll();
+  setDoNotDisturb(false);   // never leave the Mac silenced after the room exits
+});
 let quitting = false;
 app.on('before-quit', (e) => {
   if (!quitting) { quitting = true; e.preventDefault(); cleanup().then(() => app.quit()); }

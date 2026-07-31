@@ -299,20 +299,40 @@
       : (standalone || touch || params.get('kiosk') === '1');
     if (deviceMode) document.body.classList.add('device');
 
+    // ============================================================
+    // FILL THE WHOLE iPAD, whatever iPad it is.
+    // ------------------------------------------------------------
+    // The guest canvas is authored at 816x1172. Scaling that fixed box to fit any
+    // screen left dark letterbox bars on every iPad whose shape is not 816:1172
+    // (an iPad Pro 11" is ~0.70, a 10.2" is ~0.75, the design is 0.696), which is
+    // exactly the "not full screen" problem.
+    //
+    // So: SCALE to cover the short axis, then STRETCH the canvas box on the long
+    // axis to the real viewport. Layout inside the screen is flex/absolute, so the
+    // extra height or width is absorbed by the room's own dark field and the
+    // content stays centred, rather than being cropped or boxed. The result fills
+    // the display edge to edge on every iPad size, and dvh keeps it honest when
+    // Safari's bars come and go.
+    // ============================================================
+    const DESIGN_W = 816, DESIGN_H = 1172;
     function fit() {
       const room = document.getElementById('room'); if (!room) return;
-      let s;
-      if (deviceMode) {
-        // COVER only when the screen is essentially the designed 816×1172
-        // shape (within 2.5%), on anything squarer (4:3 iPads) cover cropped
-        // ~8% of the UI off the edges, so CONTAIN and let the room's own dark
-        // field letterbox the sliver instead.
-        const want = 816 / 1172;
-        const have = window.innerWidth / Math.max(1, window.innerHeight);
-        const near = Math.abs(have / want - 1) <= 0.025;
-        s = (near ? Math.max : Math.min)(window.innerWidth / 816, window.innerHeight / 1172);
-      } else {
-        s = Math.min(window.innerWidth / 920, window.innerHeight / 1276);  // framed desktop preview
+      const screenEl = room.querySelector('.screen');
+      if (!deviceMode) {
+        // framed desktop preview keeps the bezel and its fixed proportions
+        const s = Math.min(window.innerWidth / 920, window.innerHeight / 1276);
+        room.style.transform = 'scale(' + s + ')';
+        if (screenEl) { screenEl.style.width = DESIGN_W + 'px'; screenEl.style.height = DESIGN_H + 'px'; }
+        return;
+      }
+      const vw = window.innerWidth;
+      const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+      // cover the narrow axis so type and touch targets stay the designed size
+      const s = Math.max(vw / DESIGN_W, vh / DESIGN_H);
+      // then give the canvas exactly the viewport, expressed in pre-scale units
+      if (screenEl) {
+        screenEl.style.width = Math.ceil(vw / s) + 'px';
+        screenEl.style.height = Math.ceil(vh / s) + 'px';
       }
       room.style.transform = 'scale(' + s + ')';
     }
@@ -320,9 +340,42 @@
     // every channel a rotation or viewport change can announce itself.
     window.addEventListener('resize', fit);
     window.addEventListener('orientationchange', () => setTimeout(fit, 60));
-    if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', fit);
+      window.visualViewport.addEventListener('scroll', fit);
+    }
     window.addEventListener('pageshow', fit);
     fit();
+
+    // ============================================================
+    // PORTRAIT ONLY. The room is a portrait object: the reading column, the orb
+    // and the baseline ring are all composed for a tall screen. A guest who turns
+    // the iPad sideways mid-session would get a broken composition, and iOS gives
+    // a web app no way to force rotation. So we ask, with the calmest possible
+    // animation: a phone-shaped mark that rotates upright, once, and stays.
+    // The moment they turn it back the overlay leaves and nothing was lost.
+    // ============================================================
+    function watchOrientation() {
+      if (!deviceMode) return;
+      const el = document.getElementById('rotate');
+      if (!el) return;
+      const check = () => {
+        const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+        const landscape = window.innerWidth > vh * 1.06;   // hysteresis, ignore near-square wobble
+        el.classList.toggle('on', landscape);
+        document.body.classList.toggle('landscape', landscape);
+        // iPadOS 16.4+ honours this in an installed (standalone) web app; it is a
+        // no-op everywhere else, so the overlay is still the real guarantee.
+        if (landscape && screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock('portrait').catch(() => {});
+        }
+      };
+      window.addEventListener('resize', check);
+      window.addEventListener('orientationchange', () => setTimeout(check, 60));
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', check);
+      check();
+    }
+    watchOrientation();
 
     const byId = (id) => document.getElementById(id);
     const controls = byId('controls');

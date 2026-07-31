@@ -94,20 +94,60 @@
   #controls .now { color: var(--c-signal); }
 
   /* DEVICE / KIOSK MODE, launched standalone from the iPad home screen, or ?kiosk=1.
-     Strip the desktop-preview iPad bezel and let the real 816×1172 guest canvas
-     fill the whole screen (the controller cover-scales #room to the viewport). */
+     Strip the desktop-preview bezel and let the guest canvas fill the WHOLE display.
+     The controller sizes .screen to the real viewport (in pre-scale units) and
+     cover-scales #room, so this fills any iPad edge to edge with no letterbox. */
   body.device #stage { background: #060605; }
-  body.device .ipad { width: 816px; height: 1172px; padding: 0; border: 0; border-radius: 0;
+  body.device .ipad { width: auto; height: auto; padding: 0; border: 0; border-radius: 0;
                       background: none; box-shadow: none; }
   body.device .camera { display: none; }
   body.device .screen { border-radius: 0; box-shadow: none; }
   body.device #controls { display: none !important; }
+  /* dvh tracks Safari's disappearing bars; svh/lvh fall back on older iPadOS */
+  body.device, body.device html { height: 100dvh; }
+
+  /* ---------------- TURN IT UPRIGHT ----------------
+     The room is composed for portrait. Rather than break the layout sideways, one
+     calm overlay asks for the turn: a device mark that rotates upright and settles,
+     over and over, slowly. No alarm, no red, nothing that reads as an error. */
+  #rotate { position: fixed; inset: 0; z-index: 200; display: none;
+            align-items: center; justify-content: center; flex-direction: column; gap: 30px;
+            background: #060605; text-align: center; padding: 40px; }
+  #rotate.on { display: flex; animation: introFade 420ms var(--ease-out) both; }
+  #rotate .mark { width: 74px; height: 104px; border-radius: 13px;
+                  border: 2px solid var(--c-signal); position: relative;
+                  animation: turnUpright 3.4s var(--ease-in-out) infinite; }
+  #rotate .mark::after { content: ''; position: absolute; left: 50%; bottom: 8px;
+                  transform: translateX(-50%); width: 22px; height: 3px; border-radius: 2px;
+                  background: var(--c-signal); opacity: 0.7; }
+  #rotate .t { font-family: var(--font-display); font-size: 30px; color: var(--fg-strong);
+               letter-spacing: -0.02em; }
+  #rotate .s { font-family: var(--font-sans); font-size: 16px; color: var(--fg-muted); max-width: 320px; line-height: 1.5; }
+  /* starts on its side, turns upright, rests there, then repeats */
+  @keyframes turnUpright {
+    0%, 12%   { transform: rotate(-90deg); }
+    38%, 78%  { transform: rotate(0deg); }
+    100%      { transform: rotate(-90deg); }
+  }
+  /* while the overlay is up, hold the room still underneath */
+  body.landscape #room { filter: blur(2px); opacity: 0.25; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #rotate .mark { animation: none; transform: rotate(0deg); }
+  }
 
   ::-webkit-scrollbar { width: 0; height: 0; }
 </style>
 </head>
 <body>
   <div id="stage"><div id="room"><div class="ipad"><span class="camera"></span><div class="screen" id="screen"></div></div></div></div>
+
+  <!-- shown only when a guest turns the iPad sideways; the controller toggles .on -->
+  <div id="rotate">
+    <div class="mark"></div>
+    <div class="t">Turn the iPad upright</div>
+    <div class="s">The room reads best in portrait. Nothing is lost, your session is waiting.</div>
+  </div>
 
   <div id="controls">
     <button id="btnPrev">‹ Prev</button>
