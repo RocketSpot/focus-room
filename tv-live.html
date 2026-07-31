@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>The Focus Room — TV · Live Session</title>
+<title>The Focus Room, TV · Live Session</title>
 <link rel="stylesheet" href="tokens.css">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -41,7 +41,7 @@
   .corner { position: absolute; width: 4px; height: 4px; border-radius: 50%;
             background: var(--dot); opacity: 0.18; }
 
-  /* header chrome — quiet, top-left */
+  /* header chrome, quiet, top-left */
   .head { position: absolute; top: 76px; left: 120px; right: 120px;
           display: flex; justify-content: space-between; align-items: flex-start; }
   .brand { display: flex; align-items: center; gap: 18px; }
@@ -63,11 +63,11 @@
   }
   .state.swap .word { opacity: 0; transform: translateY(14px); }
 
-  /* instrument caption, bottom-left — keeps the honesty frame visible */
+  /* instrument caption, bottom-left, keeps the honesty frame visible */
   .caption { position: absolute; left: 120px; bottom: 84px;
              color: var(--fg-muted); font-size: 19px; letter-spacing: var(--tr-mono);
              font-family: var(--font-mono); text-transform: uppercase; }
-  /* the relative axis hint, far right — "high / low for you", no numbers */
+  /* the relative axis hint, far right, "high / low for you", no numbers */
   .axis { position: absolute; right: 120px; top: 300px; height: 480px;
           display: flex; flex-direction: column; justify-content: space-between;
           align-items: flex-end; text-align: right; }
@@ -76,7 +76,7 @@
 
   svg.plot { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 
-  /* preview controls — OUTSIDE the scaled canvas, hidden in kiosk */
+  /* preview controls, OUTSIDE the scaled canvas, hidden in kiosk */
   #controls {
     position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
     display: flex; align-items: center; gap: 10px; z-index: 50;
@@ -107,7 +107,7 @@
       <div class="head">
         <div class="brand">
           <span class="mark"></span>
-          <span class="label">ZONE — THE FOCUS ROOM</span>
+          <span class="label">ZONE, THE FOCUS ROOM</span>
         </div>
         <div class="live"><span class="pip"></span><span>READING SESSION · LIVE</span></div>
       </div>
@@ -150,7 +150,7 @@
         <circle id="headCore" r="3.5" fill="#fff"/>
       </svg>
 
-      <div class="caption">Your focus — relative to your own session today</div>
+      <div class="caption">Your focus, relative to your own session today</div>
     </div>
   </div>
 
@@ -207,7 +207,7 @@
     var stateWord = document.getElementById('stateWord');
     var stateWrap = document.getElementById('stateWrap');
 
-    // baseline sits at the low reference (v ≈ 0.30) — a synthetic prop, so it is
+    // baseline sits at the low reference (v ≈ 0.30), a synthetic prop, so it is
     // preview-only; in the room nothing fabricated is drawn
     if (SERVED) {
       baseline.setAttribute('display', 'none');
@@ -238,7 +238,7 @@
       curWord = w;
       stateWrap.classList.add('swap');
       // swap the text only after the 620ms fade-out completes, then fade back in.
-      // one timer at a time — a rapid second word must not hard-cut mid-fade.
+      // one timer at a time, a rapid second word must not hard-cut mid-fade.
       clearTimeout(wordTimer);
       wordTimer = setTimeout(function () { stateWord.textContent = w; stateWrap.classList.remove('swap'); wordTimer = null; }, 620);
     }
@@ -263,10 +263,10 @@
     }
 
     // render the live line from accumulated real samples, through the kept
-    // FocusLine rendering primitives (project + smooth) — calm, one color, no numbers.
+    // FocusLine rendering primitives (project + smooth), calm, one color, no numbers.
     function renderLive() {
       if (!liveSamples.length) return;
-      // reading length is guest-controlled — widen the window once the session
+      // reading length is guest-controlled, widen the window once the session
       // outgrows the ~7-min span so the head never pins to the right edge
       var span = Math.max(SPAN, liveSamples[liveSamples.length - 1].t);
       var pix = liveSamples.map(function (s) {
@@ -319,7 +319,7 @@
           renderLive();
           if (m.stateWord) setWord(m.stateWord);
         } else if (m.type === 'session/state' && (m.beat === 'idle' || m.beat === 'welcome')) {
-          // a fresh session is starting — clear the prior guest's line and word
+          // a fresh session is starting, clear the prior guest's line and word
           if (liveMode) {
             liveSamples = [];
             clearPlot();
@@ -384,7 +384,7 @@
     var controls = document.getElementById('controls');
     document.getElementById('btnHide').onclick = function () { controls.classList.add('hide'); };
     // !SERVED, same as tv-signal: the preview controls draw synthetic data
-    // (archetype curve, scrubber, state word) over the live plot — never one
+    // (archetype curve, scrubber, state word) over the live plot, never one
     // keypress away from a guest-facing wall.
     document.addEventListener('keydown', function (e) { if (e.key === 'c' && !SERVED) controls.classList.toggle('hide'); });
 
@@ -395,7 +395,7 @@
       d.style.left = pos[0] + 'px'; d.style.top = pos[1] + 'px'; tv.appendChild(d);
     });
 
-    // go live if we're being served inside the app — boot blank/live-idle and
+    // go live if we're being served inside the app, boot blank/live-idle and
     // draw only what real eeg/frame samples put on screen
     if (SERVED) enterLive();
     connectLive();

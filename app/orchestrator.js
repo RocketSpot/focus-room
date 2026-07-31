@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================
-// orchestrator.js — the session brain (no operator).
+// orchestrator.js, the session brain (no operator).
 // ------------------------------------------------------------
 // Owns the beat state machine, drives the sidecar (fit → stream), fires the one
 // interruption on the real plateau, paces the reveal, and keeps the iPad and TV
@@ -32,13 +32,13 @@ const REVEAL_STEP_MS = parseInt(process.env.FOCUSROOM_REVEAL_STEP_MS || '60000',
 // If no clean plateau appears after a few minutes of reading, fire at the best
 // high point so the session never stalls (Document.pdf). Override for tests.
 // The resting baseline: fifteen still seconds, EYES OPEN. Eyes-open is the right
-// reference here because the reading itself is done eyes-open — alpha rises
+// reference here because the reading itself is done eyes-open, alpha rises
 // sharply the moment the eyes close (Berger's alpha block), so an eyes-closed
 // baseline would confound eye state with attention and make every later
 // comparison read as a bigger change than it was.
 const BASELINE_MS = parseInt(process.env.FOCUSROOM_BASELINE_MS || '15000', 10);
 
-// 3.5 minutes outlived the reading itself — guests finished the passage before
+// 3.5 minutes outlived the reading itself, guests finished the passage before
 // the fallback ever fired. 75s lands inside every piece while still giving the
 // real EEG plateau the first chance to trigger it.
 const PLATEAU_FALLBACK_MS = parseInt(process.env.FOCUSROOM_PLATEAU_FALLBACK_MS || '75000', 10);
@@ -48,7 +48,7 @@ const PLATEAU_FALLBACK_MS = parseInt(process.env.FOCUSROOM_PLATEAU_FALLBACK_MS |
 const PROCESS_MS = parseInt(process.env.FOCUSROOM_PROCESS_MS || '3000', 10);
 
 // ============================================================
-// LINK RESILIENCE — a dropped link is a PAUSE, never a decision.
+// LINK RESILIENCE, a dropped link is a PAUSE, never a decision.
 // ------------------------------------------------------------
 // Bluetooth and Wi-Fi both drop in a real room, and when they do there is a
 // guest sitting in that room with buds in their ears, mid-session. So nothing
@@ -67,7 +67,7 @@ const PROCESS_MS = parseInt(process.env.FOCUSROOM_PROCESS_MS || '3000', 10);
 // ============================================================
 
 // No frames for this long and the EEG stream is treated as stalled. Frames
-// arrive ~1/s, so this is several missed frames — long enough not to trip on
+// arrive ~1/s, so this is several missed frames, long enough not to trip on
 // ordinary scheduling jitter, short enough that the guest isn't left staring at
 // a frozen line wondering whether the room broke.
 const EEG_STALL_MS = parseInt(process.env.FOCUSROOM_EEG_STALL_MS || '6000', 10);
@@ -79,15 +79,15 @@ const EEG_STALL_TICK_MS = Math.max(100, Math.min(1000, Math.floor(EEG_STALL_MS /
 // Abandonment watchdog: the only guest path back to idle is close_choice, so a
 // guest who walks away mid-flow would wedge the room for every following guest.
 // Per-beat inactivity budgets; any client message or hello refreshes the clock.
-// (FOCUSROOM_IDLE_RESET_MS overrides every budget — read at arm time so tests
+// (FOCUSROOM_IDLE_RESET_MS overrides every budget, read at arm time so tests
 // can flip it on a live orchestrator.)
 const MIN_MS = 60 * 1000;
 const WATCHDOG_BUDGET_MS = {
   welcome: 6 * MIN_MS, fit: 6 * MIN_MS, intake: 6 * MIN_MS, picker: 6 * MIN_MS,
   strongest: 6 * MIN_MS, email: 6 * MIN_MS, close: 6 * MIN_MS,
-  standby: 8 * MIN_MS,   // the reveal auto-advances long before this
-  reading: 30 * MIN_MS,  // a guest reads silently — long budget
-  // idle: no budget — there is nothing to abandon
+  standby: 8 * MIN_MS,  // the reveal auto-advances long before this
+  reading: 30 * MIN_MS, // a guest reads silently, long budget
+  // idle: no budget, there is nothing to abandon
 };
 
 // The watchdog above measures GUEST inactivity, which it can only honestly do
@@ -102,7 +102,7 @@ const LINK_LOST_CEILING_MS = parseInt(process.env.FOCUSROOM_LINK_LOST_MS || Stri
 // your own brain, not a gate to pass: after this short settle the room is simply
 // ready, whatever the signal is doing. (It used to require N clean frames AND
 // analysis eligibility, so a marginal fit could lock the room and leave a guest
-// staring at "Adjusting the fit" forever.) Quality is still measured — it just goes
+// staring at "Adjusting the fit" forever.) Quality is still measured, it just goes
 // to the operator now, never to the guest, and never blocks anyone.
 const FIT_SETTLE_MS = parseInt(process.env.FOCUSROOM_FIT_SETTLE_MS
   || process.env.FOCUSROOM_FIT_HINT_MS || '1800', 10);
@@ -117,7 +117,7 @@ class Orchestrator extends EventEmitter {
     this._demoEnabled = false; this._demoActive = false; this._demoSending = false; this._demoTimers = [];
     // staff/demonstration override (correction 1): an explicit, visible, staff-only
     // switch that lets the room be walked through WITHOUT valid EEG. It persists across
-    // sessions until a staff member clears it (like the demo state) — the safe direction,
+    // sessions until a staff member clears it (like the demo state), the safe direction,
     // since it only SUPPRESSES claims, never fabricates them. Set via setStaffOverride().
     this._staffOverride = false;
     this.reset();
@@ -130,7 +130,7 @@ class Orchestrator extends EventEmitter {
   }
 
   // Wipe everything a session accumulated (answers, reveal, revealStep, timers,
-  // signal flags) WITHOUT touching the beat — reset() and the abandonment
+  // signal flags) WITHOUT touching the beat, reset() and the abandonment
   // watchdog both use it.
   _clearSession() {
     this._clearReveal();
@@ -154,7 +154,7 @@ class Orchestrator extends EventEmitter {
     this._eegQualityStatus = null;
     this._fitQualityOk = false;
     // Phase 2A.2 correction 1: the eligibility state machine (from eeg/quality-v1).
-    // transportReady (packets arriving) is NOT enough to advance — analysisEligible
+    // transportReady (packets arriving) is NOT enough to advance, analysisEligible
     // (a grossly-usable channel on EACH ear) is what unlocks the ready state.
     this._eegEligibility = null;     // last eligibility object from the sidecar
     this._eegSimulation = null;      // whether the quality stream is simulated
@@ -166,7 +166,7 @@ class Orchestrator extends EventEmitter {
     this.revealTimer = null;
     this.revealStep = 0;
     this.revealShown = false;
-    // full-session recording — persisted to disk (not just the constellation dot)
+    // full-session recording, persisted to disk (not just the constellation dot)
     this.sessionId = null;
     this.sessionStartedAt = null;
     this.streamLog = null;       // { frames, bands, metrics } captured live during the reading
@@ -174,7 +174,7 @@ class Orchestrator extends EventEmitter {
     this.baseline = null;        // the 15s eyes-open resting reference (opened by baseline_start)
     this.scrollTrack = [];       // [{t, p}] how far through the piece the guest had read, on the EEG clock
     // ---- link resilience (session-scoped) ----
-    this._lastFrameAt = null;    // master ms of the last EEG frame — the stall detector's input
+    this._lastFrameAt = null;    // master ms of the last EEG frame, the stall detector's input
     this._eegDown = false;       // the stream went quiet and we're waiting for it
     // A stale link-lost stamp must not survive into the next session: it made
     // the next guest's first hello record a spurious multi-hour link_restored
@@ -195,7 +195,7 @@ class Orchestrator extends EventEmitter {
   now() { return Date.now(); }
   // A monotonic timestamp (ms) in the orchestrator's OWN clock domain, for event
   // instrumentation. NOT comparable across process/clock domains (iPad, room-audio,
-  // sidecar) — each domain's monotonic clock is independent; alignment is via the
+  // sidecar), each domain's monotonic clock is independent; alignment is via the
   // shared master (wall) clock, with the documented uncertainty. Never Date.now-only.
   _mono() { try { return +perf.now().toFixed(3); } catch (e) { return null; } }
 
@@ -239,7 +239,7 @@ class Orchestrator extends EventEmitter {
       // no impedance messages, so this flag is how the iPad + TV learn the
       // read is clean (dropping it left the iPad on "finding a clean read…").
       fitAllGood: this._fitAllGood,
-      // coaching notices are canonical state, not one-shot extras — every
+      // coaching notices are canonical state, not one-shot extras, every
       // rebroadcast (resync, supervisor-ready) must carry them while they hold.
       notice: this._notice(),
       link: this._linkState(),
@@ -252,7 +252,7 @@ class Orchestrator extends EventEmitter {
   }
 
   // GUEST-FACING COACHING IS OFF. The room never tells a guest about the state of
-  // their signal — not "signal lost", not "reseat", not "we're still checking". A
+  // their signal, not "signal lost", not "reseat", not "we're still checking". A
   // guest can do nothing useful with a signal verdict, and being told their brain
   // isn't reading properly is the opposite of the experience. The same information
   // now goes to the OPERATOR instead (see _coachOps), who can quietly help.
@@ -261,8 +261,8 @@ class Orchestrator extends EventEmitter {
     return null;
   }
 
-  // Operator-only coaching. Computes a short, actionable prompt — which bud to
-  // adjust and what to say to the guest — and sends it to the 'ops' role ONLY.
+  // Operator-only coaching. Computes a short, actionable prompt, which bud to
+  // adjust and what to say to the guest, and sends it to the 'ops' role ONLY.
   // Carries NO raw EEG: just a side, a reason word, and a suggested line.
   _coachOps() {
     const e = this._eegEligibility;
@@ -278,9 +278,9 @@ class Orchestrator extends EventEmitter {
     if (key === this._coachKey) return;          // only speak when the advice changes
     this._coachKey = key;
     const SAY = {
-      left: 'Ask them to gently push the LEFT earbud in and settle — no need to mention the signal.',
-      right: 'Ask them to gently push the RIGHT earbud in and settle — no need to mention the signal.',
-      both: 'Ask them to settle both earbuds and sit still for a moment — keep it casual.',
+      left: 'Ask them to gently push the LEFT earbud in and settle, no need to mention the signal.',
+      right: 'Ask them to gently push the RIGHT earbud in and settle, no need to mention the signal.',
+      both: 'Ask them to settle both earbuds and sit still for a moment, keep it casual.',
     };
     const payload = side
       ? { active: true, side, reason, say: SAY[side], t: this.now() }
@@ -289,7 +289,7 @@ class Orchestrator extends EventEmitter {
   }
 
   // Can we currently reach the guest's iPad? A server that doesn't track
-  // presence can't tell us, and this is resilience code — it must never itself
+  // presence can't tell us, and this is resilience code, it must never itself
   // become the thing that fails. Unknown means "assume reachable", which is the
   // behaviour that existed before any of this.
   _guestReachable() {
@@ -310,7 +310,7 @@ class Orchestrator extends EventEmitter {
   // ---------------- client (iPad) messages ----------------
   onClientHello({ role, clientTime }) {
     // ONLY a guest (iPad) hello counts as guest activity. A TV or operator
-    // console reconnecting must not refresh the abandonment budget — otherwise
+    // console reconnecting must not refresh the abandonment budget, otherwise
     // an operator refreshing their browser keeps a genuinely-abandoned session
     // alive indefinitely.
     if (role !== 'ipad') { this._resync(); return; }
@@ -329,7 +329,7 @@ class Orchestrator extends EventEmitter {
 
   _resync() { this._broadcastState(); }
 
-  // Phase 2A.2 correction 2: the room-audio host reports its DUCK marker back — the
+  // Phase 2A.2 correction 2: the room-audio host reports its DUCK marker back, the
   // duck's scheduled Web-Audio clock time + a monotonic estimate of audible onset, in
   // the room-audio browser's OWN clock domain. Kept SEPARATE from the visual marker;
   // never merged into a single onset, never used to claim sample-accurate timing.
@@ -345,11 +345,11 @@ class Orchestrator extends EventEmitter {
     if (typeof p.outputLatency === 'number') ad.outputLatencySec = p.outputLatency;
     ad.reportReceivedMonotonicMs = this._mono();
     this._record('audio_ducked', this.now(), { scheduledAudioContextTime: ad.scheduledAudioContextTime });
-    this.log(`room-audio duck reported (audio-clock ${ad.scheduledAudioContextTime}s) — separate marker, not a sample-accurate onset`);
+    this.log(`room-audio duck reported (audio-clock ${ad.scheduledAudioContextTime}s), separate marker, not a sample-accurate onset`);
   }
 
   onClientMessage(msg, role) {
-    // Only the guest's iPad drives the FSM — any other LAN client (a stray
+    // Only the guest's iPad drives the FSM, any other LAN client (a stray
     // laptop on the room network, a TV surface, a probe) is ignored. The role
     // check comes FIRST: only GUEST activity may refresh the abandonment
     // budget (same invariant as onClientHello), or a chattering non-guest
@@ -364,7 +364,7 @@ class Orchestrator extends EventEmitter {
     if (this._demoActive && !this._demoSending) {
       const autoEvent = msg.type === CLIENT.GUEST_EVENT
         && (msg.kind === GUEST_EVENT.READING_STARTED || msg.kind === GUEST_EVENT.READING_SCROLL);
-      if (!autoEvent) { this._demoStop(); this.log('demo: real guest input — autopilot yielding'); }
+      if (!autoEvent) { this._demoStop(); this.log('demo: real guest input, autopilot yielding'); }
     }
     this._uiCue(msg); // serene select-sound for accepted taps (never mid-session)
     if (msg.type === CLIENT.GUEST_INTAKE) return this._onIntake(msg);
@@ -372,7 +372,7 @@ class Orchestrator extends EventEmitter {
   }
 
   // Console-menu sound cue: broadcast ui/cue for exactly the inputs the FSM will
-  // accept in the CURRENT beat — and only in the beginning/end beats. The reading
+  // accept in the CURRENT beat, and only in the beginning/end beats. The reading
   // and the strongest-stretch pause stay free of UI sounds (only the adaptive
   // music breathes there); mirrors the transition table in _onGuestEvent.
   _uiCue(msg) {
@@ -380,9 +380,9 @@ class Orchestrator extends EventEmitter {
       (msg.type === CLIENT.GUEST_INTAKE &&
         (this.beat === 'intake' || (this.beat === 'picker' && msg.reading))) ||
       (msg.type === CLIENT.GUEST_EVENT && ({
-        idle: [GUEST_EVENT.EARBUD_SEATED],          // a new guest starting a session
+        idle: [GUEST_EVENT.EARBUD_SEATED],         // a new guest starting a session
         welcome: [GUEST_EVENT.EARBUD_SEATED],
-        fit: [GUEST_EVENT.BASELINE_START, GUEST_EVENT.FIT_CONFIRMED],  // "I'm ready" is a tap too
+        fit: [GUEST_EVENT.BASELINE_START, GUEST_EVENT.FIT_CONFIRMED], // "I'm ready" is a tap too
         standby: [GUEST_EVENT.REVEAL_ACK],
         email: [GUEST_EVENT.EMAIL_ENTERED],
         close: [GUEST_EVENT.CLOSE_CHOICE],
@@ -397,7 +397,7 @@ class Orchestrator extends EventEmitter {
     this._record('intake', msg.t);
 
     if (this.beat === 'intake') this.setBeat('picker');
-    // Only a reading pick advances out of the picker — a double-fired intake
+    // Only a reading pick advances out of the picker, a double-fired intake
     // submission (no reading payload) must not start the session early.
     else if (this.beat === 'picker' && msg.reading) this._beginReading();
   }
@@ -406,14 +406,14 @@ class Orchestrator extends EventEmitter {
     const kind = msg.kind || (msg.payload && msg.payload.type);
 
     // The iPad's socket stays open from one guest to the next, so a new guest
-    // never re-sends client/hello — and idle had no case here, so their very
+    // never re-sends client/hello, and idle had no case here, so their very
     // first tap was silently dropped and the room sat wedged until someone
     // reloaded the page. Treat a seat-the-earbud tap at idle as the start of a
     // fresh session. (reset() first: it wipes the event log, so record after.)
     if (this.beat === 'idle' && kind === GUEST_EVENT.EARBUD_SEATED) {
       this.reset();
       this.setBeat('welcome');
-      this.log('new guest tapped through at idle — starting a fresh session');
+      this.log('new guest tapped through at idle, starting a fresh session');
     }
     // scroll samples arrive every few seconds; they belong in scrollTrack, not
     // in the event log, which is meant to stay readable
@@ -425,12 +425,12 @@ class Orchestrator extends EventEmitter {
           this.setBeat('fit');
           this.sup.send(SIDECAR_IN.CONNECT);
           // the signal check STREAMS live so the guest SEES their α/β/γ waves (not an
-          // electrode/impedance readout). Not recorded — streamLog opens at reading.
+          // electrode/impedance readout). Not recorded, streamLog opens at reading.
           this.sup.send(SIDECAR_IN.START_SESSION, { reason: 'signal_check' });
         }
         break;
       case 'fit':
-        // the guest is settled and asked for the resting baseline — start
+        // the guest is settled and asked for the resting baseline, start
         // capturing. The signal check is already streaming, so this just marks
         // the window; no extra sidecar command is needed.
         if (kind === GUEST_EVENT.BASELINE_START) {
@@ -460,7 +460,7 @@ class Orchestrator extends EventEmitter {
           this.scrollTrack.push({ t: this._streamT(), p: last ? Math.max(last.p, p) : p });
         } else if (kind === GUEST_EVENT.NOTIFICATION_SHOWN) {
           // the iPad reports the actual rendered-frame time of the notification card
-          // — a real (if not sample-accurate) onset. Fills the VISUAL marker only;
+          //, a real (if not sample-accurate) onset. Fills the VISUAL marker only;
           // the audio-duck marker arrives separately (onRoomAudioEvent). The two are
           // never merged into one "exact" timestamp.
           if (this.interruptionTiming && this.interruptionTiming.eventRenderedTime == null) {
@@ -521,7 +521,7 @@ class Orchestrator extends EventEmitter {
     // check already ran _streamT() (its clock counts from earbud-in, easily
     // minutes), and a sidecar restart mid-reading would otherwise compute
     // _streamOffset from the SIGNAL CHECK's high water instead of the
-    // reading's — teleporting the rest of the session far right on the chart.
+    // reading's, teleporting the rest of the session far right on the chart.
     this._streamOffset = 0;
     this._maxStreamT = 0;
     // open a fresh full-session recording (stable id → one file, updated in place)
@@ -541,7 +541,7 @@ class Orchestrator extends EventEmitter {
     this._clearReadingFallback();
     this._readingFallback = setTimeout(() => {
       if (this.beat === 'reading' && !this.interruptionFired) {
-        this.log('no clean plateau — firing interruption at the best high point (fallback)');
+        this.log('no clean plateau, firing interruption at the best high point (fallback)');
         this._fireInterruption();
       }
     }, PLATEAU_FALLBACK_MS);
@@ -593,8 +593,8 @@ class Orchestrator extends EventEmitter {
     this._saveSession();   // the full session (reads, focus line, band stream) is saved to disk now
 
     // A brief, HONEST processing moment before the reveal: the room reads the
-    // session — cleaning noise, deriving the focus signal, shaping the four reads
-    // from the bands — and the TV says so, so the numbers land as considered
+    // session, cleaning noise, deriving the focus signal, shaping the four reads
+    // from the bands, and the TV says so, so the numbers land as considered
     // rather than instant. The compute above is fast; this is the pause that
     // frames it. (FOCUSROOM_PROCESS_MS=0 in tests to skip the wait.)
     this.server.broadcast(SERVER.REVEAL_PROCESSING, { archetype: this.reveal.archetype });
@@ -622,7 +622,7 @@ class Orchestrator extends EventEmitter {
     this._clearReveal();
     if (this.beat === 'standby') {
       this.setBeat('email');
-      // the guest's dot joins the wall in the moment — the TV is now showing
+      // the guest's dot joins the wall in the moment, the TV is now showing
       // the constellation, so they watch it land.
       this.emit('dot-join', { archetype: this.answers.archetype });
     }
@@ -635,7 +635,7 @@ class Orchestrator extends EventEmitter {
 
   // The ONE canonical reveal payload. The TV loads tv-reveal.html only once the
   // beat turns standby, so it always misses the first broadcast and depends on
-  // main.js re-sending this on its client-hello. Both paths call this builder —
+  // main.js re-sending this on its client-hello. Both paths call this builder,
   // a second hand-written copy silently lost `bands` (the reveal's hero visual)
   // and shipped a slideshow of empty charts.
   revealPayload() {
@@ -643,7 +643,7 @@ class Orchestrator extends EventEmitter {
     return {
       samples: r.samplesForReveal || this.sessionSamples || [],
       bands: (this.streamLog && this.streamLog.bands) || [], // whole-session 5-band stream
-      reads: r.reads || [],                                  // each carries a band-based note
+      reads: r.reads || [],                                 // each carries a band-based note
       archetype: r.archetype,
       interruptT: r.interruptT,
       flat: r.flat,
@@ -658,7 +658,7 @@ class Orchestrator extends EventEmitter {
   // ---------------- full-session recording ----------------
   // Seconds into the recorded stream. Prefer the EEG frame clock; before the
   // first frame lands (brainwaves can arrive first) fall back to wall time since
-  // the reading opened, so a sample is never stamped null — a null t collapsed
+  // the reading opened, so a sample is never stamped null, a null t collapsed
   // that point onto x=0 in the reveal chart.
   // The session clock, in seconds since the reading began. lastFrame.tRel is
   // already offset-corrected (see the FRAME handler), so this stays continuous
@@ -674,7 +674,7 @@ class Orchestrator extends EventEmitter {
 
   // Capture the resting baseline: only during the fit beat, only while the
   // window is open, and only for BASELINE_MS. This is the guest's own quiet
-  // reference — every later read is expressed against it.
+  // reference, every later read is expressed against it.
   _recordBaseline(kind, obj) {
     const b = this.baseline;
     if (!b || b.endedAt || this.beat !== 'fit') return;
@@ -683,7 +683,7 @@ class Orchestrator extends EventEmitter {
     const arr = b[kind];
     // Stamp t as seconds INTO THE BASELINE (0…15). The signal-check stream's
     // own tRel counts from whenever the earbud went in, so a guest who spent
-    // 90s seating it would otherwise get a "baseline" running 90→105 — on a
+    // 90s seating it would otherwise get a "baseline" running 90→105, on a
     // clock the record doesn't even persist, making it useless as a reference.
     if (arr && arr.length < 4000) arr.push(Object.assign({}, obj, { t: +(dt / 1000).toFixed(2) }));
   }
@@ -698,7 +698,7 @@ class Orchestrator extends EventEmitter {
     if (arr && arr.length < 100000) arr.push(obj);
   }
 
-  // Assemble the complete session record — everything the room produced.
+  // Assemble the complete session record, everything the room produced.
   _sessionRecord() {
     const a = this.answers, r = this.reveal || {};
     return {
@@ -706,10 +706,10 @@ class Orchestrator extends EventEmitter {
       startedAt: this.sessionStartedAt,
       savedAt: this.now(),
       archetype: { label: a.archetype, name: a.archetypeName },
-      archetypeFeatures: r.archetype || null,       // settle / variability / raw features
-      intake: a.intake || {},                        // the three belief answers
+      archetypeFeatures: r.archetype || null,      // settle / variability / raw features
+      intake: a.intake || {},                       // the three belief answers
       onMind: a.onMind || '',
-      reading: a.reading || null,                    // the piece the guest chose
+      reading: a.reading || null,                   // the piece the guest chose
       strongestGuess: a.strongest || null,
       closeDoor: a.closeDoor || null,
       email: a.email || null,
@@ -724,21 +724,21 @@ class Orchestrator extends EventEmitter {
       eegDerivedClaimsAllowed: r.eegDerivedClaimsAllowed !== false,
       interruptT: r.interruptT != null ? r.interruptT : null,
       interruptEegT: this.interruptEegT,
-      interruptionTiming: this.interruptionTiming || null,   // Phase 2A event-timing record
-      reads: r.reads || null,                        // the four reads
-      stats: r.stats || null,                        // the measured figures the reveal quoted
-      scroll: this.scrollTrack || [],                // reading pace, on the EEG clock
-      gaps: this._streamGaps || [],                  // stream-clock stretches with no signal
-      events: this.events || [],                     // guest events on the EEG timeline
-      focusLine: this.sessionSamples || [],          // the relative engagement line (t, v, vr)
-      stream: this.streamLog || null,                // live frames / bands / metrics — full session, uncapped
-      baseline: this.baseline || null,               // the 15s eyes-open resting reference
-      impedance: this.impedanceLog || [],            // contact-density history from the signal check
+      interruptionTiming: this.interruptionTiming || null,  // Phase 2A event-timing record
+      reads: r.reads || null,                       // the four reads
+      stats: r.stats || null,                       // the measured figures the reveal quoted
+      scroll: this.scrollTrack || [],               // reading pace, on the EEG clock
+      gaps: this._streamGaps || [],                 // stream-clock stretches with no signal
+      events: this.events || [],                    // guest events on the EEG timeline
+      focusLine: this.sessionSamples || [],         // the relative engagement line (t, v, vr)
+      stream: this.streamLog || null,               // live frames / bands / metrics, full session, uncapped
+      baseline: this.baseline || null,              // the 15s eyes-open resting reference
+      impedance: this.impedanceLog || [],           // contact-density history from the signal check
     };
   }
 
   // Persist the record. Emitted (not written directly) so main.js owns the store;
-  // called at the reveal (core data ready) and again as email/door fill in — the
+  // called at the reveal (core data ready) and again as email/door fill in, the
   // stable id means each save updates the same file.
   _saveSession() {
     if (this.sessionId == null) return;
@@ -748,7 +748,7 @@ class Orchestrator extends EventEmitter {
 
   // ---------------- EEG stall detector (Bluetooth) ----------------
   // A Bluetooth drop does not announce itself. The sidecar process stays up, no
-  // socket closes, no error is raised anywhere — the frames simply stop, and
+  // socket closes, no error is raised anywhere, the frames simply stop, and
   // every signal-quality check we have is driven BY frames, so silence used to
   // be completely invisible. The line on the wall would freeze mid-session and
   // nothing, anywhere, would notice.
@@ -779,7 +779,7 @@ class Orchestrator extends EventEmitter {
     this._gapOpenT = this._streamT();     // the data has a hole from here
     this._broadcastState();
     this._coachOps();
-    this.log(`EEG stream went quiet in '${this.beat}' — holding the session and waiting for the link`);
+    this.log(`EEG stream went quiet in '${this.beat}', holding the session and waiting for the link`);
   }
 
   // Any frame proves the link is alive again. Closing the gap here (rather than
@@ -794,7 +794,7 @@ class Orchestrator extends EventEmitter {
       // only record a gap the analysis should actually skip over
       if (gap.to - gap.from >= 1) this._streamGaps.push(gap);
       this._gapOpenT = null;
-      this.log(`EEG stream resumed — ${(gap.to - gap.from).toFixed(1)}s gap recorded`);
+      this.log(`EEG stream resumed, ${(gap.to - gap.from).toFixed(1)}s gap recorded`);
     } else {
       this.log('EEG stream resumed');
     }
@@ -804,11 +804,11 @@ class Orchestrator extends EventEmitter {
 
   // ---------------- guest link (Wi-Fi) ----------------
   // The iPad dropping off the network is not the guest leaving. Both look
-  // identical to the watchdog — silence — so it needs to be told the difference.
+  // identical to the watchdog, silence, so it needs to be told the difference.
   onClientLeft(role) {
     if (role === 'ipad' && !this._guestReachable()) {
       this._linkLostAt = this.now();
-      this.log('the iPad went off the network — holding the session until it returns');
+      this.log('the iPad went off the network, holding the session until it returns');
       this._broadcastState();
     }
   }
@@ -818,7 +818,7 @@ class Orchestrator extends EventEmitter {
     const downMs = this.now() - this._linkLostAt;
     this._linkLostAt = null;
     this._record('link_restored', this.now(), { downMs });
-    this.log(`the iPad is back after ${Math.round(downMs / 1000)}s — resuming where the session stood`);
+    this.log(`the iPad is back after ${Math.round(downMs / 1000)}s, resuming where the session stood`);
     this._broadcastState();
   }
 
@@ -828,7 +828,7 @@ class Orchestrator extends EventEmitter {
     if (Number.isFinite(override) && override > 0) return override; // test knob: one budget for every beat
     const budget = WATCHDOG_BUDGET_MS[beat] || null;
     // a long FOCUSROOM_REVEAL_STEP_MS must never let the watchdog kill a live
-    // reveal — standby's budget always covers the full paced reveal plus slack.
+    // reveal, standby's budget always covers the full paced reveal plus slack.
     if (beat === 'standby' && budget != null) {
       return Math.max(budget, REVEAL_STEPS * REVEAL_STEP_MS + 120000);
     }
@@ -859,7 +859,7 @@ class Orchestrator extends EventEmitter {
     this._watchdog = null;
     if (this.beat === 'idle') return;
     // A DROPPED LINK IS NOT AN ABSENT GUEST. The budget measures guest
-    // inactivity, and it can only measure that while the guest is reachable —
+    // inactivity, and it can only measure that while the guest is reachable,
     // an iPad off the Wi-Fi looks exactly like someone who walked out. Before
     // this guard, a router blip during the reading wiped a live session,
     // discarded the recorded EEG and sent the room back to idle with a guest
@@ -867,14 +867,14 @@ class Orchestrator extends EventEmitter {
     if (!this._guestReachable()) {
       const downFor = this._linkLostAt ? this.now() - this._linkLostAt : 0;
       if (downFor < LINK_LOST_CEILING_MS) {
-        this.log(`watchdog: budget elapsed in '${this.beat}' but the iPad is unreachable — holding the session, not abandoning it`);
+        this.log(`watchdog: budget elapsed in '${this.beat}' but the iPad is unreachable, holding the session, not abandoning it`);
         this._armWatchdog();
         return;
       }
-      this.log(`watchdog: nothing has come back for ${Math.round(downFor / 60000)} min — reclaiming the room`);
+      this.log(`watchdog: nothing has come back for ${Math.round(downFor / 60000)} min, reclaiming the room`);
     }
     const beat = this.beat;
-    this.log(`watchdog: no guest activity in '${beat}' for ${Math.round(budgetMs / 1000)}s — abandoning the session`);
+    this.log(`watchdog: no guest activity in '${beat}' for ${Math.round(budgetMs / 1000)}s, abandoning the session`);
     this._record('session_abandoned', this.now(), { beat, budgetMs }); // diag trail
     // fit now STREAMS (the signal check), so stopping it is STOP_SESSION like the reading
     if (beat === 'fit' || beat === 'reading' || beat === 'strongest') this.sup.send(SIDECAR_IN.STOP_SESSION);
@@ -884,7 +884,7 @@ class Orchestrator extends EventEmitter {
 
   // ---------------- fit escalation ----------------
   // If no allGood impedance snapshot arrives within the hint window, surface the
-  // canonical 'fit_slow' notice — cleared the moment an allGood lands or the
+  // canonical 'fit_slow' notice, cleared the moment an allGood lands or the
   // beat leaves fit. (The iPad copy consuming it lands separately.)
   // Entering the signal check arms a SETTLE, not a gate: after a short beat the room
   // is ready regardless of what the signal is doing. Nothing here inspects quality.
@@ -895,9 +895,9 @@ class Orchestrator extends EventEmitter {
     this._fitHint = setTimeout(() => {
       this._fitHint = null;
       if (this.beat !== 'fit' || this._fitAllGood) return;
-      this._fitAllGood = true;                 // ready — never conditional on the signal
+      this._fitAllGood = true;                 // ready, never conditional on the signal
       this._broadcastState();
-      this.log(`signal check: settled after ${Math.round(FIT_SETTLE_MS)}ms — ready (not gated on signal quality)`);
+      this.log(`signal check: settled after ${Math.round(FIT_SETTLE_MS)}ms, ready (not gated on signal quality)`);
     }, FIT_SETTLE_MS);
   }
 
@@ -912,24 +912,24 @@ class Orchestrator extends EventEmitter {
     if (this._fitSlow) {
       this._fitSlow = false;
       this._broadcastState();
-      this.log('fit: allGood arrived — fit_slow cleared');
+      this.log('fit: allGood arrived, fit_slow cleared');
     }
   }
 
   // ---------------- sidecar restart ----------------
   // Commands are fire-and-forget: a supervisor restart mid-beat leaves fit or
   // reading silently dead. Re-issue what the current beat depends on. Wired from
-  // main.js's supervisor 'ready' handler — which also fires on first boot, when
+  // main.js's supervisor 'ready' handler, which also fires on first boot, when
   // the beat is idle and this is a no-op.
   onSidecarReady() {
     switch (this.beat) {
       case 'fit':
-        this.log('sidecar restarted during signal check — re-issuing CONNECT + START_SESSION');
+        this.log('sidecar restarted during signal check, re-issuing CONNECT + START_SESSION');
         this.sup.send(SIDECAR_IN.CONNECT); // real-mode connects take seconds; the sidecar handles ordering
         this.sup.send(SIDECAR_IN.START_SESSION, { reason: 'signal_check' });
         break;
       case 'reading':
-        this.log('sidecar restarted during reading — re-issuing START_SESSION; the timeline has a gap');
+        this.log('sidecar restarted during reading, re-issuing START_SESSION; the timeline has a gap');
         this.signalIssue = true; // sticky: the reveal already leans on the clean data
         // Carry the session clock across the restart. The fresh stream's tRel
         // reopens at 0, so without this every post-restart sample lands back at
@@ -945,15 +945,15 @@ class Orchestrator extends EventEmitter {
         this.sup.send(SIDECAR_IN.START_SESSION, { reason: 'sidecar_restart' });
         break;
       case 'strongest':
-        // the reading already ended (STOP_SESSION ran at reading_finished) — an
+        // the reading already ended (STOP_SESSION ran at reading_finished), an
         // orphan START_SESSION here would stream into nothing and, in sim, make
         // the NEXT guest's start hit the re-entrancy guard and skip the engine
         // reset. Only flag trouble if the crash beat the session capture.
         if (this.sessionSamples == null) {
-          this.log('sidecar restarted during strongest — session samples were lost; reveal falls back');
+          this.log('sidecar restarted during strongest, session samples were lost; reveal falls back');
           this.signalIssue = true; // reads.js already handles null samples via the minimal path
         } else {
-          this.log('sidecar restarted during strongest — session already captured; nothing to re-issue');
+          this.log('sidecar restarted during strongest, session already captured; nothing to re-issue');
         }
         break;
       default:
@@ -974,7 +974,7 @@ class Orchestrator extends EventEmitter {
           this.timeline.lastFrame = { tRel, t: msg.t };
         }
         // A frame is also the proof the link is alive. Called AFTER the timeline
-        // update so a gap being closed can be measured to the RESUMING frame —
+        // update so a gap being closed can be measured to the RESUMING frame,
         // measuring it before left every gap exactly zero seconds long.
         this._onStreamAlive();
         this._recordStream('frames', { t: tRel, v: msg.engagementRel, w: msg.stateWord || null });
@@ -986,7 +986,7 @@ class Orchestrator extends EventEmitter {
       case SIDECAR_OUT.BRAINWAVES:
         // Record ONLY once the frame clock has anchored the timeline. Brainwaves
         // can beat the first frame in, and _streamT's wall-clock fallback stamped
-        // that early row at ~2.4s before the stream clock restarted at 0 — a
+        // that early row at ~2.4s before the stream clock restarted at 0, a
         // stray opening row that forked the reveal chart's left edge. Dropping a
         // pre-anchor row loses ≤2s of a 1–2Hz stream; mis-stamping it lies.
         if (this.timeline.lastFrame) {
@@ -1012,7 +1012,7 @@ class Orchestrator extends EventEmitter {
         this._fireInterruption();
         break;
       // The buds themselves connecting or dropping. The SDK runs its own
-      // auto-reconnect, so this is reported, recorded and rendered calmly — it
+      // auto-reconnect, so this is reported, recorded and rendered calmly, it
       // never drives a beat change.
       case SIDECAR_OUT.CONNECTION: {
         const was = this._budsConnected;
@@ -1020,7 +1020,7 @@ class Orchestrator extends EventEmitter {
         if (was !== this._budsConnected) {
           if (!this._budsConnected) {
             this.signalIssue = true;
-            this.log('earbud link dropped — the SDK is reconnecting; the session holds');
+            this.log('earbud link dropped, the SDK is reconnecting; the session holds');
             this._record('buds_disconnected', this.now());
           } else if (was === false) {
             // false → true is a genuine restore; null → true is just the FIRST
@@ -1071,7 +1071,7 @@ class Orchestrator extends EventEmitter {
 
   // Operator-triggered interruption (the console's "Fire the interruption"
   // button). Routes through the SAME path as the automatic one, so it actually
-  // shows the guest the notification card and marks the real EEG timeline —
+  // shows the guest the notification card and marks the real EEG timeline,
   // rather than the raw sidecar `mark`, which only annotated the recording and
   // did nothing the guest could see. Returns whether it fired, so the console
   // can tell the operator (it only fires during the reading, once).
@@ -1085,7 +1085,7 @@ class Orchestrator extends EventEmitter {
     if (this.beat !== 'reading' || this.interruptionFired) return;
     // Never spend the room's one interruption while the stream is down. The
     // whole point of it is to MEASURE what a notification costs, and with no
-    // signal there is nothing to measure — the guest would get the buzz and the
+    // signal there is nothing to measure, the guest would get the buzz and the
     // reveal would have nothing to say about it. Wait for the link and let the
     // fallback try again.
     // _lastFrameAt == null covers the stream that NEVER produced a frame after
@@ -1093,7 +1093,7 @@ class Orchestrator extends EventEmitter {
     // detector can't see that case, and the 75s fallback would otherwise spend
     // the room's one interruption with zero signal to measure it against.
     if (this._eegDown || this._lastFrameAt == null) {
-      this.log('interruption due, but there is no live EEG signal — deferring until the signal returns');
+      this.log('interruption due, but there is no live EEG signal, deferring until the signal returns');
       this._clearReadingFallback();
       this._readingFallback = setTimeout(() => {
         if (this.beat === 'reading' && !this.interruptionFired) this._fireInterruption();
@@ -1105,11 +1105,11 @@ class Orchestrator extends EventEmitter {
     const t = this.now();
     const reqMono = this._mono();
     this.interruptEegT = this.eegTimeOf(t); // anchor for the reveal's interruption read
-    // Phase 2A.2 event-timing (correction 2): the interruption is a MULTIMODAL event —
+    // Phase 2A.2 event-timing (correction 2): the interruption is a MULTIMODAL event,
     // a VISUAL notification card on the iPad + a ROOM-AUDIO duck. It is NOT earbud audio,
     // so a firmware audio-onset marker is NOT relevant here (a device EEG SAMPLE COUNTER
-    // remains desirable for alignment, but the firmware exposes none — audit Q17/18/23).
-    // The two markers are captured and kept SEPARATE — never collapsed into one supposed
+    // remains desirable for alignment, but the firmware exposes none, audit Q17/18/23).
+    // The two markers are captured and kept SEPARATE, never collapsed into one supposed
     // exact timestamp, and never chosen to maximise an apparent EEG effect. The primary
     // marker is PREDECLARED here, before any analysis. No sample-accurate claim is made.
     this.interruptionTiming = {
@@ -1131,7 +1131,7 @@ class Orchestrator extends EventEmitter {
         timingConfidence: 'low',
       },
       // EEG alignment: no device sample counter exists, so alignment is only the
-      // master-clock epoch mapping (eegTimeOf) — receive-time, not sample-accurate.
+      // master-clock epoch mapping (eegTimeOf), receive-time, not sample-accurate.
       eegAlignment: {
         deviceSampleCounterAvailable: false, deviceSampleIndex: null,
         sdkCallbackTimeEstimate: null, sidecarMonotonicMs: null,
@@ -1139,14 +1139,14 @@ class Orchestrator extends EventEmitter {
         estimatedUncertaintyMs: 1200, timingConfidence: 'low',
       },
       // PREDECLARED intervention marker (fixed before analysis; not cherry-picked):
-      primaryMarkerDefinition: 'visual.renderedFrameMonotonicMs — the iPad committed paint of the notification card',
+      primaryMarkerDefinition: 'visual.renderedFrameMonotonicMs, the iPad committed paint of the notification card',
       secondaryMarkers: ['audioDuck.scheduledAudioContextTime', 'visual.requestMonotonicMs'],
       // ---- legacy/compat fields the reveal + record already read ----
       eventRequestTime: t, eventRequestEegT: this.interruptEegT,
       eventRenderedTime: null, eventRenderedEegT: null,
       deviceSampleIndex: null, estimatedPhysicalOnset: null,
       timingMethod: 'app_fire_call',
-      timingUncertaintyMs: 1200,  // ~1 s emit cadence + 2 s window + transport (provisional)
+      timingUncertaintyMs: 1200, // ~1 s emit cadence + 2 s window + transport (provisional)
       timingConfidence: 'low',
       media: ['ipad_visual_card', 'room_audio_duck'],
     };
@@ -1156,12 +1156,12 @@ class Orchestrator extends EventEmitter {
     this.log(`interruption fired @ EEG t=${this.eegTimeOf(t)}s (onMind: "${this.answers.onMind}")`);
   }
 
-  // Signal-trouble flow (Document.pdf): never show a broken line — the engine
+  // Signal-trouble flow (Document.pdf): never show a broken line, the engine
   // keeps the smoothed line flowing; we just coach a small reseat and flag the
   // session so the reveal leans on the clean middle. (A 30s re-read to recapture
   // a lost interruption is the next step if the dip window itself reads unclear.)
   // During the signal check (fit beat, streaming), mark ready once the live signal
-  // has held clean for a moment — the honest "signal is clear" gate, from the real
+  // has held clean for a moment, the honest "signal is clear" gate, from the real
   // signal itself rather than an electrode/impedance readout.
   // The signal check no longer GATES on the signal at all. A live frame simply lets the
   // room settle a touch sooner than the timer; a poor one never holds anyone back.
@@ -1180,7 +1180,7 @@ class Orchestrator extends EventEmitter {
   // Drives the fit-ready gate above and lets the signal-check surface show a truthful
   // partial/poor state.
   //
-  // CORRECTION 1 — receiving raw callbacks alone is NOT sufficient to advance. The
+  // CORRECTION 1, receiving raw callbacks alone is NOT sufficient to advance. The
   // fit gate now keys on ANALYSIS ELIGIBILITY (a grossly-usable channel on each ear),
   // not mere packet receipt (transportReady / 'received'). Staff override allows
   // navigation without valid EEG, for demonstrations.
@@ -1190,18 +1190,18 @@ class Orchestrator extends EventEmitter {
     this._eegEligibility = msg.eligibility || null;
     if (typeof msg.simulation === 'boolean') this._eegSimulation = msg.simulation;
     // Eligibility is still COMPUTED and recorded (engineering + validation evidence and
-    // the reveal-claim gate depend on it) — it just no longer holds the guest up.
+    // the reveal-claim gate depend on it), it just no longer holds the guest up.
     const analysisOk = !!(this._eegEligibility && this._eegEligibility.analysisEligible);
     this._fitQualityOk = analysisOk || this._staffOverride;
     this._coachOps();      // quality goes to the OPERATOR, never to the guest
     // surface a truthful partial/one-ear/neither-ear state to the iPad + TV, but only
-    // when the summary actually changes (quality streams ~3×/s — don't spam state).
+    // when the summary actually changes (quality streams ~3×/s, don't spam state).
     const e = this._eegEligibility;
     const key = e ? `${e.transportReady}|${e.analysisEligible}|${e.eligibilityStatus}|${e.ears.left.usable}|${e.ears.right.usable}` : 'none';
     if (key !== this._eegEligKey) { this._eegEligKey = key; if (this.beat === 'fit') this._broadcastState(); }
   }
 
-  // A compact, honest signal-eligibility summary for the surfaces. Never a number —
+  // A compact, honest signal-eligibility summary for the surfaces. Never a number,
   // it tells the iPad/TV whether the room may advance and whether one/both ears read.
   _signalEligibilitySummary() {
     const e = this._eegEligibility;
@@ -1220,7 +1220,7 @@ class Orchestrator extends EventEmitter {
   // ---------------- staff / demonstration override (correction 1) ----------------
   // An explicit, staff-only switch. When ON: the room may be walked through without
   // valid EEG (navigation unblocked), but the session is marked invalid for EEG
-  // interpretation — it must NOT generate EEG-derived guest claims, and is never
+  // interpretation, it must NOT generate EEG-derived guest claims, and is never
   // labelled "successfully measured". Visible on every surface via session/state.
   setStaffOverride(on, reason) {
     const was = this._staffOverride;
@@ -1228,8 +1228,8 @@ class Orchestrator extends EventEmitter {
     if (this._staffOverride === was) return this._staffOverride;
     this._record(this._staffOverride ? 'staff_override_on' : 'staff_override_off', this.now(), { reason: reason || null });
     this.log(`staff override ${this._staffOverride
-      ? 'ENABLED — navigation allowed; session marked invalid-for-eeg-interpretation (no EEG-derived guest claims)'
-      : 'cleared — analysis eligibility required again to advance'}`);
+      ? 'ENABLED, navigation allowed; session marked invalid-for-eeg-interpretation (no EEG-derived guest claims)'
+      : 'cleared, analysis eligibility required again to advance'}`);
     // enabling unblocks the fit gate immediately; disabling re-requires analysis eligibility
     this._fitQualityOk = this._staffOverride
       || !!(this._eegEligibility && this._eegEligibility.analysisEligible);
@@ -1264,15 +1264,15 @@ class Orchestrator extends EventEmitter {
     const t = typeof masterT === 'number' ? masterT : this.now();
     const eegT = this.eegTimeOf(t);
     this.events.push({ kind, masterT: t, eegT, payload });
-    this.log(`event ${kind} @ master=${t} eeg=${eegT == null ? '—' : eegT + 's'}`);
+    this.log(`event ${kind} @ master=${t} eeg=${eegT == null ? ', ' : eegT + 's'}`);
     this.emit('event', { kind, masterT: t, eegT, payload });
   }
 
   // ---------- sim demo autopilot (SIMULATE only) ----------------------------
   // `npm run dev` has no real guest to tap through the iPad, so the TV sits on
   // the idle constellation and nothing streams. When main.js enables the demo
-  // (sim builds only), this walks a whole guest session on a loop — signal
-  // check → orb reading → band reveal → close → repeat — so every surface shows
+  // (sim builds only), this walks a whole guest session on a loop, signal
+  // check → orb reading → band reveal → close → repeat, so every surface shows
   // live example data. The first real iPad tap cancels it (see onClientMessage).
   enableDemo() { this._demoEnabled = true; }
   _demoDo(fn) { this._demoSending = true; try { fn(); } finally { this._demoSending = false; } }
@@ -1288,17 +1288,17 @@ class Orchestrator extends EventEmitter {
     const hello = () => this._demoDo(() => this.onClientHello({ role: 'ipad', clientTime: this.now() }));
     // [delay-from-previous-step (ms), action]
     const steps = [
-      [300,   hello],                                                    // idle → welcome
-      [2000,  () => ev(GUEST_EVENT.EARBUD_SEATED)],                      // → fit (signal-check waves stream)
-      [6500,  () => ev('fit_confirmed')],                               // → intake
-      [2600,  () => intake({ answers: { 0: 'A blip — I barely notice', 1: 'It drifts', 2: 'A few minutes' }, onMind: 'a deadline on Friday' })], // → picker
-      [2600,  () => intake({ reading: { id: 'octopus', title: 'How an Octopus Thinks', meta: '3 min read' } })], // → reading (orb + START_SESSION)
-      [24000, () => ev(GUEST_EVENT.READING_FINISHED)],                   // → strongest (interruption auto-fires mid-reading)
-      [3200,  () => ev(GUEST_EVENT.STRONGEST_STRETCH_GUESS, { choice: 'The ending' })], // → reveal (bands)
-      [22000, () => ev('reveal_ack')],                                  // → email (after a couple reveal slides)
-      [3200,  () => ev(GUEST_EVENT.EMAIL_ENTERED, { email: 'demo@thefocusroom.local' })], // → close
-      [3200,  () => ev(GUEST_EVENT.CLOSE_CHOICE, { door: 'customer' })], // → idle
-      [5000,  () => { this._demoActive = false; this.startDemo(); }],    // loop
+      [300,  hello],                                                   // idle → welcome
+      [2000, () => ev(GUEST_EVENT.EARBUD_SEATED)],                     // → fit (signal-check waves stream)
+      [6500, () => ev('fit_confirmed')],                              // → intake
+      [2600, () => intake({ answers: { 0: 'A blip, I barely notice', 1: 'It drifts', 2: 'A few minutes' }, onMind: 'a deadline on Friday' })], // → picker
+      [2600, () => intake({ reading: { id: 'octopus', title: 'How an Octopus Thinks', meta: '3 min read' } })], // → reading (orb + START_SESSION)
+      [24000, () => ev(GUEST_EVENT.READING_FINISHED)],                  // → strongest (interruption auto-fires mid-reading)
+      [3200, () => ev(GUEST_EVENT.STRONGEST_STRETCH_GUESS, { choice: 'The ending' })], // → reveal (bands)
+      [22000, () => ev('reveal_ack')],                                 // → email (after a couple reveal slides)
+      [3200, () => ev(GUEST_EVENT.EMAIL_ENTERED, { email: 'demo@thefocusroom.local' })], // → close
+      [3200, () => ev(GUEST_EVENT.CLOSE_CHOICE, { door: 'customer' })], // → idle
+      [5000, () => { this._demoActive = false; this.startDemo(); }],   // loop
     ];
     let acc = 0;
     for (const [ms, fn] of steps) { acc += ms; this._demoTimers.push(setTimeout(fn, acc)); }

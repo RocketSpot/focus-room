@@ -1,18 +1,18 @@
 'use strict';
 // ============================================================
-// honesty.js — the honesty copy layer (Document.pdf "What We Claim, What We
+// honesty.js, the honesty copy layer (Document.pdf "What We Claim, What We
 // Don't"). EVERY guest-facing string/number is routed through here. It makes it
 // structurally impossible to emit:
 //   1. an absolute or clinical score
 //   2. a percentage presented as a focus score (digits or spelled out)
 //   3. a to-the-second (or to-the-decimal) timing figure
-//   4. a "you felt X but your brain says Y" comparison — even split across
+//   4. a "you felt X but your brain says Y" comparison, even split across
 //      two adjacent sentences
 // All copy is relative ("in your session today"), directional, and about the
 // guest's own session. If a value can't be expressed relatively, it is omitted.
 //
 // In dev/tests (not packaged) the layer THROWS on a violation (catch
-// regressions loudly). In a packaged build it logs loudly and redacts/omits —
+// regressions loudly). In a packaged build it logs loudly and redacts/omits,
 // a violation can never reach a guest, and can never kill an output.
 // ============================================================
 
@@ -20,17 +20,17 @@
 const NUMW = '(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)';
 const NUM = `(?:\\d+(?:\\.\\d+)?|${NUMW}(?:[-\\s]${NUMW})*)`;
 // negations that turn clinical wording into an honest DISCLAIMER ("not a
-// clinical score", "this isn't a diagnosis", "we don't diagnose") — the plain
+// clinical score", "this isn't a diagnosis", "we don't diagnose"), the plain
 // n't token can never match inside a contraction, so the contractions are
 // spelled out (straight + curly apostrophe), and the gap allows wording like
 // "not presented as a clinical score".
 const NEG = "(?:not|no|never|without|nothing|non|isn't|isn’t|aren't|aren’t|wasn't|wasn’t|weren't|weren’t|don't|don’t|doesn't|doesn’t|didn't|didn’t|won't|won’t|can't|can’t|cannot|couldn't|couldn’t|wouldn't|wouldn’t)";
 
 const RULES = [
-  // a percentage as a SCORE — digits ("96%") or spelled out ("96 percent",
+  // a percentage as a SCORE, digits ("96%") or spelled out ("96 percent",
   // "ninety-six per cent"). The reveal's own figures are percentages OF A
-  // RELATIVE FRAME — "the first 5% of your reading", "53% of the time",
-  // "rose 25% above its session level", "32% of your own range" — which is
+  // RELATIVE FRAME, "the first 5% of your reading", "53% of the time",
+  // "rose 25% above its session level", "32% of your own range", which is
   // exactly the relative expression the doc demands, and the wall already
   // states them. A % is allowed ONLY when its relative frame follows
   // immediately; a naked "96%" stays a violation.
@@ -40,7 +40,7 @@ const RULES = [
       const tail = m.input.slice(m.index + m[0].length, m.index + m[0].length + 40).toLowerCase();
       if (/^\s*(?:of (?:your|the time|its own|their own)|above|below|against)\b/.test(tail)) return true;
       // The terse band phrases end their sentence right on the figure ("theta,
-      // your internal thinking, rose 25%.") — the relative frame ("against its
+      // your internal thinking, rose 25%."), the relative frame ("against its
       // session level") was established by the sentence's FIRST clause, and
       // repeating it overflowed the prose block. A % directly after rose/fell
       // is still a relative statement; a naked "96%" stays a violation, and a
@@ -52,7 +52,7 @@ const RULES = [
   { name: 'fraction-score', re: new RegExp(`\\b\\d+(?:\\.\\d+)?\\s?\\/\\s?(?:10|100)\\b|\\b${NUM}\\s+out\\s+of\\s+(?:a\\s+)?${NUM}\\b`, 'gi') },
   { name: 'numeric-score', re: /\b(?:score|rating|points?|percentile|index)\b[^.]{0,16}?\d|\b\d+(?:\.\d+)?\s*(?:points?|percentile|\/\s?5)\b/gi },
   // a STOPWATCH-precision time figure. The room's honest measurement grain is
-  // five seconds (reads.js round5 — "the room measures, it doesn't stopwatch"),
+  // five seconds (reads.js round5, "the room measures, it doesn't stopwatch"),
   // and the wall states those figures, so the card may quote the SAME ones
   // ("Settled in 5 sec."). What stays banned is precision the smoothed signal
   // can't carry: decimals, milliseconds, and second counts off the 5s grain
@@ -65,10 +65,10 @@ const RULES = [
       if (u.startsWith('min')) return Number.isInteger(v);    // "3 min" fine, "4.5 mins" not
       return Number.isInteger(v) && v % 5 === 0;              // 5s grain: "5 sec", "40 sec"
     } },
-  // felt-vs-measured / perceived-vs-actual — in one sentence, or split across
+  // felt-vs-measured / perceived-vs-actual, in one sentence, or split across
   // two adjacent sentences ("It felt like X. But the measured signal…")
   { name: 'felt-vs-measured', re: /\bfelt\b[^.]{0,48}\b(?:but|while|yet|however|though)\b[^.]{0,48}\b(?:brain|measured|signal|actually|reality|data)\b|\b(?:perceived|felt)\b[^.]{0,24}\b(?:vs\.?|versus)\b[^.]{0,24}\b(?:measured|actual|real|brain)\b|\byour\s+brain\s+(?:says|said|tells|knows|thinks)\b|\bfelt\b[^.!?]{0,80}[.!?]['”")\]]?\s+[^.!?]{0,24}?\b(?:but|yet|however|though|actually|in\s+(?:fact|reality|truth)|meanwhile)\b[^.!?]{0,80}?\b(?:brain|measured|signal|actually|reality|data)\b/gi },
-  // clinical / diagnostic framing — but NOT honest disclaimers ("not a clinical
+  // clinical / diagnostic framing, but NOT honest disclaimers ("not a clinical
   // score", "this isn't a diagnosis", "we don't diagnose"), which are exactly
   // what the doc wants us to say.
   { name: 'clinical', re: new RegExp(`(?<!\\b${NEG}\\b[^.]{0,24})\\b(?:diagnos\\w*|clinical(?:ly)?|disorder|deficit|abnormal|patholog\\w*|ADHD|neurological\\s+condition)\\b`, 'gi') },
@@ -95,12 +95,12 @@ function redact(text) {
   let s = String(text == null ? '' : text);
   // Strip ONLY the disallowed matches. Redacting every rule match regardless of
   // its allow() exception stripped the legitimately-relative figures alongside
-  // the one violation ("rose. Your focus fell of its own range.") — broken
+  // the one violation ("rose. Your focus fell of its own range."), broken
   // guest-facing copy in a packaged build.
   for (const r of RULES) {
     r.re.lastIndex = 0;
     s = s.replace(r.re, (...args) => {
-      // replace() hands (match, p1…pN, offset, string) — no named groups here
+      // replace() hands (match, p1…pN, offset, string), no named groups here
       const match = args[0];
       const index = args[args.length - 2];
       const input = args[args.length - 1];
@@ -121,7 +121,7 @@ function redact(text) {
 // Route a guest-facing string through the layer.
 //  - strict (dev/tests): throws on any violation.
 //  - non-strict (packaged): logs LOUDLY + returns the redacted text (the
-//    offending bit is omitted) — a violation never reaches a guest and never
+//    offending bit is omitted), a violation never reaches a guest and never
 //    kills an output.
 function honest(text, label = 'copy', strict = defaultStrict()) {
   const v = vet(text);

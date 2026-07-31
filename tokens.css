@@ -1,5 +1,5 @@
 /* ============================================================
-   ZONE — THE FOCUS ROOM
+   ZONE, THE FOCUS ROOM
    Shared design tokens. SINGLE SOURCE OF TRUTH for this installation.
    Every surface (TV, iPad, card, profile, email) inherits from here.
    --------------------------------------------------------------
@@ -8,13 +8,13 @@
    Where the Focus Room intentionally departs (deeper room-black for
    a 100″ TV in a dark room, wider mono tracking for distance
    reading, longer motion durations at TV scale), the override is
-   documented inline. Do not re-derive colors — change the DS sheet.
+   documented inline. Do not re-derive colors, change the DS sheet.
    ============================================================ */
 @import url('_ds/zone-design-system-454d3276-5756-4030-bb1e-7963dc5e1b2b/colors_and_type.css');
 
 /* ---- FONTS ----------------------------------------------------
    LOCAL-FIRST: all faces are bundled and served off the room's own
-   machine — never a CDN (the consumer app's feedback repeatedly hit
+   machine, never a CDN (the consumer app's feedback repeatedly hit
    slow CDN font loads). The build's change #3 replaces the original
    Google Fonts @import here (and the two in the DS sheet above, now
    disabled) with this one local sheet, which declares PP Neue
@@ -23,24 +23,24 @@
 @import url('assets/fonts/fonts.css');
 
 :root {
-  /* ---------- COLOR — aliased to DS warm-gray scale ---------- */
+  /* ---------- COLOR, aliased to DS warm-gray scale ---------- */
   --c-offwhite:   var(--color-warm-gray-100);   /* #F3F2EE */
   --c-white:      var(--color-white);
-  --c-warm-200:   var(--color-warm-gray-200);   /* primary fg on dark — most used */
+  --c-warm-200:   var(--color-warm-gray-200);   /* primary fg on dark, most used */
   --c-warm-300:   var(--color-warm-gray-300);   /* meta / secondary copy */
   --c-warm-400:   var(--color-warm-gray-400);
   --c-warm-500:   var(--color-warm-gray-500);
-  --c-near-black: var(--color-warm-gray-700);   /* deepest DS field — the TV's ground */
-  --c-black:      #0B0B0A;   /* INTENTIONAL: room-dark below the DS scale —
+  --c-near-black: var(--color-warm-gray-700);   /* deepest DS field, the TV's ground */
+  --c-black:      #0B0B0A;   /* INTENTIONAL: room-dark below the DS scale,
                                 the letterbox around the TV in a dark room */
 
   /* ---------- THE ONE ACCENT ---------- */
-  --c-orange:      var(--color-orange);          /* used sparingly — one at a time */
+  --c-orange:      var(--color-orange);          /* used sparingly, one at a time */
   --c-orange-soft: rgba(255,87,20,0.14);
   --c-orange-line: rgba(255,87,20,0.40);
 
   /* ---------- THE SIGNAL ----------
-     The focus line IS the flow state — it uses the DS's sacred
+     The focus line IS the flow state, it uses the DS's sacred
      In Flow gold (--color-state-flow, #DDCA8E). Bright and calm on
      near-black, never clinical. Orange is reserved for the
      interruption mark, the single punctuation. */
@@ -48,31 +48,31 @@
   --c-signal-soft:   rgba(221,202,142,0.16);
   --c-signal-faint:  rgba(221,202,142,0.06);
   --c-signal-glow:   rgba(221,202,142,0.5);   /* the gold halo step every glow uses */
-  --c-signal-dim:    #8C8463;   /* flow gold dimmed — the replay line at rest */
+  --c-signal-dim:    #8C8463;   /* flow gold dimmed, the replay line at rest */
 
   /* ---------- BRAINWAVE BANDS ----------
      One colour per rhythm, shared by every surface that draws them: the live
      signal check, the reveal slideshow, and the iPad's onboarding key. Tuned for
      contrast on the dark wall; beta is signal-gold because it is the focus band.
-     NEVER alarm-orange — that belongs to the interruption alone. */
+     NEVER alarm-orange, that belongs to the interruption alone. */
   --w-delta: #9D93D6;   /* violet */
   --w-theta: #4FA69A;   /* teal   */
   --w-alpha: #8CB16A;   /* sage   */
-  --w-beta:  #DDCA8E;   /* signal gold — the focus band */
+  --w-beta:  #DDCA8E;   /* signal gold, the focus band */
   --w-gamma: #E0A657;   /* warm amber */
 
   /* ---------- ARCHETYPE TONES ----------
      Monochrome-plus-warmth, harmonized around the flow gold. Each
      archetype gets ONE characteristic tone for its line in the
      card/profile; the live TV line is always --c-signal. These are
-     tints between DS flow gold and warm-gray — NOT new brand colors,
+     tints between DS flow gold and warm-gray, NOT new brand colors,
      and never used as fills or backgrounds. */
-  --c-arch-deep:    var(--color-state-flow);   /* Deep Diver — flow gold */
-  --c-arch-igniter: #E8C089;   /* Quick Igniter — warmer amber      */
-  --c-arch-steady:  #CBC9BC;   /* Steady Burner — calm pale warm    */
-  --c-arch-sprint:  #E9B27E;   /* Sprinter — hotter clay-amber      */
+  --c-arch-deep:    var(--color-state-flow);   /* Deep Diver, flow gold */
+  --c-arch-igniter: #E8C089;   /* Quick Igniter, warmer amber      */
+  --c-arch-steady:  #CBC9BC;   /* Steady Burner, calm pale warm    */
+  --c-arch-sprint:  #E9B27E;   /* Sprinter, hotter clay-amber      */
 
-  /* ---------- SEMANTIC — DARK FIELD (default) ---------- */
+  /* ---------- SEMANTIC, DARK FIELD (default) ---------- */
   --bg:          var(--c-near-black);
   --bg-room:     var(--c-black);          /* the room around the TV  */
   --bg-elevated: #201F1D;                 /* barely-there card fill  */
@@ -85,7 +85,7 @@
   --hair-strong: rgba(214,212,201,0.18);
   --dot:         var(--c-warm-200);       /* dot-grid annotation dots */
 
-  /* ---------- SEMANTIC — OFF-WHITE FIELD ----------
+  /* ---------- SEMANTIC, OFF-WHITE FIELD ----------
      Used for the warm intake / close moments and the print card. */
   --bg-light:        var(--c-offwhite);
   --bg-light-elev:   var(--c-white);
@@ -93,22 +93,22 @@
   --fg-light-muted:  var(--c-warm-300);
   --hair-light:      rgba(20,20,20,0.10);
 
-  /* ---------- TYPE — families ---------- */
+  /* ---------- TYPE, families ---------- */
   --font-display: "PP Neue Montreal", "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
   --font-sans:    "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  /* ---------- TYPE — scale (px) ----------
+  /* ---------- TYPE, scale (px) ----------
      iPad / card / email scale. The TV scales these up via its own
      --tv multipliers (see each TV file). */
-  --fs-h1:      56px;   /* display H1 — weight 400, lh 100%          */
-  --fs-h2:      40px;   /* display H2 — weight 500, lh 100%          */
+  --fs-h1:      56px;   /* display H1, weight 400, lh 100%          */
+  --fs-h2:      40px;   /* display H2, weight 500, lh 100%          */
   --fs-h3:      30px;
   --fs-title:   18px;   /* Inter 500                                  */
   --fs-body:    16px;   /* Inter 300 / lh 20px                        */
   --fs-body-2:  14px;   /* Inter 400 / lh 16px                        */
   --fs-meta:    12px;
-  --fs-mono:    9px;    /* IBM Plex Mono 500 uppercase — the workhorse */
+  --fs-mono:    9px;    /* IBM Plex Mono 500 uppercase, the workhorse */
   --fs-mono-2:  8px;    /* smallest instrument tag                    */
 
   /* ---------- TRACKING ---------- */
@@ -133,7 +133,7 @@
   --stroke-signal: 3px;     /* the focus line on the iPad/card scale  */
   --stroke-hair:   1px;
 
-  /* ---------- BLUR — signature ---------- */
+  /* ---------- BLUR, signature ---------- */
   --blur-progressive: blur(36px);
   --blur-highlight:   blur(72px);
   --blur-glow:        blur(110px);
@@ -148,7 +148,7 @@
 }
 
 /* ============================================================
-   TYPE CLASSES — direct use in markup
+   TYPE CLASSES, direct use in markup
    ============================================================ */
 .t-h1 { font-family: var(--font-display); font-weight: 400; font-size: var(--fs-h1);
         line-height: 1; letter-spacing: var(--tr-display); }
@@ -175,7 +175,7 @@
    SIGNATURE ELEMENTS
    ============================================================ */
 
-/* The soft ambient "light" — oversized blurred ellipse behind UI.
+/* The soft ambient "light", oversized blurred ellipse behind UI.
    Bottom-weighted per styleguide. opacity ~0.18, blur 72px. */
 .fr-light {
   position: absolute;
@@ -203,7 +203,7 @@
   height: 0;
 }
 
-/* Instrument tag — mono label paired with a value, observatory style. */
+/* Instrument tag, mono label paired with a value, observatory style. */
 .fr-tag .k { color: var(--fg-muted); }
 .fr-tag .v { color: var(--fg-strong); }
 

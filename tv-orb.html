@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>The Focus Room — TV · Orb</title>
+<title>The Focus Room, TV · Orb</title>
 <link rel="stylesheet" href="tokens.css">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; background: #000; overflow: hidden; font-family: var(--font-sans); }
   #wrap { position: fixed; inset: 0; background: #060605; }
-  /* Stacked video CHANNELS handed off by the live signal. Each state is a CHANNEL — a
+  /* Stacked video CHANNELS handed off by the live signal. Each state is a CHANNEL, a
      group whose opacity is the state's weight (the slow bloom). Inside a channel sit TWO
      copies of its clip that CROSS-DISSOLVE across the loop seam, so native `loop`'s
      last-frame→first-frame CUT is never seen. #orbstack isolates its own stacking context
@@ -25,7 +25,7 @@
   .chan video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
     opacity: 0; transition: opacity 700ms linear; pointer-events: none; will-change: opacity; }
   .chan video.on { opacity: 1; }
-  /* full aura around the orb — additive over the black field, tinted to the
+  /* full aura around the orb, additive over the black field, tinted to the
      active state video in apply() and repainted EVERY frame so it snaps with
      the state the instant the orb changes; breathes with the signal */
   .aura { position: absolute; left: 50%; top: 50%; width: 96vmin; height: 96vmin;
@@ -33,7 +33,7 @@
     mix-blend-mode: screen; filter: blur(26px); will-change: transform, opacity; }
   /* specks: tiny motes of the aura drifting off the orb (canvas, screen-blended) */
   #specks { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen; }
-  /* mist: a few slow wisps drifting past the rim — barely-there, screen-blended */
+  /* mist: a few slow wisps drifting past the rim, barely-there, screen-blended */
   .mist { position: absolute; left: 50%; top: 50%; border-radius: 50%; pointer-events: none;
     mix-blend-mode: screen; filter: blur(34px); will-change: transform, opacity; }
   .mist.m1 { width: 44vmin; height: 34vmin; animation: drift1 37s ease-in-out infinite alternate; }
@@ -45,7 +45,7 @@
     50% { opacity: 0.85; } to { transform: translate(-86%, -40%) scale(0.94); opacity: 0.5; }  }
   @keyframes drift3 { from { transform: translate(-52%, -108%) scale(0.9); opacity: 0.38; }
     50% { opacity: 0.8; } to { transform: translate(-46%, 4%) scale(1.12); opacity: 0.45; } }
-  /* vignette sinks the video edges into room-black — a shade deeper now that
+  /* vignette sinks the video edges into room-black, a shade deeper now that
      the orb sits alone: the frame should feel like a dark room, not a screen */
   .vig { position: absolute; inset: 0; pointer-events: none;
     background: radial-gradient(120% 100% at 50% 50%, transparent 42%, rgba(6,6,5,0.62) 78%, #060605 100%); }
@@ -77,7 +77,7 @@
     <canvas id="specks"></canvas>
     <div class="vig"></div>
     <!-- no header, no pip, no caption: during the reading the screen must not
-         ask for the guest's eyes. The orb alone in the dark room — colour and
+         ask for the guest's eyes. The orb alone in the dark room, colour and
          breath carry the state; the words belong to the reveal at the end. -->
   </div>
   <div id="controls" class="hide"><button id="btnHide">Hide</button></div>
@@ -86,7 +86,7 @@
   (function () {
     var SERVED = !!location.host && location.search.indexOf('preview') === -1;
     // HONESTY: ?preview on the SERVED host runs the synthetic driver on a real
-    // TV — that fabricated motion must carry a label (sim is always labeled).
+    // TV, that fabricated motion must carry a label (sim is always labeled).
     if (location.host && !SERVED) {
       var _pv = document.createElement('div');
       _pv.textContent = 'PREVIEW · SYNTHETIC DATA';
@@ -101,7 +101,7 @@
     // ---- video CHANNELS: two copies per clip, cross-dissolved across the loop seam ----
     // Native <video loop> snaps last-frame → first-frame (a visible CUT). Instead each
     // channel keeps a "current" copy playing and, a beat before it ends, restarts the
-    // "next" copy from 0 and dissolves between them over 700ms — so the wrap is a soft
+    // "next" copy from 0 and dissolves between them over 700ms, so the wrap is a soft
     // dissolve, never a cut. Only the current copy decodes at rest; the second spins up
     // briefly at the seam, so the decode load matches the old single-video-per-state.
     var STATES = ['gold', 'lockedin', 'drifting', 'depleted', 'red'];
@@ -135,7 +135,7 @@
         nw.classList.add('on');              // dissolve the fresh copy IN (700ms)
         old.classList.remove('on');          // dissolve the ending copy OUT (700ms)
         ch.cur = nw; ch.nxt = old;
-        // once the dissolve is done the old copy is invisible — pause it so we never
+        // once the dissolve is done the old copy is invisible, pause it so we never
         // decode two streams longer than the seam, then it waits, ready as 'nxt' again.
         setTimeout(function () { try { old.pause(); } catch (e) {} ch.seaming = false; }, 820);
       }
@@ -145,7 +145,7 @@
     var mists = document.querySelectorAll('.mist');
     var glowR = 221, glowG = 202, glowB = 142; // live aura tint (gold until data)
 
-    // smoke: soft wisps of the aura's colour curling off the orb — not dots.
+    // smoke: soft wisps of the aura's colour curling off the orb, not dots.
     // Each wisp is a blurred radial blob that rises from the rim, swells and
     // wavers sideways as it fades; drawn additively so it reads as lit vapour.
     var scv = document.getElementById('specks'), sctx = scv.getContext('2d');
@@ -154,7 +154,7 @@
     window.addEventListener('resize', resizeSpecks); resizeSpecks();
     function spawnWisp() {
       var W = scv.width, H = scv.height, R = Math.min(W, H) * 0.17; // ≈ the orb's rim
-      // bias toward the upper half — smoke rises off the top of the orb
+      // bias toward the upper half, smoke rises off the top of the orb
       var ang = Math.random() < 0.75
         ? -Math.PI * (0.12 + Math.random() * 0.76)          // upper arc
         : Math.random() * Math.PI * 2;                      // occasional stray anywhere
@@ -162,8 +162,8 @@
       wisps.push({
         x: W / 2 + Math.cos(ang) * rr, y: H / 2 + Math.sin(ang) * rr,
         vx: Math.cos(ang) * (2 + Math.random() * 4),
-        vy: -(6 + Math.random() * 8),                       // a slow, steady rise
-        r0: R * (0.10 + Math.random() * 0.10),              // starts small, swells ~3x
+        vy: -(6 + Math.random() * 8),                      // a slow, steady rise
+        r0: R * (0.10 + Math.random() * 0.10),             // starts small, swells ~3x
         ph: Math.random() * 6.283, wf: 0.5 + Math.random() * 0.7, // sideways waver
         wa: 8 + Math.random() * 14,
         life: 0, max: 6 + Math.random() * 6
@@ -199,7 +199,7 @@
 
     // reactive state: bloom the state channel over the gold base with the live
     // signal. Engagement (relative) picks locked-in ↔ drifting ↔ depleted; an
-    // interruption flashes red. All driven by measured signal — no numbers shown.
+    // interruption flashes red. All driven by measured signal, no numbers shown.
     var eng = 0.4, engT = 0.4, engHist = [];
     var redUntil = 0, nowMs = 0, haveData = !SERVED;
     // committed orb state + the dwell gate that keeps it from flickering
@@ -212,7 +212,7 @@
 
     // ---- clean state hand-off: reveal, never cross-dissolve ----
     // The incoming channel fades in ON TOP (raised z) while the OUTGOING channel holds
-    // full opacity beneath it — so the gold base never bleeds through mid-fade (the old
+    // full opacity beneath it, so the gold base never bleeds through mid-fade (the old
     // muddy triple-blend). Once the incoming has fully covered, the covered channels are
     // dropped to 0. name === null → no state (the gold base shows on its own).
     var zc = 10, shownState = null, hideTimer = null;
@@ -238,7 +238,7 @@
 
       // The orb settles into a STATE and stays there. A state must win a wide
       // hysteresis band AND hold its claim for MIN_DWELL before the orb commits,
-      // so the guest sees a slow bloom every half-minute or so — not a surface
+      // so the guest sees a slow bloom every half-minute or so, not a surface
       // reacting to every breath. (Continuous crossfade lives in CSS: 2.6s.)
       if (haveData) {
         var want = state;
@@ -253,7 +253,7 @@
       }
 
       // hand the orb to the committed state (gold base shows until data arrives), and
-      // overlay red on top per frame (its own channel — no bloom, instant response).
+      // overlay red on top per frame (its own channel, no bloom, instant response).
       showState(haveData ? state : null);
       C.red.el.style.opacity = red.toFixed(3);
 
@@ -262,7 +262,7 @@
       for (var si = 0; si < STATES.length; si++) loopChannel(C[STATES[si]]);
 
       // aura + mist + smoke share one tint mixed from the same state weights as
-      // the video bloom — repainted EVERY frame so the halo snaps with the orb
+      // the video bloom, repainted EVERY frame so the halo snaps with the orb
       // the instant its state moves (red flashes the same frame it fires).
       // TINTS are MEASURED from the state videos themselves (bright-pixel
       // average, hue preserved, lifted to glow brightness) so every fade

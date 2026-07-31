@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================
-// Zone — The Focus Room :: central config
+// Zone, The Focus Room :: central config
 // One place that resolves dev-vs-packaged paths, ports, and the
 // simulation discipline. Everything else imports from here so the
 // dev launch and the installed .exe behave identically.
@@ -17,7 +17,7 @@ const fs = require('fs');
 // Reads a gitignored .env next to the project root into process.env, so keys
 // like POSTMARK_API_KEY never live in source or in a committed config file.
 // Deliberately dependency-free: the room is local-first and offline, and this
-// is ~15 lines — not worth a runtime package (dotenv is only ever present here
+// is ~15 lines, not worth a runtime package (dotenv is only ever present here
 // as a transitive dev dependency, so requiring it would break a clean install).
 // A REAL environment variable always wins, so a launcher or CI can override.
 // Never logs a value: a missing or malformed file is silently skipped.
@@ -73,7 +73,7 @@ const webRoot = isDev ? repoRoot : path.join(resourcesPath, 'webroot');
 
 // The Python sidecar:
 //  - dev:  run sidecar/main.py with the project venv interpreter
-//          (FOCUSROOM_PYTHON overrides — the web host has no venv, just
+//          (FOCUSROOM_PYTHON overrides, the web host has no venv, just
 //          a stock python3; the sim path is pure stdlib)
 //  - prod: run the PyInstaller-frozen standalone binary from resources/sidecar
 function resolveSidecar() {
@@ -123,7 +123,7 @@ function resolveSidecar() {
   return {
     command,
     baseArgs: [],
-    // NEVER repoRoot here — in a packaged app that resolves INSIDE app.asar,
+    // NEVER repoRoot here, in a packaged app that resolves INSIDE app.asar,
     // which is not a real directory and makes spawn() fail. Use the frozen
     // binary's own onedir folder.
     cwd: path.dirname(command),
@@ -134,7 +134,7 @@ function resolveSidecar() {
 // --- ports ---------------------------------------------------------------
 // LAN-facing HTTP + WebSocket (the iPad opens this in Safari; the TV window
 // connects to it too). Bound to 0.0.0.0 so the iPad on the room LAN reaches it.
-// Cloud hosts (Replit) inject PORT — honor it so the deployment Just Works.
+// Cloud hosts (Replit) inject PORT, honor it so the deployment Just Works.
 const LAN_PORT = parseInt(
   process.env.FOCUSROOM_LAN_PORT || process.env.PORT || '4321', 10);
 
@@ -146,7 +146,7 @@ const SIDECAR_PORT = parseInt(process.env.FOCUSROOM_SIDECAR_PORT || '0', 10);
 
 // --- writable data dir (sqlite, session records, generated outputs) ------
 // FOCUSROOM_DATA_DIR overrides (point it at a persistent volume on a cloud
-// host — and a FRESH dir gives the web room its own empty constellation).
+// host, and a FRESH dir gives the web room its own empty constellation).
 const dataDir = process.env.FOCUSROOM_DATA_DIR
   || (isDev || !app
     ? path.join(repoRoot, 'data')

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Focus Room — Diagnostic</title>
+<title>Focus Room, Diagnostic</title>
 <style>
   :root{
     --bg:#141414; --panel:#1E1D1C; --panel2:#201F1D; --hair:rgba(214,212,201,.10);
@@ -40,68 +40,68 @@
 <body>
   <h1>
     <span>Focus Room · Diagnostic <span style="color:var(--fg-muted)">(Ctrl+Shift+D)</span></span>
-    <span id="mode" class="pill">—</span>
+    <span id="mode" class="pill">, </span>
   </h1>
   <div class="grid">
     <div class="card">
       <h2>Sidecar</h2>
-      <div class="row"><span class="k">running</span><span class="v" id="s_run">—</span></div>
-      <div class="row"><span class="k">connected</span><span class="v" id="s_conn">—</span></div>
-      <div class="row"><span class="k">ready</span><span class="v" id="s_ready">—</span></div>
-      <div class="row"><span class="k">source</span><span class="v" id="s_src">—</span></div>
-      <div class="row"><span class="k">pid</span><span class="v" id="s_pid">—</span></div>
+      <div class="row"><span class="k">running</span><span class="v" id="s_run">, </span></div>
+      <div class="row"><span class="k">connected</span><span class="v" id="s_conn">, </span></div>
+      <div class="row"><span class="k">ready</span><span class="v" id="s_ready">, </span></div>
+      <div class="row"><span class="k">source</span><span class="v" id="s_src">, </span></div>
+      <div class="row"><span class="k">pid</span><span class="v" id="s_pid">, </span></div>
       <div class="row"><span class="k">restarts</span><span class="v" id="s_restarts">0</span></div>
     </div>
 
     <div class="card">
       <h2>Native metrics (metrics.*)</h2>
-      <div class="row"><span class="k">engagement</span><span class="v" id="m_eng">—</span></div>
-      <div class="row"><span class="k">focus</span><span class="v" id="m_focus">—</span></div>
-      <div class="row"><span class="k">stress</span><span class="v" id="m_stress">—</span></div>
-      <div class="row"><span class="k">readiness</span><span class="v" id="m_ready">—</span></div>
-      <div class="row"><span class="k">drowsiness</span><span class="v" id="m_drowsy">—</span></div>
-      <div class="row"><span class="k">relaxation</span><span class="v" id="m_relax">—</span></div>
+      <div class="row"><span class="k">engagement</span><span class="v" id="m_eng">, </span></div>
+      <div class="row"><span class="k">focus</span><span class="v" id="m_focus">, </span></div>
+      <div class="row"><span class="k">stress</span><span class="v" id="m_stress">, </span></div>
+      <div class="row"><span class="k">readiness</span><span class="v" id="m_ready">, </span></div>
+      <div class="row"><span class="k">drowsiness</span><span class="v" id="m_drowsy">, </span></div>
+      <div class="row"><span class="k">relaxation</span><span class="v" id="m_relax">, </span></div>
     </div>
 
     <div class="card">
       <h2>Band powers + index</h2>
-      <div class="row"><span class="k">delta</span><span class="v" id="b_delta">—</span></div>
-      <div class="row"><span class="k">theta</span><span class="v" id="b_theta">—</span></div>
-      <div class="row"><span class="k">alpha</span><span class="v" id="b_alpha">—</span></div>
-      <div class="row"><span class="k">beta</span><span class="v" id="b_beta">—</span></div>
-      <div class="row"><span class="k">gamma</span><span class="v" id="b_gamma">—</span></div>
-      <div class="row"><span class="k">β/(α+θ) index</span><span class="v" id="b_idx">—</span></div>
+      <div class="row"><span class="k">delta</span><span class="v" id="b_delta">, </span></div>
+      <div class="row"><span class="k">theta</span><span class="v" id="b_theta">, </span></div>
+      <div class="row"><span class="k">alpha</span><span class="v" id="b_alpha">, </span></div>
+      <div class="row"><span class="k">beta</span><span class="v" id="b_beta">, </span></div>
+      <div class="row"><span class="k">gamma</span><span class="v" id="b_gamma">, </span></div>
+      <div class="row"><span class="k">β/(α+θ) index</span><span class="v" id="b_idx">, </span></div>
     </div>
 
     <div class="card">
       <h2>Live line (guest-facing)</h2>
-      <div class="row"><span class="k">engagementRel</span><span class="v" id="f_rel">—</span></div>
+      <div class="row"><span class="k">engagementRel</span><span class="v" id="f_rel">, </span></div>
       <div class="bar"><span id="f_bar" style="width:0%"></span></div>
-      <div class="row"><span class="k">state word</span><span class="v" id="f_state">—</span></div>
-      <div class="row"><span class="k">signal quality</span><span class="v" id="f_sq">—</span></div>
-      <div class="row"><span class="k">t (session)</span><span class="v" id="f_t">—</span></div>
-      <div class="row"><span class="k">plateau / dip</span><span class="v" id="f_ev">—</span></div>
+      <div class="row"><span class="k">state word</span><span class="v" id="f_state">, </span></div>
+      <div class="row"><span class="k">signal quality</span><span class="v" id="f_sq">, </span></div>
+      <div class="row"><span class="k">t (session)</span><span class="v" id="f_t">, </span></div>
+      <div class="row"><span class="k">plateau / dip</span><span class="v" id="f_ev">, </span></div>
     </div>
 
     <div class="card">
       <h2>Battery / fit</h2>
-      <div class="row"><span class="k">left %</span><span class="v" id="bat_l">—</span></div>
-      <div class="row"><span class="k">right %</span><span class="v" id="bat_r">—</span></div>
-      <div class="row"><span class="k">battery ok</span><span class="v" id="bat_ok">—</span></div>
-      <div class="row"><span class="k">impedance allGood</span><span class="v" id="imp_all">—</span></div>
-      <div class="row"><span class="k">L ch1/ch2</span><span class="v" id="imp_l">—</span></div>
-      <div class="row"><span class="k">R ch1/ch2</span><span class="v" id="imp_r">—</span></div>
+      <div class="row"><span class="k">left %</span><span class="v" id="bat_l">, </span></div>
+      <div class="row"><span class="k">right %</span><span class="v" id="bat_r">, </span></div>
+      <div class="row"><span class="k">battery ok</span><span class="v" id="bat_ok">, </span></div>
+      <div class="row"><span class="k">impedance allGood</span><span class="v" id="imp_all">, </span></div>
+      <div class="row"><span class="k">L ch1/ch2</span><span class="v" id="imp_l">, </span></div>
+      <div class="row"><span class="k">R ch1/ch2</span><span class="v" id="imp_r">, </span></div>
     </div>
 
     <div class="card">
       <h2>Packet stats / connection</h2>
-      <div class="row"><span class="k">dev1 rate</span><span class="v" id="st_r1">—</span></div>
-      <div class="row"><span class="k">dev1 recv/drop</span><span class="v" id="st_d1">—</span></div>
-      <div class="row"><span class="k">dev2 rate</span><span class="v" id="st_r2">—</span></div>
-      <div class="row"><span class="k">dev2 recv/drop</span><span class="v" id="st_d2">—</span></div>
-      <div class="row"><span class="k">elapsed</span><span class="v" id="st_el">—</span></div>
-      <div class="row"><span class="k">status</span><span class="v" id="st_status">—</span></div>
-      <div class="row"><span class="k">devices</span><span class="v" id="st_devices">—</span></div>
+      <div class="row"><span class="k">dev1 rate</span><span class="v" id="st_r1">, </span></div>
+      <div class="row"><span class="k">dev1 recv/drop</span><span class="v" id="st_d1">, </span></div>
+      <div class="row"><span class="k">dev2 rate</span><span class="v" id="st_r2">, </span></div>
+      <div class="row"><span class="k">dev2 recv/drop</span><span class="v" id="st_d2">, </span></div>
+      <div class="row"><span class="k">elapsed</span><span class="v" id="st_el">, </span></div>
+      <div class="row"><span class="k">status</span><span class="v" id="st_status">, </span></div>
+      <div class="row"><span class="k">devices</span><span class="v" id="st_devices">, </span></div>
     </div>
 
     <div class="controls">
@@ -122,7 +122,7 @@
   const $ = (id) => document.getElementById(id);
   const set = (id, val, cls) => { const el = $(id); if (!el) return; el.textContent = val;
     el.className = 'v' + (cls ? ' ' + cls : ''); };
-  const n = (x, d=3) => (x === null || x === undefined) ? '—' : Number(x).toFixed(d);
+  const n = (x, d=3) => (x === null || x === undefined) ? ', ' : Number(x).toFixed(d);
 
   function applyStatus(s) {
     if (!s) return;
@@ -130,7 +130,7 @@
     set('s_conn', s.connected ? 'yes' : 'no', s.connected ? 'ok' : 'bad');
     set('s_ready', s.ready ? 'yes' : 'no', s.ready ? 'ok' : 'warn');
     set('s_src', s.frozen ? 'frozen' : 'venv');
-    set('s_pid', s.pid ?? '—');
+    set('s_pid', s.pid ?? ', ');
     set('s_restarts', s.restarts ?? 0, s.restarts ? 'warn' : null);
     const mode = $('mode');
     mode.textContent = s.simulate ? 'SIMULATION' : 'REAL EEG';
@@ -153,18 +153,18 @@
         set('b_delta', n(m.delta)); set('b_theta', n(m.theta)); set('b_alpha', n(m.alpha));
         set('b_beta', n(m.beta)); set('b_gamma', n(m.gamma)); set('b_idx', n(m.engIndex), 'warn'); break;
       case 'eeg/frame':
-        set('f_rel', n(m.engagementRel)); set('f_state', m.stateWord || '—');
+        set('f_rel', n(m.engagementRel)); set('f_state', m.stateWord || ', ');
         set('f_sq', n(m.signalQuality)); set('f_t', n(m.tRel, 1));
         $('f_bar').style.width = Math.round((m.engagementRel ?? 0) * 100) + '%'; break;
       case 'session/plateau': set('f_ev', 'PLATEAU @ ' + n(m.tRel,1) + 's', 'warn'); log('» plateau @ ' + n(m.tRel,1) + 's'); break;
       case 'session/dip': set('f_ev', 'DIP @ ' + n(m.tRel,1) + 's', 'bad'); log('» dip @ ' + n(m.tRel,1) + 's'); break;
       case 'fit/battery':
-        set('bat_l', m.leftPct ?? '—'); set('bat_r', m.rightPct ?? '—');
+        set('bat_l', m.leftPct ?? ', '); set('bat_r', m.rightPct ?? ', ');
         set('bat_ok', m.ok ? 'yes' : 'NO', m.ok ? 'ok' : 'bad'); break;
       case 'fit/impedance': {
         set('imp_all', m.allGood ? 'YES' : 'no', m.allGood ? 'ok' : 'warn');
         const c = m.channels || {};
-        const fmt = (e) => e ? `${e.ch1?.state||'?'}/${e.ch2?.state||'?'}` : '—';
+        const fmt = (e) => e ? `${e.ch1?.state||'?'}/${e.ch2?.state||'?'}` : ', ';
         set('imp_l', fmt(c.left)); set('imp_r', fmt(c.right)); break;
       }
       case 'eeg/stats':

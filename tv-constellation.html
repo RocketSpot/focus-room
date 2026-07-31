@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>The Focus Room — TV · Constellation</title>
+<title>The Focus Room, TV · Constellation</title>
 <link rel="stylesheet" href="tokens.css">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -56,14 +56,14 @@
       <canvas id="sky" width="1920" height="1080"></canvas>
 
       <div class="head">
-        <div class="brand"><span class="mark"></span><span class="label">ZONE — THE FOCUS ROOM</span></div>
+        <div class="brand"><span class="mark"></span><span class="label">ZONE, THE FOCUS ROOM</span></div>
         <div class="right" id="mode">Idle</div>
       </div>
       <div class="titleblock">
         <h1>The Focus Constellation</h1>
-        <div class="sub">Every mind that has passed through this room — one dot each, placed by how their focus moved. No names. No ranking.</div>
+        <div class="sub">Every mind that has passed through this room, one dot each, placed by how their focus moved. No names. No ranking.</div>
       </div>
-      <div class="count"><div class="n num" id="countN">—</div><div class="k">minds, and counting</div></div>
+      <div class="count"><div class="n num" id="countN">, </div><div class="k">minds, and counting</div></div>
 
       <!-- axis hints -->
       <div class="axislab" style="left:120px; top:540px;">Settles slowly →</div>
@@ -72,10 +72,10 @@
       <div class="axislab" style="left:50%; bottom:150px; transform:translateX(-50%);">Steady once engaged</div>
 
       <!-- cluster labels positioned beside each quadrant cluster -->
-      <div class="clabel" id="lab-sprint" style="left:230px; top:420px;"><div class="name">Sprinter</div><div class="meta">— intense short peaks</div></div>
-      <div class="clabel" id="lab-deep"   style="left:230px; top:880px;"><div class="name">Deep Diver</div><div class="meta">— long deep stretches</div></div>
-      <div class="clabel" id="lab-igniter" style="left:1500px; top:420px;"><div class="name">Quick Igniter</div><div class="meta">shorter waves —</div></div>
-      <div class="clabel" id="lab-steady" style="left:1500px; top:880px;"><div class="name">Steady Burner</div><div class="meta">even, gentle waves —</div></div>
+      <div class="clabel" id="lab-sprint" style="left:230px; top:420px;"><div class="name">Sprinter</div><div class="meta">, intense short peaks</div></div>
+      <div class="clabel" id="lab-deep"   style="left:230px; top:880px;"><div class="name">Deep Diver</div><div class="meta">, long deep stretches</div></div>
+      <div class="clabel" id="lab-igniter" style="left:1500px; top:420px;"><div class="name">Quick Igniter</div><div class="meta">shorter waves,</div></div>
+      <div class="clabel" id="lab-steady" style="left:1500px; top:880px;"><div class="name">Steady Burner</div><div class="meta">even, gentle waves,</div></div>
     </div>
   </div>
 
@@ -106,7 +106,7 @@
       var px = s * (window.devicePixelRatio || 1);
       cv.width = Math.round(W * px); cv.height = Math.round(H * px);
       // derive the transform from the ROUNDED store so fillRect(0,0,W,H) covers
-      // every device pixel — an unrounded px leaves an uncleared edge sliver that
+      // every device pixel, an unrounded px leaves an uncleared edge sliver that
       // 'lighter' dots would accumulate into permanently.
       ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
     }
@@ -114,8 +114,8 @@
 
     // 2×2 map: x = settle speed (left slow / right quick), y = variability (top var / bottom steady)
     var clusters = {
-      sprint:  { name: 'Sprinter',      cx: 480,  cy: 540, sx: 150, sy: 120, n: 120, color: [233,178,126], lab: 'lab-sprint' },
-      deep:    { name: 'Deep Diver',    cx: 500,  cy: 790, sx: 120, sy: 120, n: 210, color: [221,202,142], lab: 'lab-deep' },
+      sprint:  { name: 'Sprinter',     cx: 480, cy: 540, sx: 150, sy: 120, n: 120, color: [233,178,126], lab: 'lab-sprint' },
+      deep:    { name: 'Deep Diver',   cx: 500, cy: 790, sx: 120, sy: 120, n: 210, color: [221,202,142], lab: 'lab-deep' },
       igniter: { name: 'Quick Igniter', cx: 1420, cy: 540, sx: 185, sy: 130, n: 320, color: [232,192,137], lab: 'lab-igniter' },
       steady:  { name: 'Steady Burner', cx: 1430, cy: 790, sx: 165, sy: 115, n: 290, color: [203,201,188], lab: 'lab-steady' }
     };
@@ -126,7 +126,7 @@
     }
 
     var dots = [];
-    // synthetic scatter is preview-only — served in the room the wall starts
+    // synthetic scatter is preview-only, served in the room the wall starts
     // empty and fills from constellation/data (the real persisted dots)
     if (!SERVED) Object.keys(clusters).forEach(function (k) {
       var c = clusters[k];
@@ -208,7 +208,7 @@
           ripples.push({ x: joiner.tx, y: joiner.ty, t0: now, color: joiner.color });
           dots.push({ x: joiner.tx, y: joiner.ty, key: joiner.key, color: joiner.color,
             r: 3.4, a: 0.95, ph: Math.random() * 6, tw: 0.7, born: 0.01, id: joiner.id });
-          if (joiner.id != null) landed[joiner.id] = 1; // this dot is ON THE WALL now — no rebuild may strip or re-fly it
+          if (joiner.id != null) landed[joiner.id] = 1; // this dot is ON THE WALL now, no rebuild may strip or re-fly it
           var cl = document.getElementById(clusters[joiner.key].lab);
           if (cl) { cl.classList.add('hot'); setTimeout(function () { cl.classList.remove('hot'); }, 2600); }
           var cn = document.getElementById('countN');
@@ -232,7 +232,7 @@
     document.getElementById('btnJoin').onclick = function () { joinDot(document.getElementById('selArch').value); };
     var controls = document.getElementById('controls');
     document.getElementById('btnHide').onclick = function () { controls.classList.add('hide'); };
-    // !SERVED, same as tv-signal: the synthetic driver ("Join a dot" — a
+    // !SERVED, same as tv-signal: the synthetic driver ("Join a dot", a
     // fabricated dot on the real persisted wall) must never be one keypress
     // away from the guest-facing wall.
     document.addEventListener('keydown', function (e) { if (e.key === 'c' && !SERVED) controls.classList.toggle('hide'); });
@@ -243,7 +243,7 @@
     // `landed` outlives every rebuild: constellation/data is re-broadcast to ALL
     // TVs whenever ANY tv client hellos (a reload, a Wi-Fi blip, a second
     // screen), and each arrival rebuilt the wall WITHOUT the pending-join dot
-    // and re-flew it — so a dot that had already landed vanished from the wall
+    // and re-flew it, so a dot that had already landed vanished from the wall
     // and the counter disagreed with the sky. A landed dot stays landed.
     var liveMode = false, liveIds = {}, landed = {};
     function placeDot(d) { var c = clusters[d.archetype] || clusters.deep; return { x: c.cx + (d.sx || 0) * c.sx, y: c.cy + (d.sy || 0) * c.sy }; }
@@ -267,7 +267,7 @@
     function setCount(n) {
       var cn = document.getElementById('countN'); if (!cn || typeof n !== 'number') return;
       cn.textContent = n.toLocaleString();
-      // "1 minds, and counting" is not English — the label follows the number
+      // "1 minds, and counting" is not English, the label follows the number
       var k = cn.parentNode && cn.parentNode.querySelector('.k');
       if (k) k.textContent = (n === 1 ? 'mind, and counting' : 'minds, and counting');
     }
@@ -284,14 +284,14 @@
           // bumps it to the full count). Mid-flight counts as still pending: a
           // re-broadcast during the 2.4s flight (a second TV switching to the
           // wall) used to paint the full count and then the landing bumped it
-          // again — the counter read one high until the next rebuild.
+          // again, the counter read one high until the next rebuild.
           var pendingFlight = m.joinId != null && !landed[m.joinId];
           setCount((m.count || 0) - (pendingFlight ? 1 : 0));
           if (m.joinId != null) { var jd = (m.dots || []).filter(function (d) { return d.id === m.joinId; })[0]; if (jd) joinReal(jd); }
         } else if (m.type === 'constellation/join' && m.dot) {
           joinReal(m.dot);
         } else if (m.type === 'session/state' && m.beat) {
-          // quiet header word from the beat — never 'Idle' while a guest is in
+          // quiet header word from the beat, never 'Idle' while a guest is in
           document.getElementById('mode').textContent = m.beat === 'idle' ? 'Idle' : 'In session';
         }
       };
@@ -308,10 +308,10 @@
     }
 
     // Served in the room: no synthetic dots, no fabricated count, no preview
-    // pill — the real wall arrives with constellation/data (re-sent on hello)
+    // pill, the real wall arrives with constellation/data (re-sent on hello)
     if (SERVED) {
       controls.classList.add('hide');
-      document.getElementById('countN').textContent = '—';
+      document.getElementById('countN').textContent = ', ';
     }
     connectLive();
   })();

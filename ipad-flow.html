@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <!-- viewport-fit=cover + no user-scaling = a real app surface, not a zoomable web page -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>The Focus Room — iPad · Guest Flow</title>
+<title>The Focus Room, iPad · Guest Flow</title>
 <!-- Add-to-Home-Screen → launches standalone (no Safari chrome), portrait, full-bleed.
      navigator.standalone then flips on body.device below to drop the preview bezel. -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -39,7 +39,7 @@
   @keyframes introFade { from { opacity: 0; } to { opacity: 1; } }
 
   /* ============================================================
-     CALM MOTION — the iPad should feel alive, never animated AT you.
+     CALM MOTION, the iPad should feel alive, never animated AT you.
      Everything here is slow, low-amplitude and opacity/transform only, so it
      reads as the room breathing rather than a slideshow clicking forward.
      Nothing loops fast enough to catch the eye of someone trying to read.
@@ -61,7 +61,7 @@
 
   /* every screen fades up on arrival */
   .screenwrap > * { animation: calmIn 760ms var(--ease-out) both; }
-  /* and its blocks follow, barely staggered — the eye lands on one thing at a time */
+  /* and its blocks follow, barely staggered, the eye lands on one thing at a time */
   .calm-stagger > * { animation: calmLift 640ms var(--ease-out) both; }
   .calm-stagger > *:nth-child(1) { animation-delay: 60ms; }
   .calm-stagger > *:nth-child(2) { animation-delay: 150ms; }
@@ -74,13 +74,13 @@
   button:active { transform: scale(0.976); }
 
   /* Someone who asked the system for less motion gets less motion. The room
-     still works exactly the same — it just stops moving on its own. */
+     still works exactly the same, it just stops moving on its own. */
   @media (prefers-reduced-motion: reduce) {
     .screenwrap > *, .calm-stagger > * { animation: introFade 260ms linear both; }
     [style*="orbBreathe"], [style*="orbMote"] { animation: none !important; }
   }
 
-  /* review controls (outside the iPad) — auto-hidden with ?kiosk=1 */
+  /* review controls (outside the iPad), auto-hidden with ?kiosk=1 */
   #controls { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center;
     gap: 9px; z-index: 80; background: rgba(20,20,20,0.85); border: 1px solid var(--hair-strong); backdrop-filter: blur(12px);
     border-radius: var(--r-pill); padding: 7px 9px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;
@@ -93,7 +93,7 @@
   #controls .sep { width: 1px; height: 16px; background: var(--hair-strong); }
   #controls .now { color: var(--c-signal); }
 
-  /* DEVICE / KIOSK MODE — launched standalone from the iPad home screen, or ?kiosk=1.
+  /* DEVICE / KIOSK MODE, launched standalone from the iPad home screen, or ?kiosk=1.
      Strip the desktop-preview iPad bezel and let the real 816×1172 guest canvas
      fill the whole screen (the controller cover-scales #room to the viewport). */
   body.device #stage { background: #060605; }

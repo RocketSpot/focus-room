@@ -1,7 +1,7 @@
-// ZONE — THE FOCUS ROOM · iPad vendor + DS shims (local-first, no CDN)
+// ZONE, THE FOCUS ROOM · iPad vendor + DS shims (local-first, no CDN)
 // Bundled FIRST by esbuild so window.React is set before the ui/screen IIFEs
 // (which reference the React global) evaluate. Replaces the unpkg React/Babel,
-// the Lucide CDN, and _ds_bundle.js — the screens only used window.MonoLabel
+// the Lucide CDN, and _ds_bundle.js, the screens only used window.MonoLabel
 // and window.I from the DS, both shimmed here against tokens.css.
 import React from 'react';
 import { createRoot } from 'react-dom/client';

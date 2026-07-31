@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>The Focus Room — Shareable Focus Profile</title>
+<title>The Focus Room, Shareable Focus Profile</title>
 <link rel="stylesheet" href="tokens.css">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -38,7 +38,7 @@
 
         <!-- header -->
         <circle cx="74" cy="80" r="7" fill="#DDCA8E"/>
-        <text x="92" y="86" fill="#7A7873" font-family="IBM Plex Mono, Courier New, monospace" font-size="19" letter-spacing="3">ZONE — THE FOCUS ROOM</text>
+        <text x="92" y="86" fill="#7A7873" font-family="IBM Plex Mono, Courier New, monospace" font-size="19" letter-spacing="3">ZONE, THE FOCUS ROOM</text>
         <text x="1006" y="86" text-anchor="end" fill="#7A7873" font-family="IBM Plex Mono, Courier New, monospace" font-size="19" letter-spacing="3">FOCUS PROFILE</text>
 
         <!-- the signature line -->
@@ -75,7 +75,7 @@
       deep:    { name: 'Deep Diver', desc: 'Slow to settle, then long and deep.', q: 'deep' },
       igniter: { name: 'Quick Igniter', desc: 'Settles fast, then runs in short waves.', q: 'igniter' },
       steady:  { name: 'Steady Burner', desc: 'Even focus, gentle waves, very little drift.', q: 'steady' },
-      sprint:  { name: 'Sprinter', desc: 'Intense short peaks — restless and sharp.', q: 'sprint' }
+      sprint:  { name: 'Sprinter', desc: 'Intense short peaks, restless and sharp.', q: 'sprint' }
     };
     // 2×2 quadrant positions (x: slow→quick, y: variable→steady)
     var QPOS = { sprint: [0, 0], igniter: [1, 0], deep: [0, 1], steady: [1, 1] };
@@ -113,7 +113,7 @@
       keys.forEach(function (k) {
         var p = QPOS[k]; var cx = p[0] * gap, cy = p[1] * gap;
         var on = k === arch;
-        // signal sand for the active archetype — orange (#FF5714) is reserved for
+        // signal sand for the active archetype, orange (#FF5714) is reserved for
         // the single interruption mark and nothing else.
         q.appendChild(el('circle', { cx: cx, cy: cy, r: on ? 11 : 6, fill: on ? '#DDCA8E' : '#42413E' }));
         if (on) q.appendChild(el('circle', { cx: cx, cy: cy, r: 22, fill: 'none', stroke: '#DDCA8E', 'stroke-opacity': 0.45, 'stroke-width': 1.5 }));
@@ -122,18 +122,18 @@
       q.appendChild(el('line', { x1: -2, y1: gap + 44, x2: gap + 2, y2: gap + 44, stroke: '#42413E', 'stroke-width': 1 }));
       var t1 = el('text', { x: 0, y: gap + 70, fill: '#7A7873', 'font-family': 'IBM Plex Mono, Courier New, monospace', 'font-size': 14, 'letter-spacing': 1.5 }); t1.textContent = 'SLOW'; q.appendChild(t1);
       var t2 = el('text', { x: gap, y: gap + 70, fill: '#7A7873', 'font-family': 'IBM Plex Mono, Courier New, monospace', 'font-size': 14, 'letter-spacing': 1.5, 'text-anchor': 'end' }); t2.textContent = 'QUICK'; q.appendChild(t2);
-      // signal readiness only once the webfonts are in — font-display:swap could
+      // signal readiness only once the webfonts are in, font-display:swap could
       // otherwise let the PNG capture fallback faces (outputs render waits on this)
       var fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
       fontsReady.then(function () { document.body.setAttribute('data-rendered', '1'); });
     }
 
     // real data arrives via ?d= (small payloads) or is injected after load
-    // through window.__setData (?wait=1 — long sessions outgrow the URL)
+    // through window.__setData (?wait=1, long sessions outgrow the URL)
     window.__setData = function (data) { render((data && data.arch) || 'deep', data); };
     var params = new URLSearchParams(location.search);
     var q0 = params.get('d');
-    // never fall back to the synthetic preview on a malformed payload — that
+    // never fall back to the synthetic preview on a malformed payload, that
     // ships an invented session as if it were the guest's (see card.html)
     if (q0) {
       try { var data = JSON.parse(decodeURIComponent(escape(atob(q0)))); render(data.arch || 'deep', data); }

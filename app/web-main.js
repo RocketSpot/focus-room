@@ -1,12 +1,12 @@
 'use strict';
 // ============================================================
-// Zone — The Focus Room :: headless WEB entry (no Electron)
+// Zone, The Focus Room :: headless WEB entry (no Electron)
 // ------------------------------------------------------------
 // The whole room brain on a web host (Replit or any Node box):
 //   TV        →  /tv.html            (beat-following shell, fullscreen it)
 //   guest     →  /ipad-flow.html?kiosk=1
 //   operator  →  /ops.html
-// Simulated EEG only — a cloud VM has no Bluetooth radio, so the web room
+// Simulated EEG only, a cloud VM has no Bluetooth radio, so the web room
 // always runs the deterministic sim source. Real earbuds stay physical.
 //
 // Launch:  FOCUSROOM_SIMULATE=1 node app/web-main.js
@@ -15,9 +15,9 @@
 // ============================================================
 
 // Two signal modes (set BEFORE config resolves):
-//   default          — local SIM sidecar on stock python3 (a cloud VM has no
+//   default         , local SIM sidecar on stock python3 (a cloud VM has no
 //                      Bluetooth radio, so local signal is sim-by-definition)
-//   FOCUSROOM_SIGNAL=bridge — REAL earbuds: a desktop machine runs
+//   FOCUSROOM_SIGNAL=bridge, REAL earbuds: a desktop machine runs
 //                      bridge/desktop-bridge.js and streams its sidecar up
 //                      here (requires FOCUSROOM_BRIDGE_TOKEN on both ends).
 //                      No python runs on the web host at all in this mode.
@@ -45,7 +45,7 @@ async function start() {
   await room.supervisor.start();
 }
 
-// a web host restarts the process itself — exit and let it, unless we're looping
+// a web host restarts the process itself, exit and let it, unless we're looping
 room.attachCrashGuard((looping) => process.exit(looping ? 1 : 2));
 
 const bye = () => room.cleanup().then(() => process.exit(0));

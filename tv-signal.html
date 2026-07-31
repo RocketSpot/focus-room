@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>The Focus Room — TV · Signal</title>
+<title>The Focus Room, TV · Signal</title>
 <link rel="stylesheet" href="tokens.css">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -31,14 +31,14 @@
   .live .pip { width: 10px; height: 10px; border-radius: 50%; background: var(--c-signal); box-shadow: 0 0 16px 2px var(--c-signal-glow); animation: breathe 5.6s var(--ease-in-out) infinite; }
   @keyframes breathe { 0%,100% { opacity: 0.95; } 50% { opacity: 0.5; } }
 
-  /* amber (never orange) SIMULATED badge — persistent whenever the source is sim */
+  /* amber (never orange) SIMULATED badge, persistent whenever the source is sim */
   #simBadge { position: absolute; top: 66px; left: 50%; transform: translateX(-50%); display: none;
     font-family: var(--font-mono); font-size: 15px; letter-spacing: 0.22em; text-transform: uppercase;
     color: #E0A657; border: 1px solid rgba(224,166,87,0.55); border-radius: 6px; padding: 7px 14px;
     background: rgba(224,166,87,0.06); }
   #simBadge.on { display: block; }
 
-  /* STAFF MODE indicator — shown whenever engineering access is unlocked. Distinct
+  /* STAFF MODE indicator, shown whenever engineering access is unlocked. Distinct
      from the amber SIMULATED badge (this is teal) so the two never read as one. */
   #staffBadge { position: absolute; top: 66px; right: 120px; display: none;
     font-family: var(--font-mono); font-size: 14px; letter-spacing: 0.22em; text-transform: uppercase;
@@ -66,7 +66,7 @@
   .caption { position: absolute; left: 120px; bottom: 60px; color: var(--fg-muted); font-size: 16px; letter-spacing: var(--tr-mono); font-family: var(--font-mono); text-transform: uppercase; }
   .caption .dim { color: var(--fg-faint); }
 
-  /* engineering overlay — all four transmitted channels + quality; toggled with 'e' */
+  /* engineering overlay, all four transmitted channels + quality; toggled with 'e' */
   #eng { position: absolute; left: 120px; right: 120px; top: 916px; display: none; font-family: var(--font-mono);
     font-size: 13px; letter-spacing: var(--tr-mono-sm); color: var(--fg-faint); text-transform: uppercase; line-height: 1.7; }
   #eng.on { display: block; }
@@ -82,7 +82,7 @@
       <div class="glow b" id="glowB"></div>
 
       <div class="head">
-        <div class="brand"><span class="mark"></span><span class="label">ZONE — THE FOCUS ROOM</span></div>
+        <div class="brand"><span class="mark"></span><span class="label">ZONE, THE FOCUS ROOM</span></div>
         <div class="live"><span class="pip"></span><span>LIVE</span></div>
       </div>
       <div id="simBadge">Simulated data</div>
@@ -103,7 +103,7 @@
   (function () {
     'use strict';
     // ============================================================
-    // Phase 2A live signal check — renders ACTUAL raw EEG samples (eeg/raw-v1),
+    // Phase 2A live signal check, renders ACTUAL raw EEG samples (eeg/raw-v1),
     // not decorative band lines. Rules: straight segments between real samples,
     // no splines, no invented noise, gaps stay visible, causal per-channel display
     // filter only, robust attack/release gain, no µV labels (calibration
@@ -153,7 +153,7 @@
     function filtReset(cf) { biquadReset(cf.hp); biquadReset(cf.lp); cf.primed = false; }
 
     // ---- ring buffers (one shared index ring + per-channel raw & filtered) ----
-    var CAP = 6000;                            // ~24 s at 250 Hz — plenty over the 8 s window
+    var CAP = 6000;                            // ~24 s at 250 Hz, plenty over the 8 s window
     var idxRing = new Float64Array(CAP);       // global sample index per slot
     var rawRing = [new Float32Array(CAP), new Float32Array(CAP), new Float32Array(CAP), new Float32Array(CAP)];
     var filtRing = [new Float32Array(CAP), new Float32Array(CAP), new Float32Array(CAP), new Float32Array(CAP)];
@@ -162,7 +162,7 @@
     var cf = [makeChannelFilter(), makeChannelFilter(), makeChannelFilter(), makeChannelFilter()];
     var haveData = false;
     // browser-transport continuity (distinct from device/SDK continuity) + an explicit
-    // dropped-DISPLAY-batch counter. A dropped display batch is a browser/transport drop —
+    // dropped-DISPLAY-batch counter. A dropped display batch is a browser/transport drop,
     // NEVER reported as device packet loss. The ring buffer is fixed-size (bounded memory).
     var lastSeq = 0, droppedDisplayBatches = 0;
 
@@ -211,11 +211,11 @@
 
     // ---- quality → channel selection (NO guest-facing signal state) ----
     // The room NEVER tells a guest the state of their signal. No "clear / received /
-    // limited / poor", no "reseat that side", no "settling", no per-channel reasons —
+    // limited / poor", no "reseat that side", no "settling", no per-channel reasons,
     // judging someone's signal at them is not the experience, and the guest can do
     // nothing useful with it. The heading is a CONSTANT welcome; the waveform speaks
     // for itself. Quality still arrives and still drives channel selection + the
-    // engineering view + the operator's coaching prompt — it just never reaches the wall.
+    // engineering view + the operator's coaching prompt, it just never reaches the wall.
     var QUAL = null, selL = 'Left-A', selR = 'Right-A', selSwitchL = null, selSwitchR = null;
     var GUEST_WORD = 'This is you', GUEST_SUB = 'live from your earbuds';
     function onQuality(m) {
@@ -229,7 +229,7 @@
       selR = sel.right || selR;
       updateEarStates();
     }
-    // Engineering-only per-channel state — rendered ONLY in staff mode, never for a guest.
+    // Engineering-only per-channel state, rendered ONLY in staff mode, never for a guest.
     function chanState(ch) {
       if (!QUAL || !QUAL.channels || !QUAL.channels[ch]) return '';
       var q = QUAL.channels[ch];
@@ -265,7 +265,7 @@
     function sizeCanvas() { canvas.width = CW * DPR; canvas.height = CH * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0); }
     sizeCanvas();
 
-    var GAIN_FLOOR = 40;                        // ADC counts — don't over-amplify a quiet trace
+    var GAIN_FLOOR = 40;                        // ADC counts, don't over-amplify a quiet trace
     var gainShared = null;                      // px per count, smoothed (attack/release)
     var engOn = false;
 
@@ -305,9 +305,9 @@
         if (!col) cols[px] = { min: v, max: v, last: v, idx: gi };
         else { if (v < col.min) col.min = v; if (v > col.max) col.max = v; col.last = v; col.idx = gi; }
       }
-      // SOFT LIMIT — never a hard clamp. Clamping pinned every large artifact (a blink,
+      // SOFT LIMIT, never a hard clamp. Clamping pinned every large artifact (a blink,
       // an electrode step, a bud being touched) flat against the panel edge and drew it
-      // as a FLAT-TOPPED SQUARE — a shape the signal never made. Instead the drawn
+      // as a FLAT-TOPPED SQUARE, a shape the signal never made. Instead the drawn
       // offset stays linear (honest 1:1) inside the knee and compresses asymptotically
       // toward the edge beyond it, so a big excursion TAPERS and keeps its shape rather
       // than railing. Monotonic, continuous, slope 1 at the knee: no sample is dropped,
@@ -368,20 +368,20 @@
         var ampL = (la != null) ? robustAmp(la, leftIdx) : null;
         var ampR = (ra != null) ? robustAmp(ra, leftIdx) : null;
         // shared gain policy so L and R amplitudes are directly comparable (same units).
-        // robustAmp is ~1 SD of the trace, and ordinary EEG regularly reaches ~3 SD — so
+        // robustAmp is ~1 SD of the trace, and ordinary EEG regularly reaches ~3 SD, so
         // the old CH*0.20 (≈112px for 1 SD in a 123px half-lane) put NORMAL signal at the
         // panel edge and made every artifact rail into a flat-topped square. CH*0.05 puts
         // 1 SD at ~28px, so a ~3 SD swing still lands inside the soft knee and only a true
-        // artifact reaches the compressing region. Same data, honestly scaled — it is only
+        // artifact reaches the compressing region. Same data, honestly scaled, it is only
         // how far the trace is drawn, never which samples are drawn.
         var ampShared = Math.max(ampL || 0, ampR || 0, GAIN_FLOOR);
         var targetGain = (CH * 0.05) / ampShared;
         if (gainShared == null) gainShared = targetGain;
         else { var rate = targetGain < gainShared ? 0.10 : 0.03; gainShared += (targetGain - gainShared) * rate; } // faster attack (shrink) than release
         if (la != null && ampL != null) drawTrace(la, 0, CW, 20, 270, leftIdx, rightIdx, gainShared, 'var(--c-signal)', selSwitchL);
-        else drawUnavailable(20, 270, staffMode ? 'left ear — no usable channel' : '');
+        else drawUnavailable(20, 270, staffMode ? 'left ear, no usable channel' : '');
         if (ra != null && ampR != null) drawTrace(ra, 0, CW, 290, 540, leftIdx, rightIdx, gainShared, '#CBB26A', selSwitchR);
-        else drawUnavailable(290, 540, staffMode ? 'right ear — no usable channel' : '');
+        else drawUnavailable(290, 540, staffMode ? 'right ear, no usable channel' : '');
       } else {
         // --- engineering: all four transmitted channels, same time axis ---
         var order = [0, 1, 2, 3], amps = [];
@@ -396,7 +396,7 @@
           ctx.fillStyle = 'rgba(214,212,201,0.5)'; ctx.font = '15px "IBM Plex Mono", monospace';
           ctx.fillText(LABELS[q], 8, yt + 16);
           if (anyPresent) drawTrace(q, 0, CW, yt, yb, leftIdx, rightIdx, gEng, 'var(--c-signal)');
-          else drawUnavailable(yt, yb, LABELS[q] + ' — absent');
+          else drawUnavailable(yt, yb, LABELS[q] + ', absent');
         }
       }
       requestAnimationFrame(render);
@@ -408,10 +408,10 @@
       var el = document.getElementById('eng');
       if (!engOn) { el.classList.remove('on'); return; }
       el.classList.add('on');
-      if (!QUAL) { el.innerHTML = '<b>ENGINEERING</b> — waiting for quality…'; return; }
+      if (!QUAL) { el.innerHTML = '<b>ENGINEERING</b>, waiting for quality…'; return; }
       var cq = QUAL.channels || {}, cc = QUAL.connectionQuality || {};
       function badge(ch) {
-        var q = cq[ch]; if (!q) return ch + ':—';
+        var q = cq[ch]; if (!q) return ch + ':, ';
         if (!q.present) return '<span class="bad">' + ch + ':absent</span>';
         var flags = [];
         if (q.flatline) flags.push('flat'); if (q.clipping) flags.push('clip'); if (q.electrodeStep) flags.push('step');
@@ -422,23 +422,23 @@
       }
       var sel = QUAL.selectedConsumerChannels || {};
       el.innerHTML =
-        '<b>ENGINEERING</b> · ingest ' + (cc.ingestThroughputSamplesPerSecond != null ? cc.ingestThroughputSamplesPerSecond + '/s' : '—')
-        + ' · cadence ' + (cc.callbackCadenceHz != null ? cc.callbackCadenceHz + 'Hz' : '—')
-        + ' · batch ' + (cc.meanSamplesPerCallback != null ? cc.meanSamplesPerCallback : '—')
+        '<b>ENGINEERING</b> · ingest ' + (cc.ingestThroughputSamplesPerSecond != null ? cc.ingestThroughputSamplesPerSecond + '/s' : ', ')
+        + ' · cadence ' + (cc.callbackCadenceHz != null ? cc.callbackCadenceHz + 'Hz' : ', ')
+        + ' · batch ' + (cc.meanSamplesPerCallback != null ? cc.meanSamplesPerCallback : ', ')
         + ' · exp ' + (cc.expectedHardwareSampleRateHz || CFG.expectedRate) + 'Hz · device-rate n/a (' + (cc.sampleRateConfidence || 'unverified') + ')'
-        + ' · sel L=' + selL + '(' + ((sel.confidence || {}).left || '—') + ') R=' + selR + '(' + ((sel.confidence || {}).right || '—') + ')'
+        + ' · sel L=' + selL + '(' + ((sel.confidence || {}).left || ', ') + ') R=' + selR + '(' + ((sel.confidence || {}).right || ', ') + ')'
         + ' · idx ' + ((QUAL.packetContinuity || {}).localIndex || 0)
         + ' · dropped-display-batches ' + droppedDisplayBatches
-        + ' · continuity ' + ((QUAL.packetContinuity || {}).continuityMethod || '—') + '(' + ((QUAL.packetContinuity || {}).continuityConfidence || '—') + ')'
+        + ' · continuity ' + ((QUAL.packetContinuity || {}).continuityMethod || ', ') + '(' + ((QUAL.packetContinuity || {}).continuityConfidence || ', ') + ')'
         + ' · units UNVERIFIED (uncalibrated) · thresholds provisional · clear ' + (CFG.clearStateEnabled ? 'enabled' : 'GATED')
-        + '<br>DEVICE SAMPLE CONTINUITY UNVERIFIED — firmware exposes no sample counter'
+        + '<br>DEVICE SAMPLE CONTINUITY UNVERIFIED, firmware exposes no sample counter'
         + '<br>' + ['Left-A', 'Left-B', 'Right-A', 'Right-B'].map(badge).join(' &nbsp; ');
     }
 
     // ---- EEG message handling (shared by the IPC relay + the WS fallback) ----
     // Raw config/raw/quality normally arrive from the launcher's authenticated IPC relay (finding
     // #5). The same handler also runs for any WS-delivered eeg message (a future launcher-authorized
-    // WebSocket client) — the plain page socket never receives eeg types, so this is defensive.
+    // WebSocket client), the plain page socket never receives eeg types, so this is defensive.
     function handleEeg(m) {
       if (m.type === 'eeg/config-v1') {
         LABELS = m.channelLabels || LABELS;
@@ -492,14 +492,14 @@
     // The engineering view exposes all four raw channels + detailed quality. An ordinary
     // guest must NOT be able to open it. It is gated behind a build-level STAFF flag the
     // LAUNCHER provides (never a bare URL param a guest could type):
-    //   • the launcher's preload reports staffUiEnabled — FALSE in production guest builds,
+    //   • the launcher's preload reports staffUiEnabled, FALSE in production guest builds,
     //     so ?staff=1 / ?dev=1 do NOTHING there; TRUE only in a dev/staff build;
     //   • a LOCALLY CONFIGURED credential (FOCUSROOM_STAFF_TOKEN → the launcher-issued PIN)
     //     unlocks via 'S' + the credential. There is NO hardcoded PIN, and no launcher (a
     //     plain browser on the LAN) is LOCKED by default.
-    // Access is logged locally (timestamp + action ONLY — never raw samples). Leaving staff
+    // Access is logged locally (timestamp + action ONLY, never raw samples). Leaving staff
     // mode clears the engineering view + text and returns to the consumer view. This is an
-    // operational gate, not a cryptographic control (a dev build's page-side flag) — the real
+    // operational gate, not a cryptographic control (a dev build's page-side flag), the real
     // production lock is the launcher withholding staffUiEnabled + the credential.
     var Q = new URLSearchParams(location.search);
     var STAFF_CFG = (window.__FOCUSROOM__ && window.__FOCUSROOM__.staff) || {};
@@ -513,7 +513,7 @@
     function engToggleAllowed() { return staffMode === true; }   // the single gate the 'E' key honours
 
     function logEngAccess(action, how) {
-      // local access log — NO raw EEG, ever. Just who/when/how the eng view was used.
+      // local access log, NO raw EEG, ever. Just who/when/how the eng view was used.
       var entry = { t: Date.now(), action: action, how: how || null, host: location.host || 'file' };
       try {
         var KEY = 'focusroom.eng.accessLog';
@@ -521,7 +521,7 @@
         if (!Array.isArray(log)) log = [];
         log.push(entry); if (log.length > 200) log = log.slice(-200);   // bounded; access events only
         localStorage.setItem(KEY, JSON.stringify(log));
-      } catch (e) { /* localStorage may be unavailable on file:// — access still works */ }
+      } catch (e) { /* localStorage may be unavailable on file://, access still works */ }
       // console records the ACCESS EVENT only (never raw channel values)
       try { console.info('[focusroom] engineering-view ' + action + (how ? ' (' + how + ')' : '')); } catch (e) {}
     }
@@ -539,7 +539,7 @@
       if (!staffMode) {
         // leaving staff mode: clear the engineering view + its rendered buffer and
         // return to the consumer view. (The shared signal rings keep feeding the
-        // consumer L/R trace — only the engineering EXPOSURE is torn down.)
+        // consumer L/R trace, only the engineering EXPOSURE is torn down.)
         engOn = false;
         var el = document.getElementById('eng'); el.classList.remove('on'); el.innerHTML = '';
         logEngAccess('staff-mode-off', how);
@@ -550,14 +550,14 @@
     if (staffMode) { document.getElementById('staffBadge').classList.add('on'); logEngAccess('staff-mode-on', 'launcher-param'); }
 
     document.addEventListener('keydown', function (e) {
-      // 'E' toggles the engineering view — ONLY when staff/dev mode is unlocked.
+      // 'E' toggles the engineering view, ONLY when staff/dev mode is unlocked.
       if (e.key === 'e' || e.key === 'E') {
         if (!engToggleAllowed()) return;              // ordinary guest: no engineering view
         engOn = !engOn;
         logEngAccess(engOn ? 'eng-view-open' : 'eng-view-close', 'keypress');
         return;
       }
-      // 'S' opens the staff-credential prompt — ONLY in a staff build with a configured
+      // 'S' opens the staff-credential prompt, ONLY in a staff build with a configured
       // credential. In production guest builds (STAFF_UI false) or when no credential is
       // configured (STAFF_PIN empty), it does nothing. A wrong/blank entry does nothing.
       if ((e.key === 's' || e.key === 'S') && !staffMode) {

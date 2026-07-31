@@ -1,10 +1,10 @@
 'use strict';
 // ============================================================
-// email/provider.js — pluggable email send (Document.pdf / master prompt:
+// email/provider.js, pluggable email send (Document.pdf / master prompt:
 // "Put the provider behind a small interface so it can be swapped, and read the
 // API key from an environment variable or local config, never hard-coded").
-//   • PostmarkProvider — real send (POSTMARK_API_KEY from env/config).
-//   • DevFileProvider  — no key → writes the rendered email + attachment to disk
+//   • PostmarkProvider, real send (POSTMARK_API_KEY from env/config).
+//   • DevFileProvider , no key → writes the rendered email + attachment to disk
 //                        and logs, so the flow is testable without a key.
 // ============================================================
 const fs = require('fs');
@@ -28,7 +28,7 @@ class PostmarkProvider {
       })),
     };
     // Persist BEFORE the attempt: if the send fails (or the box dies mid-send)
-    // the guest's report survives as pending-email-<ts>.json — recoverable and
+    // the guest's report survives as pending-email-<ts>.json, recoverable and
     // visible. Deleted only on a confirmed success.
     let pendingPath = null;
     if (this.outDir) {
@@ -60,12 +60,12 @@ class PostmarkProvider {
       try { data = await res.json(); } catch (_) {}
     } catch (e) {
       const why = e.name === 'AbortError' ? `timed out after ${SEND_TIMEOUT_MS}ms` : e.message;
-      throw new Error(`postmark send failed (${why})${pendingPath ? ` — payload kept at ${pendingPath}` : ''}`);
+      throw new Error(`postmark send failed (${why})${pendingPath ? `, payload kept at ${pendingPath}` : ''}`);
     } finally {
       clearTimeout(timer);
     }
     if (!res.ok || (data.ErrorCode && data.ErrorCode !== 0)) {
-      throw new Error(`postmark error ${data.ErrorCode ?? res.status}: ${data.Message || res.statusText}${pendingPath ? ` — payload kept at ${pendingPath}` : ''}`);
+      throw new Error(`postmark error ${data.ErrorCode ?? res.status}: ${data.Message || res.statusText}${pendingPath ? `, payload kept at ${pendingPath}` : ''}`);
     }
     if (pendingPath) { try { fs.unlinkSync(pendingPath); } catch (_) {} } // confirmed sent
     return { ok: true, id: data.MessageID, provider: 'postmark' };

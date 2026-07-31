@@ -8,7 +8,7 @@
 <title>Focus Room · Operator</title>
 <style>
   /* ============================================================
-     ZONE — THE FOCUS ROOM · OPERATOR CONSOLE
+     ZONE, THE FOCUS ROOM · OPERATOR CONSOLE
      ------------------------------------------------------------
      The operator glances at this on a laptop or a phone, in a dim
      room, while a guest is mid-session. So: dark, warm, spare,
@@ -18,17 +18,17 @@
      TOKENS: this console must stay ONE self-contained file (it is
      opened from any device on the room network, offline-first), so
      the tokens.css variables it uses are MIRRORED below rather than
-     linked. Same names, same values — keep in sync with tokens.css.
+     linked. Same names, same values, keep in sync with tokens.css.
      Departures from the token sheet are marked OPS-LOCAL.
      ============================================================ */
   :root{
     /* ---- mirrored from tokens.css ---- */
-    --c-signal:#DDCA8E;                      /* the flow gold — the one accent */
+    --c-signal:#DDCA8E;                      /* the flow gold, the one accent */
     --c-signal-soft:rgba(221,202,142,.16);
     --c-signal-faint:rgba(221,202,142,.06);
     --c-signal-glow:rgba(221,202,142,.5);
     --c-signal-dim:#8C8463;
-    --bg:#141414;                            /* warm-gray-700 — the console field */
+    --bg:#141414;                            /* warm-gray-700, the console field */
     --bg-room:#0B0B0A;
     --bg-elevated:#201F1D;
     --bg-elevated-2:#262421;
@@ -71,7 +71,7 @@
     -webkit-font-smoothing:antialiased}
   a{color:var(--c-signal)}
 
-  /* the room's ambient light — one oversized, very faint gold ellipse */
+  /* the room's ambient light, one oversized, very faint gold ellipse */
   .ambient{position:fixed;left:50%;top:-20vh;width:min(820px,132vw);height:52vh;transform:translateX(-50%);
     border-radius:50%;pointer-events:none;z-index:0;opacity:.62;
     background:radial-gradient(closest-side,rgba(221,202,142,.11),transparent 72%);
@@ -136,7 +136,7 @@
     margin:clamp(24px,4.4vw,34px) 2px 12px;animation:fadeIn 700ms var(--ease-out) 200ms both}
   h2.sec::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--hair),transparent)}
 
-  /* ---------- assistant cards — what's wrong + how to fix ---------- */
+  /* ---------- assistant cards, what's wrong + how to fix ---------- */
   #fixes{margin-top:12px}
   .fix{position:relative;background:var(--bg-elevated);border:1px solid var(--hair);border-radius:var(--r-md);
     padding:16px 18px 16px 20px;margin-bottom:9px;overflow:hidden;
@@ -164,7 +164,7 @@
   .lvl-dot.bad{background:var(--bad);box-shadow:0 0 0 3px var(--bad-soft)}
 
   /* ---------- at a glance ---------- */
-  /* six equal readings — three across on a laptop, two on a phone. Wide cards
+  /* six equal readings, three across on a laptop, two on a phone. Wide cards
      keep every value on one line, which is the whole point of "at a glance". */
   .chips{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:9px}
   .chip{position:relative;background:var(--bg-elevated);border:1px solid var(--hair);border-radius:var(--r-md);
@@ -218,7 +218,7 @@
   .log::-webkit-scrollbar{width:9px}
   .log::-webkit-scrollbar-thumb{background:var(--hair-strong);border-radius:var(--r-pill);
     border:3px solid var(--bg-elevated)}
-  .log:empty::after{content:'Nothing yet — the room’s messages land here.';display:block;padding:16px 15px;
+  .log:empty::after{content:'Nothing yet, the room’s messages land here.';display:block;padding:16px 15px;
     color:var(--fg-3);font-size:13.5px}
   .line{display:flex;gap:12px;align-items:baseline;padding:9px 15px;border-top:1px solid var(--hair);
     font-size:13.5px;line-height:1.45;animation:lineIn 460ms var(--ease-out) both;
@@ -288,7 +288,7 @@
   .swap{animation:textSwap 460ms var(--ease-out) both}
 
   /* An operator may be sensitive to motion, or watching this beside a
-     guest. Under reduce, everything settles instantly — nothing moves. */
+     guest. Under reduce, everything settles instantly, nothing moves. */
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{
       animation-duration:1ms!important;animation-delay:0ms!important;animation-iteration-count:1!important;
@@ -311,7 +311,7 @@
     .nums{grid-template-columns:repeat(auto-fill,minmax(102px,1fr))}
     #coach{width:calc(100vw - 24px)}
   }
-  /* keep the header one line on a phone — the sticky bar should not eat the view */
+  /* keep the header one line on a phone, the sticky bar should not eat the view */
   @media (max-width:430px){ .brand .btag{display:none} }
 </style>
 </head>
@@ -325,7 +325,7 @@
       <span class="btag">Operator</span>
     </div>
     <div class="badges">
-      <span class="badge" id="modeBadge">—</span>
+      <span class="badge" id="modeBadge">, </span>
       <span class="badge" id="linkBadge">connecting…</span>
     </div>
   </div>
@@ -362,7 +362,7 @@
     <div class="nums" id="nums"></div>
   </details>
 
-  <div class="foot" id="foot">—</div>
+  <div class="foot" id="foot">, </div>
 
 <script src="lib/diagnose.js"></script>
 <script>
@@ -379,7 +379,7 @@
   // ---- tiny DOM helpers ----------------------------------------------------
   // The console repaints twice a second. Anything that rewrites unchanged DOM
   // would restart its entrance animation every tick and flicker in the corner of
-  // the operator's eye — so every painter below writes ONLY on change, and the
+  // the operator's eye, so every painter below writes ONLY on change, and the
   // change itself is what animates.
   function restart(el, cls){ el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
   function setText(el, s){ if(el.textContent===s) return; el.textContent=s; restart(el,'swap'); }
@@ -409,7 +409,7 @@
       case 'eeg/metrics': live.metrics=m; break;
       case 'eeg/connection':
         if(m.leftConnected!==undefined){ S.buds={left:!!m.leftConnected,right:!!m.rightConnected}; }
-        // battery rides the connection heartbeat (batteryL/R) — the streaming
+        // battery rides the connection heartbeat (batteryL/R), the streaming
         // path never sends fit/battery, so this is where the chips learn it
         if(m.batteryL!=null||m.batteryR!=null) S.battery={leftPct:m.batteryL,rightPct:m.batteryR,ok:true};
         break;
@@ -417,8 +417,8 @@
       case 'fit/impedance': S.impedance={allGood:m.allGood,channels:m.channels}; break;
       case 'eeg/stats':
         S.stats=m;
-        // the per-bud stream carries battery too — the streaming-fit path never
-        // sends fit/battery, so the chips sat on "—" through a whole session
+        // the per-bud stream carries battery too, the streaming-fit path never
+        // sends fit/battery, so the chips sat on ", " through a whole session
         if(m.batteryL!=null||m.batteryR!=null) S.battery={leftPct:m.batteryL,rightPct:m.batteryR,ok:true};
         break;
       case 'discovered': S.discovered=m.devices||[]; break;
@@ -456,10 +456,10 @@
 
     // HONESTY: never show a green "healthy" tick with no live data behind it.
     // If the socket is down, or the room hasn't sent anything yet, say exactly
-    // that — the operator must never read a reassuring ✓ that means nothing.
+    // that, the operator must never read a reassuring ✓ that means nothing.
     if(!conn){
       paintBanner('info','◦','Not connected to the room','Trying to reconnect… nothing is lost.');
-      oneFix('info','Reconnecting to the room','The console lost its connection. It keeps retrying on its own — no action needed.');
+      oneFix('info','Reconnecting to the room','The console lost its connection. It keeps retrying on its own, no action needed.');
       paintChips(); paintNums(); return;
     }
     if(!seenData){
@@ -490,19 +490,19 @@
     paintChips(); paintNums();
   }
   // chips are built once and then updated in place, so a value that changes can
-  // announce itself with one soft gold wash — the only thing on the page that
+  // announce itself with one soft gold wash, the only thing on the page that
   // ever calls for a glance
   var chipEls=null, chipPrev=[];
   function paintChips(){
-    var eng = S.sidecar.running===false?['Stopped','bad'] : S.sidecar.ready?['Ready','ok'] : S.sidecar.running?['Starting','warn']:['—','mut'];
+    var eng = S.sidecar.running===false?['Stopped','bad'] : S.sidecar.ready?['Ready','ok'] : S.sidecar.running?['Starting','warn']:[', ','mut'];
     var buds = (function(){ var l=S.buds.left,rr=S.buds.right;
       if(l==null&&rr==null) return ['Unknown','mut'];
       if(l&&rr) return ['Both','ok']; if(!l&&!rr) return ['None','bad']; return [(l?'Left':'Right')+' only','warn']; })();
-    var bat = (function(){ var a=S.battery.leftPct,c=S.battery.rightPct; if(a==null&&c==null) return ['—','mut'];
-      var lo=Math.min(a==null?100:a,c==null?100:c); return [(a==null?'—':a+'%')+' / '+(c==null?'—':c+'%'), lo<20?'warn':'ok']; })();
-    var contact = S.impedance? (S.impedance.allGood?['Clean','ok']:['Not yet','warn']) : ['—','mut'];
-    var sq = S.signalQuality==null?['—','mut'] : S.signalQuality>=0.7?['Good','ok'] : S.signalQuality>=0.5?['Fair','warn']:['Poor','bad'];
-    var beat = [D.BEAT_PLAIN[S.beat]||'—','mut'];
+    var bat = (function(){ var a=S.battery.leftPct,c=S.battery.rightPct; if(a==null&&c==null) return [', ','mut'];
+      var lo=Math.min(a==null?100:a,c==null?100:c); return [(a==null?', ':a+'%')+' / '+(c==null?', ':c+'%'), lo<20?'warn':'ok']; })();
+    var contact = S.impedance? (S.impedance.allGood?['Clean','ok']:['Not yet','warn']) : [', ','mut'];
+    var sq = S.signalQuality==null?[', ','mut'] : S.signalQuality>=0.7?['Good','ok'] : S.signalQuality>=0.5?['Fair','warn']:['Poor','bad'];
+    var beat = [D.BEAT_PLAIN[S.beat]||', ','mut'];
     var chips=[['Signal engine',eng],['Earbuds',buds],['Battery L/R',bat],['Contact',contact],['Signal quality',sq],['Room',beat]];
     var host=$('chips');
     if(!chipEls || chipEls.length!==chips.length){
@@ -531,7 +531,7 @@
   function paintNums(){
     var nb=live.bands, nm=live.metrics, nf=live.frame;
     var nums=[['δ delta',fx3(nb.delta)],['θ theta',fx3(nb.theta)],['α alpha',fx3(nb.alpha)],['β beta',fx3(nb.beta)],['γ gamma',fx3(nb.gamma)],
-      ['β/(α+θ)',fx3(nb.engIndex)],['engagement',fx3(nf.engagementRel)],['state',nf.stateWord||'—'],
+      ['β/(α+θ)',fx3(nb.engIndex)],['engagement',fx3(nf.engagementRel)],['state',nf.stateWord||', '],
       ['focus',fx3(nm.focus)],['stress',fx3(nm.stress)],['drowsiness',fx3(nm.drowsiness)]];
     var host=$('nums');
     if(!numEls || numEls.length!==nums.length){
@@ -547,7 +547,7 @@
       var t=String(n[1]); if(numPrev[i]===t) return; numPrev[i]=t; numEls[i].textContent=t;
     });
   }
-  function fx3(x){ return (x==null||isNaN(x))?'—':Number(x).toFixed(3); }
+  function fx3(x){ return (x==null||isNaN(x))?', ':Number(x).toFixed(3); }
   function esc(s){ return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
 
   // ---- websocket (reconnects forever, jittered) ----
@@ -562,11 +562,11 @@
       if(m.type==='ops/feed'){ onFeed(m.channel,m.payload); }
       // OPERATOR-ONLY bud coaching. The guest is never told anything about their
       // signal; when a side stops reading well the advice comes here instead, with
-      // the exact words to use. Carries no raw EEG — just a side, a reason, a line.
+      // the exact words to use. Carries no raw EEG, just a side, a reason, a line.
       else if(m.type==='ops/coach'){ paintCoach(m); }
       else if(m.type==='session/state'){
         if(m.beat)S.beat=m.beat; S.link=m.link||S.link;
-        // the streaming signal check has no impedance messages — its clean-read
+        // the streaming signal check has no impedance messages, its clean-read
         // verdict rides canonical state, and the Contact chip should say so
         // (never overrides a real impedance read from the hardware fit path)
         if(typeof m.fitAllGood==='boolean' && (!S.impedance || S.impedance.streaming))
@@ -579,7 +579,7 @@
   }
   // ---- operator bud-coaching popup ----------------------------------------
   // A small, quiet card in the corner. It names the side to help with and gives a
-  // line to say that never mentions the signal — the guest's experience stays
+  // line to say that never mentions the signal, the guest's experience stays
   // free of signal talk while the operator still knows what to do. It arrives on
   // a slow fade-and-rise (see #coach in the stylesheet), never a pop.
   function paintCoach(m){
@@ -605,7 +605,7 @@
 
   // mode badge
   function tickBadges(){ var mb=$('modeBadge'); if(S.mode==='sim'){mb.textContent='Simulation';mb.className='badge sim';}
-    else if(S.mode==='real'){mb.textContent='Real EEG';mb.className='badge real';} else {mb.textContent='—';mb.className='badge';} }
+    else if(S.mode==='real'){mb.textContent='Real EEG';mb.className='badge real';} else {mb.textContent=', ';mb.className='badge';} }
 
   // controls → ops command over the same socket
   document.querySelectorAll('button[data-cmd]').forEach(function(btn){

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>The Focus Room — Room Audio</title>
+<title>The Focus Room, Room Audio</title>
 <link rel="stylesheet" href="tokens.css">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -31,25 +31,25 @@
 
 <script>
 /* =============================================================================
-   room-audio.html — the room's sound, v2 (research-based rebuild).
+   room-audio.html, the room's sound, v2 (research-based rebuild).
 
-   Two distinct generative scenes in ONE key (F major — warm, tonally clear),
+   Two distinct generative scenes in ONE key (F major, warm, tonally clear),
    crossfaded by beat, all synthesized in Web Audio (no files, offline, never
    repeats). Design follows the sleep/relaxation-music literature + analyses of
    Endel, NextSense, and console home-menu music:
      • MENU scene (idle constellation, welcome, intake, picker, reveal, close):
-       a welcoming lobby — a slow 4-chord loop of open added-tone voicings
+       a welcoming lobby, a slow 4-chord loop of open added-tone voicings
        (Fadd9 → Csus2 → Dm7 → B♭maj7, ~10s each, crossfaded, never re-triggered)
        with a sparse felt-piano note every few bars so it feels alive, never
        thumpy (no percussion at all).
-     • SESSION scene (fit, reading, strongest): very calm — one sustained
+     • SESSION scene (fit, reading, strongest): very calm, one sustained
        Dm(add9) bed that only changes TIMBRE with the smoothed brain-state
        scalar: the low-pass opens and the upper third/ninth fade in as
        engagement rises; a warm steady sub rises as they drift. A ~0.1 Hz
        amplitude breath keeps it alive. No pulse, no note changes, no jumps.
    What the research killed from v1: rootless open-fifth voicings (read as
    hollow/ominous), detuned unisons in the bass (slow beating = throb of
-   unease — chorus detune now only ≥ A3), the 2.8 s cavern reverb (now 1.0 s,
+   unease, chorus detune now only ≥ A3), the 2.8 s cavern reverb (now 1.0 s,
    low-passed = intimate room), the band-passed noise "whistle" (now soft
    low-passed room tone), and the interruption's sharp-detuned tone (now a
    consonant swell + duck).
@@ -84,12 +84,12 @@
   var N = { D2: 73.42, F2: 87.31, Bb2: 116.54, C3: 130.81, D3: 146.83, F3: 174.61,
     G3: 196.00, A3: 220.00, C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23,
     G4: 392.00, A4: 440.00, C5: 523.25, D5: 587.33, F5: 698.46 };
-  // the menu loop: open voicings, root+fifth low, third/ninth high — every chord
+  // the menu loop: open voicings, root+fifth low, third/ninth high, every chord
   // states a clear third or a floating sus color; nothing hollow, nothing dark
   var CHORDS = [
-    { name: 'Fadd9',  notes: [N.F2, N.C3, N.A3, N.G4, N.C5] },
-    { name: 'Csus2',  notes: [N.C3, N.G3, N.D4, N.G4, N.D5] },
-    { name: 'Dm7',    notes: [N.D3, N.A3, N.C4, N.F4, N.A4] },
+    { name: 'Fadd9', notes: [N.F2, N.C3, N.A3, N.G4, N.C5] },
+    { name: 'Csus2', notes: [N.C3, N.G3, N.D4, N.G4, N.D5] },
+    { name: 'Dm7',   notes: [N.D3, N.A3, N.C4, N.F4, N.A4] },
     { name: 'Bbmaj7', notes: [N.Bb2, N.F3, N.A3, N.D4, N.A4] },
   ];
   var CHORD_S = 10;        // seconds per chord (~40s loop)
@@ -107,7 +107,7 @@
   var BED_URL = { menu: 'assets/audio/lobby.ogg', session: 'assets/audio/session.ogg' };
   var bedOn = { menu: false, session: false }, bedLoop = { menu: null, session: null };
 
-  function makeIR(seconds, decay) {          // generated reverb impulse — no file
+  function makeIR(seconds, decay) {          // generated reverb impulse, no file
     var rate = ctx.sampleRate, len = Math.floor(rate * seconds);
     var buf = ctx.createBuffer(2, len, rate);
     for (var c = 0; c < 2; c++) {
@@ -137,7 +137,7 @@
     return src;
   }
   // a pad voice: triangle fundamental; chorus twin (+7 cents, half gain) ONLY on
-  // mid/high notes — bass stays unison so nothing beats slowly (the v1 mistake)
+  // mid/high notes, bass stays unison so nothing beats slowly (the v1 mistake)
   function padVoice(freq, dest) {
     var lvl = freq < 150 ? 0.85 : freq < 300 ? 0.6 : 0.4;
     var g = gain(lvl); g.connect(dest);
@@ -199,7 +199,7 @@
   // ---- produced beds: load, find steady loop region, play under the layers ----
   function loopPoints(buf) {
     // scan RMS in 0.25s windows; loop between the first and last steady windows
-    // so the track's fade-in/out never plays — the loop stays mid-ambience.
+    // so the track's fade-in/out never plays, the loop stays mid-ambience.
     var d = buf.getChannelData(0), rate = buf.sampleRate, hop = Math.floor(rate * 0.25);
     var rms = [];
     for (var i = 0; i + hop <= d.length; i += hop) {
@@ -290,7 +290,7 @@
 
     var stale = (nowMs - lastFrameAt) > 4000;
     if (stale && SERVED) sTarget += (0.5 - sTarget) * 0.02; // no fresh signal → drift to neutral
-    s += (sTarget - s) * 0.03;                              // heavy smoothing — never flutters
+    s += (sTarget - s) * 0.03;                              // heavy smoothing, never flutters
     duck += ((nowMs < duckUntil ? 0.4 : 1) - duck) * 0.05;  // interruption duck, smooth recovery
 
     var menuT = (MENU_LVL[beat] || 0) * duck;
@@ -298,7 +298,7 @@
     set(menuBus.gain, Math.max(0.0001, menuT), 2.2);        // long ramps = seamless scene handoffs
     set(sessBus.gain, Math.max(0.0001, sessT), 2.2);
 
-    // session timbre follows the smoothed scalar — brightness, never new notes.
+    // session timbre follows the smoothed scalar, brightness, never new notes.
     // Over a produced bed the adaptive layers ride at a supporting level.
     var sv = sessT > 0.01 ? s : 0.45;
     var lift = bedOn.session ? 0.62 : 1;
@@ -312,7 +312,7 @@
   }
 
   // ---- UI cues (all in F major, so every sound is part of the music) -----------
-  function cueSelect() { // soft tap: A4+C5 (third+fifth of F — warm, not glassy)
+  function cueSelect() { // soft tap: A4+C5 (third+fifth of F, warm, not glassy)
     if (!ctx) return; cueCount.select++;
     var t = ctx.currentTime;
     [[N.A4, 0.045], [N.C5, 0.03]].forEach(function (p, i) {
@@ -335,7 +335,7 @@
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(0.04 * duck, t + 0.14);
     g.gain.exponentialRampToValueAtTime(0.0004, t + 0.65);
-    bp.frequency.setValueAtTime(1400, t); bp.frequency.exponentialRampToValueAtTime(850, t + 0.55); // settles DOWN — a rise reads as alarm
+    bp.frequency.setValueAtTime(1400, t); bp.frequency.exponentialRampToValueAtTime(850, t + 0.55); // settles DOWN, a rise reads as alarm
     src.stop(t + 0.8);
     [[N.A3, 0.02], [N.F4, 0.015]].forEach(function (p) {
       var o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = p[0];
@@ -377,26 +377,26 @@
   function cueJoin() { // a star lands on the constellation: the Duolingo "correct!" bloom
     if (!ctx) return; cueCount.join++;
     var t = ctx.currentTime;
-    // A brighter, rewarding ascent — C4 → F4 → A4 → C5 (the achievement arc),
+    // A brighter, rewarding ascent, C4 → F4 → A4 → C5 (the achievement arc),
     // landing open, then a high add9 sparkle a beat later. Warm felt/celesta with
     // a long bloom reverb, and a shimmer on top so it reads as a little win.
-    felt(N.C4, t,        0.11, 0.9,  revLong);
-    felt(N.F4, t + 0.08, 0.11, 0.9,  revLong);
-    felt(N.A4, t + 0.16, 0.12, 1.2,  revLong);
-    felt(N.C5, t + 0.26, 0.13, 1.5,  revLong);   // lands UP an octave — the reward peak
-    felt(N.G4, t + 0.30, 0.05, 1.1,  revLong);   // add9 warmth under the peak
+    felt(N.C4, t,       0.11, 0.9, revLong);
+    felt(N.F4, t + 0.08, 0.11, 0.9, revLong);
+    felt(N.A4, t + 0.16, 0.12, 1.2, revLong);
+    felt(N.C5, t + 0.26, 0.13, 1.5, revLong);   // lands UP an octave, the reward peak
+    felt(N.G4, t + 0.30, 0.05, 1.1, revLong);   // add9 warmth under the peak
     // a bright sparkle a moment after the landing (the Duolingo shimmer)
     felt(N.C5 * 2, t + 0.42, 0.05, 1.6, revLong);
     felt(N.G4 * 2, t + 0.50, 0.035, 1.4, revLong);
   }
 
   // ---- interruption: a phone notification, on purpose --------------------------
-  // This is the one sound that is SUPPOSED to break the spell — it's the whole
+  // This is the one sound that is SUPPOSED to break the spell, it's the whole
   // experiment. A message-app "ding": two quick bright bell tones rising a
   // fourth, struck (fast attack, short decay) with a slightly inharmonic upper
   // partial so it reads as a device, not as the room's music. The bed ducks
   // underneath so the ding cuts through the way a real notification does.
-  // Phase 2A.2 correction 2: report the audio-duck marker back to the orchestrator —
+  // Phase 2A.2 correction 2: report the audio-duck marker back to the orchestrator,
   // the duck's scheduled Web-Audio clock time + a monotonic estimate of audible onset,
   // in THIS page's (room-audio browser) clock domain. Kept separate from the iPad visual
   // marker; never presented as a sample-accurate onset. Silent in the standalone preview.
@@ -421,7 +421,7 @@
     duckUntil = nowMs + 1900;
     if (!ctx) return;
     var t = ctx.currentTime;
-    reportAudioDuck(t);       // the duck begins now (this audio-clock time) — report it back
+    reportAudioDuck(t);       // the duck begins now (this audio-clock time), report it back
     function ding(freq, at, peak) {
       var o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
       var p = ctx.createOscillator(); p.type = 'sine'; p.frequency.value = freq * 2.74; // bell-ish partial
@@ -433,11 +433,11 @@
       eo.gain.linearRampToValueAtTime(peak, at + 0.004);
       ep.gain.linearRampToValueAtTime(peak * 0.30, at + 0.003);
       eo.gain.exponentialRampToValueAtTime(0.0004, at + 0.42);
-      ep.gain.exponentialRampToValueAtTime(0.0004, at + 0.16); // partial dies first — a struck bell
+      ep.gain.exponentialRampToValueAtTime(0.0004, at + 0.16); // partial dies first, a struck bell
       o.start(at); o.stop(at + 0.5); p.start(at); p.stop(at + 0.5);
     }
     ding(N.C5 * 2, t, 0.16);            // C6
-    ding(N.F5 * 2, t + 0.085, 0.15);    // F6 — the rising fourth of a message alert
+    ding(N.F5 * 2, t + 0.085, 0.15);    // F6, the rising fourth of a message alert
   }
 
   // ---- inputs -----------------------------------------------------------------
@@ -469,7 +469,7 @@
         lastRevealIndex = m.index; cueScroll(m.index);
       }
     } else if (m.type === 'constellation/join') {
-      setTimeout(cueJoin, 2400); // the dot's flight is 2400ms — ring at the landing
+      setTimeout(cueJoin, 2400); // the dot's flight is 2400ms, ring at the landing
     } else if (m.type === 'session/state') {
       if (m.beat && m.beat !== beat && CUE_BEATS[m.beat] && running) cueTransition();
       if (m.beat && m.beat !== 'standby') lastRevealIndex = 0; // fresh reveal next session
@@ -524,9 +524,9 @@
   // Auto-start ONLY where the room intends sound: the app's OWN hidden audio
   // window over http://127.0.0.1 (where Electron grants gesture-free audio) or
   // an explicit ?autoplay (test harness). A design preview / editor pane stays
-  // SILENT behind the tap overlay — surprise audio on a dev box is the audio
+  // SILENT behind the tap overlay, surprise audio on a dev box is the audio
   // version of surprise printing. And on a real web host (https), the browser
-  // keeps the AudioContext suspended until a genuine tap anyway — auto-hiding
+  // keeps the AudioContext suspended until a genuine tap anyway, auto-hiding
   // the overlay there produced silence with no way in, so the overlay stays
   // until the visitor taps.
   var LOCAL_HOST = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
@@ -538,7 +538,7 @@
     document.addEventListener('keydown', kick, { once: true });
   });
 
-  // debug hook (harmless in production) — lets a test harness inject messages and
+  // debug hook (harmless in production), lets a test harness inject messages and
   // read the graph state without a WebSocket or a listening ear.
   window.__audio = {
     info: function () {

@@ -1,12 +1,12 @@
 'use strict';
 // ============================================================
-// store.js — local persistence for the Focus Constellation (and session
+// store.js, local persistence for the Focus Constellation (and session
 // records). The wall accumulates one anonymous dot per guest, placed by their
 // archetype; it starts sparse and fills over weeks/months (Document.pdf).
 //
 // Backed by a small JSON file behind this interface. The master prompt names
 // SQLite; this is swappable to better-sqlite3 / node:sqlite without touching
-// callers — the data is tiny and append-only, so JSON is reliable and needs no
+// callers, the data is tiny and append-only, so JSON is reliable and needs no
 // native build for the .exe. (See docs/BUILD.md.)
 // ============================================================
 const fs = require('fs');
@@ -28,7 +28,7 @@ class Store {
   _load() {
     let raw;
     try { raw = fs.readFileSync(FILE, 'utf8'); }
-    catch (_) { this.dots = []; return; } // no file yet — a fresh wall
+    catch (_) { this.dots = []; return; } // no file yet, a fresh wall
     try { this.dots = (JSON.parse(raw).dots) || []; }
     catch (e) {
       // A corrupt file must never silently wipe months of dots: move it aside
@@ -36,7 +36,7 @@ class Store {
       const aside = `${FILE}.corrupt-${Date.now()}`;
       try { fs.renameSync(FILE, aside); } catch (_) {}
       /* eslint-disable-next-line no-console */
-      console.error(`[store] constellation.json unreadable (${e.message}) — moved aside to ${aside}, starting fresh`);
+      console.error(`[store] constellation.json unreadable (${e.message}), moved aside to ${aside}, starting fresh`);
       this.dots = [];
     }
   }
@@ -60,8 +60,8 @@ class Store {
     return dot;
   }
 
-  // Persist the FULL session — the focus line, the live band/metric stream, the
-  // four reads, the archetype + its features, and the guest's answers — as one
+  // Persist the FULL session, the focus line, the live band/metric stream, the
+  // four reads, the archetype + its features, and the guest's answers, as one
   // human-readable JSON per session under data/sessions/. This is the real record
   // (the constellation dot is only an anonymous pin); it's also the dataset that
   // can later drive replay/analysis. Written atomically; one file per session id,

@@ -1,9 +1,9 @@
-/* ZONE — THE FOCUS ROOM · iPad shared UI primitives
+/* ZONE, THE FOCUS ROOM · iPad shared UI primitives
    Composes with the bound Zone DS bundle (window.MonoLabel, window.I,
-   window.DotDivider — loaded via _ds_bundle.js before this file).
+   window.DotDivider, loaded via _ds_bundle.js before this file).
    Exports to window for the screen files. Uses tokens.css vars.
    NOTE: the bundle's BgLights/TopBar/ZaineComposer/IOSDevice are the
-   consumer mobile app's surfaces — out of scope here by brief (“build
+   consumer mobile app's surfaces, out of scope here by brief (“build
    fresh Focus Room surfaces”); the kiosk fields below implement the
    same signature blur-light element at kiosk scale. */
 (function () {
@@ -11,7 +11,7 @@
   const e = React.createElement;
   const DS = window.ZoneDesignSystem_454d32 || {};
 
-  // ---- tiny mono micro-label — delegates to the DS MonoLabel ----
+  // ---- tiny mono micro-label, delegates to the DS MonoLabel ----
   // (wider tracking than mobile: this kiosk is read at arm's length)
   function Mono({ children, color, style, caret }) {
     return e(window.MonoLabel, { style: { display: 'inline-block', color: color || 'var(--fg-muted)',
@@ -88,7 +88,7 @@
     );
   }
 
-  // ---- arrow icon — the DS Lucide helper (arrow-up-right) ----
+  // ---- arrow icon, the DS Lucide helper (arrow-up-right) ----
   function Arrow({ size = 18, color = 'currentColor' }) {
     return e(window.I, { name: 'arrow-up-right', size, color });
   }
@@ -116,7 +116,7 @@
       }
     },
       glow ? e('div', { className: 'fr-light', style: { width: 460, height: 460, left: '50%', bottom: -220, transform: 'translateX(-50%)', background: 'rgba(221,202,142,0.16)' } }) : null,
-      glow ? e('div', { className: 'fr-light', style: { width: 320, height: 320, left: -120, bottom: 40, background: 'rgba(221,202,142,0.05)' } }) : null,   /* signal gold, never orange: orange belongs to the interruption alone */
+      glow ? e('div', { className: 'fr-light', style: { width: 320, height: 320, left: -120, bottom: 40, background: 'rgba(221,202,142,0.05)' } }) : null,  /* signal gold, never orange: orange belongs to the interruption alone */
       e(CornerDots, { dark: true }), children);
   }
 

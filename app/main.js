@@ -1,9 +1,9 @@
 'use strict';
 // ============================================================
-// Zone — The Focus Room :: Electron main process (the room SHELL)
+// Zone, The Focus Room :: Electron main process (the room SHELL)
 // ------------------------------------------------------------
-// The room's BRAIN — sidecar supervision, LAN surface server, the
-// orchestrator, outputs, ops gate, crash guard — lives in room-core.js
+// The room's BRAIN, sidecar supervision, LAN surface server, the
+// orchestrator, outputs, ops gate, crash guard, lives in room-core.js
 // (shared with the headless web deployment). This file adds what only
 // the physical room has: the TV window on the 100" screen, the hidden
 // room-sound host, the Ctrl+Shift+D shortcut, and the app lifecycle.
@@ -21,7 +21,7 @@ const { createRoom } = require('./room-core');
 const rawStreamToken = crypto.randomBytes(32).toString('hex');
 const { SIDECAR_IN } = require('./protocol');
 
-// Single instance only — one room, one brain.
+// Single instance only, one room, one brain.
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 
 // The room sound (room-audio.html) is a generative Web Audio engine in a hidden
@@ -31,7 +31,7 @@ const ROOM_AUDIO = process.env.FOCUSROOM_NO_AUDIO !== '1';
 
 // The shipped app carries ZERO framework chrome: no stock menu (its Help links
 // would be the only "Electron" a guest could ever find). macOS keeps a minimal
-// named menu — Cmd+Q, copy/paste for the ops pages, and the native fullscreen
+// named menu, Cmd+Q, copy/paste for the ops pages, and the native fullscreen
 // toggle live there; Windows gets no menu at all (F11 is wired on the TV
 // window directly).
 function installMenu() {
@@ -57,7 +57,7 @@ const room = createRoom({
   onDiag: (channel, payload) => {
     if (diagWindow && !diagWindow.isDestroyed()) diagWindow.webContents.send(channel, payload);
   },
-  // Deliver the live raw-EEG stream to the AUTHORIZED TV renderer over IPC (finding #5 containment) —
+  // Deliver the live raw-EEG stream to the AUTHORIZED TV renderer over IPC (finding #5 containment),
   // and ONLY while the signal surface is shown, so raw never even enters the renderer on other beats.
   // The token stays in main; the renderer receives only the config/raw/quality messages it renders.
   onRawEeg: (msg) => {
@@ -68,7 +68,7 @@ const room = createRoom({
   // The orchestrator drives which TV surface shows for the current beat.
   onBeat: ({ surface }) => navigateTv(surface),
   // a TV window that loaded before the bind is showing a URL nothing
-  // served — (re)navigate it to the correct surface now.
+  // served, (re)navigate it to the correct surface now.
   onServerUp: () => {
     if (tvWindow && !tvWindow.isDestroyed()) tvWindow.loadURL(tvUrlFor(tvSurface));
     if (audioWindow && !audioWindow.isDestroyed()) audioWindow.loadURL(audioUrl());
@@ -76,17 +76,17 @@ const room = createRoom({
 });
 const { supervisor, server, orchestrator } = room;
 // Configure server-side raw-EEG authorization: verify the launcher token, and require a loopback
-// socket (finding #5 §3: loopback-only by default — including during FOCUSROOM_VALIDATION=1 and any
+// socket (finding #5 §3: loopback-only by default, including during FOCUSROOM_VALIDATION=1 and any
 // packaged/guest/launcher-driven mode; a non-loopback raw connection needs the explicit dev opt-in
 // FOCUSROOM_ALLOW_REMOTE_RAW=1, which is ignored when packaged or validating). Fail-closed.
 server.configureRawAuth({ token: rawStreamToken, requireLoopback: config.RAW_REQUIRE_LOOPBACK });
 if (!config.RAW_REQUIRE_LOOPBACK) {
   // dev-only, ignored in packaged/validation. Logged WITHOUT the token.
-  console.warn('[security] FOCUSROOM_ALLOW_REMOTE_RAW=1 — non-loopback raw connections permitted (dev only).');
+  console.warn('[security] FOCUSROOM_ALLOW_REMOTE_RAW=1, non-loopback raw connections permitted (dev only).');
 }
 
 // Raw EEG reaches the authorized TV renderer over Electron IPC (finding #5 containment): the token
-// NEVER leaves the main process — not additionalArguments, not process.argv, not the renderer. The
+// NEVER leaves the main process, not additionalArguments, not process.argv, not the renderer. The
 // live raw stream is pushed from room-core's onRawEeg hook (below, gated to the signal surface); a
 // freshly-loaded signal surface asks for the last config/quality via this sender-gated handler.
 ipcMain.handle('rawEeg:last', (evt) => {
@@ -111,7 +111,7 @@ function tvUrlFor(surface) {
 }
 
 // Per-window config handed to the preload via additionalArguments (base64 JSON, a private
-// process channel — not a URL/query param). Carries ONLY the staff DISPLAY-gate config (item 1/2:
+// process channel, not a URL/query param). Carries ONLY the staff DISPLAY-gate config (item 1/2:
 // uiEnabled is false in production guest builds; the PIN is FOCUSROOM_STAFF_TOKEN, empty ⇒ disabled).
 // The raw-EEG capability token is NOT here (finding #5 containment): it must never appear in
 // additionalArguments / process.argv / the OS command line. It is delivered separately, on demand,
@@ -138,15 +138,15 @@ function createTvWindow() {
     width: config.isDev && !external ? 1280 : target.bounds.width,
     height: config.isDev && !external ? 720 : target.bounds.height,
     backgroundColor: '#0B0B0A', // room-black around the TV
-    fullscreen: !!external,     // fullscreen the real 100" TV; windowed in dev
+    fullscreen: !!external,    // fullscreen the real 100" TV; windowed in dev
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,           // §4: renderer containment (already on)
-      nodeIntegration: false,           // §4
-      devTools: !config.isPackaged,     // §4: no DevTools in packaged guest mode
-      additionalArguments: [windowConfigArg()],   // build-gated staff DISPLAY config (NO raw token)
+      contextIsolation: true,          // §4: renderer containment (already on)
+      nodeIntegration: false,          // §4
+      devTools: !config.isPackaged,    // §4: no DevTools in packaged guest mode
+      additionalArguments: [windowConfigArg()],  // build-gated staff DISPLAY config (NO raw token)
     },
   });
   // §4 renderer containment for the raw-EEG surface: deny remote navigation + window.open, so a
@@ -188,7 +188,7 @@ function createAudioWindow() {
   if (!ROOM_AUDIO || (audioWindow && !audioWindow.isDestroyed())) return;
   audioWindow = new BrowserWindow({
     width: 320, height: 200,
-    show: false,          // invisible host — it is heard, not seen
+    show: false,         // invisible host, it is heard, not seen
     skipTaskbar: true,
     webPreferences: {
       backgroundThrottling: false, // a hidden window must NOT throttle its audio/timers
@@ -200,7 +200,7 @@ function createAudioWindow() {
   audioWindow.on('closed', () => { audioWindow = null; });
 }
 
-// The operator console is now a SERVED page (ops.html), not an Electron window —
+// The operator console is now a SERVED page (ops.html), not an Electron window,
 // so it opens in a browser and is reachable from any device on the room network
 // (the operator's phone, a laptop). Ctrl+Shift+D just opens it in the default
 // browser. Its telemetry + controls ride the same LAN WebSocket the iPad/TV use.
@@ -209,7 +209,7 @@ function openOpsConsole() {
   shell.openExternal(url).catch((e) => console.error('[ops] could not open console:', e.message));
 }
 
-// Ctrl/Cmd+Shift+U — flash the iPad URL(s) on the TV itself. Setting up the
+// Ctrl/Cmd+Shift+U, flash the iPad URL(s) on the TV itself. Setting up the
 // room means standing at the TV wondering what to type into Safari; this
 // answers it on the biggest screen in the room, then fades away.
 function showLanUrlToast() {
@@ -249,7 +249,7 @@ ipcMain.handle('diag:info', () => ({
 app.whenReady().then(async () => {
   installMenu();
   // Dev runs use the stock Electron shell, whose Dock icon is the one piece of
-  // Electron branding a guest could ever see — replace it with the room's orb.
+  // Electron branding a guest could ever see, replace it with the room's orb.
   // (The packaged app carries its own icns; this only matters unpackaged.)
   if (process.platform === 'darwin' && app.dock && !config.isPackaged) {
     try { app.dock.setIcon(path.join(config.repoRoot, 'build', 'resources', 'icon.png')); } catch (_) {}
@@ -269,7 +269,7 @@ app.whenReady().then(async () => {
   createAudioWindow(); // hidden generative room-sound host (no-op if FOCUSROOM_NO_AUDIO=1)
 
   app.on('activate', () => {
-    // recreate BOTH windows on a macOS dock reactivation — closing the TV also
+    // recreate BOTH windows on a macOS dock reactivation, closing the TV also
     // closed the hidden audio host, and bringing back only the TV left the
     // room silent until a full restart
     if (BrowserWindow.getAllWindows().length === 0) { createTvWindow(); createAudioWindow(); }

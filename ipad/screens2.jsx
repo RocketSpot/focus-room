@@ -1,4 +1,4 @@
-/* ZONE — THE FOCUS ROOM · iPad screens (part 2)
+/* ZONE, THE FOCUS ROOM · iPad screens (part 2)
    Reading (+ interruption) · StrongestQ · Standby · Email · Close */
 (function () {
   const { useState, useEffect, useRef } = React;
@@ -7,7 +7,7 @@
   const FL = window.FocusLine;
   const wrap = (extra) => ({ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', ...extra });
 
-  // Curated reading bodies, keyed to the picked piece id. Content slots — each
+  // Curated reading bodies, keyed to the picked piece id. Content slots, each
   // array is the full body of one piece; the Reading screen renders the paragraphs
   // for answers.piece.id (falling back to 'keeper'). No placeholder line ships.
   const READING_BODIES = {
@@ -15,7 +15,7 @@
       'The lamp had been dark for three nights before anyone on the mainland noticed. By then the tide had come and gone six times, and whatever the keeper had meant to write in the logbook stopped, mid-sentence, on the page dated the fourth.',
       'I took the boat out myself. The dock was intact. The door was unlocked. Inside, a kettle sat cold on the stove and a chair faced the window as though someone had only just stood up from it.',
       'It was the footprints that stayed with me. Three sets, leading from the water to the door, pressed deep into sand that no one had walked since the storm. None of them led back out. I counted them twice, the way you check a number you already know is wrong.',
-      'There is a particular silence inside a lighthouse with no light. It is not the absence of sound but the presence of waiting — the building itself seeming to hold its breath for the beam that does not come.',
+      'There is a particular silence inside a lighthouse with no light. It is not the absence of sound but the presence of waiting, the building itself seeming to hold its breath for the beam that does not come.',
       'I have read the final entry more times than I can admit. It is four words long. It is not a distress call, and it is not a goodbye, and it is the reason I keep coming back to that page, turning it over, looking for the sentence that should have followed.'
     ],
     octopus: [
@@ -113,7 +113,7 @@
         // interruption card
         overlay ? e(Interruption, { mind: mind, onBack: () => { setShowInt(false); setDismissed(true); } }) : null,
 
-        // signal-trouble reseat coaching (never a broken line — just a small nudge)
+        // signal-trouble reseat coaching (never a broken line, just a small nudge)
         // A hardware nudge is NOT the interruption: it used to render in the
         // interruption orange, mid-reading, spending the room's one accent
         // moments before the real notification landed. Muted now, and docked to
@@ -151,7 +151,7 @@
 
   /* ---------------- STRONGEST-STRETCH QUESTION (light, single tap) ---------------- */
   function StrongestQ({ go, answers, setAnswers }) {
-    // labels match the choice vocabulary reads.js GUESS_REGION expects verbatim —
+    // labels match the choice vocabulary reads.js GUESS_REGION expects verbatim,
     // stored as answers.strongestGuess and sent as payload.choice by the controller.
     const opts = ['The opening', 'The turn partway through', 'The ending', 'Honestly, I’m not sure'];
     // the 220ms is a visual dwell (the row highlights before the screen moves);
@@ -169,7 +169,7 @@
   }
 
   /* ---------------- STANDBY (dark, hand off to the TV) ---------------- */
-  /* quiet mono text-button — the signature micro-label as a real touch target.
+  /* quiet mono text-button, the signature micro-label as a real touch target.
      minHeight 48 canvas px ≈ 45pt after the 3:4 cover scale (HIG ≥44pt); press
      feedback matches PillBtn (scale 0.975). */
   function QuietBtn({ onClick, dark, style, children }) {
@@ -249,7 +249,7 @@
     const arch = (answers.archetype || 'deep');
     const archName = (FL && FL.ARCH[arch]) ? FL.ARCH[arch].name : 'Deep Diver';
     // The takeaway line is the guest's OWN line. It used to be
-    // FL.linePath(archetype), the synthetic generator curve — so the last thing
+    // FL.linePath(archetype), the synthetic generator curve, so the last thing
     // a guest saw was a shape belonging to their archetype in general and to
     // nobody's session in particular, and it matched neither the wall nor the
     // printed card. Feed the real samples; only fall back to the generator when
@@ -264,7 +264,7 @@
     }
     // The synthetic generator curve belongs to the standalone (file://) preview
     // ONLY. Served in the room with no reveal (a reloaded Safari lost it and
-    // the re-send hasn't landed yet), draw nothing — a blank slot is honest, a
+    // the re-send hasn't landed yet), draw nothing, a blank slot is honest, a
     // generic archetype curve on a real guest's takeaway is not.
     const served = typeof location !== 'undefined' && !!location.host;
     const path = FL && (real || !served) ? FL.linePath(lineKey, box, { samples: 140 }) : '';
@@ -274,7 +274,7 @@
     const setDoor = (k) => setAnswers({ ...answers, door: k });
     // honest takeaway: only name what the outputs pipeline confirmed. The email
     // sends on the CTA tap (close_choice → send-report), so before that moment
-    // an entered address earns intent — "will follow" — never "is in your inbox".
+    // an entered address earns intent, "will follow", never "is in your inbox".
     const willEmail = !!answers.email;
     const takeaway = out.cardPrinted && out.emailSent
       ? 'Take your card · your report is in your inbox'
@@ -285,7 +285,7 @@
               : 'Your reading is complete';
     return e(LightField, null,
       e('div', { style: wrap({ padding: '60px 60px 56px' }) },
-        // review-only door switch — hidden in device mode (door stays 'investor')
+        // review-only door switch, hidden in device mode (door stays 'investor')
         device ? null : e('div', { style: { display: 'flex', justifyContent: 'center', marginBottom: 34 } },
           e('div', { style: { display: 'inline-flex', background: 'rgba(20,20,20,0.05)', borderRadius: 'var(--r-pill)', padding: 4, gap: 2 } },
             Object.keys(DOORS).map(k => e('button', { key: k, onClick: () => setDoor(k),

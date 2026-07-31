@@ -1,4 +1,4 @@
-// ZONE — THE FOCUS ROOM · iPad controller (synced) + standalone-preview fallback
+// ZONE, THE FOCUS ROOM · iPad controller (synced) + standalone-preview fallback
 // Drives which screen shows from the master clock's session/state, sends every
 // guest action back to main timestamped on the shared clock, and falls back to
 // linear manual stepping when opened as a file (no WebSocket).
@@ -18,7 +18,7 @@
   const ORDER = ['welcome', 'fit', 'intake', 'picker', 'reading', 'strongest', 'standby', 'email', 'close'];
   // idle maps to earbud_seated too: between guests the beat returns to 'idle'
   // (the iPad shows Welcome again), and the next guest's final Welcome tap must
-  // start their session — without this entry it sent 'advance', which the
+  // start their session, without this entry it sent 'advance', which the
   // orchestrator drops at idle, wedging every guest after the first.
   const GO_EVENT = { idle: 'earbud_seated', welcome: 'earbud_seated', fit: 'fit_confirmed', reading: 'reading_finished',
     strongest: 'strongest_stretch_guess', standby: 'reveal_ack', email: 'email_entered', close: 'close_choice' };
@@ -90,13 +90,13 @@
 
   /* The one thing a guest ever sees about a dropped link: a quiet line at the
      bottom of whatever screen they're on. Never an error, never a dialog, never
-     anything that asks them to do something about it — because there is nothing
+     anything that asks them to do something about it, because there is nothing
      for them to do, and the session is not in danger. Deliberately in the muted
      grey of the reseat nudge rather than the interruption orange, which the room
      reserves for the one notification. */
   function LinkStrip({ reconnecting, findingSignal }) {
     if (!reconnecting && !findingSignal) return null;
-    // never 'finding your signal' — the room does not narrate the signal to a guest
+    // never 'finding your signal', the room does not narrate the signal to a guest
     const label = 'Reconnecting';
     return e('div', {
       style: {
@@ -157,7 +157,7 @@
         else if (m.type === S.STATE) {
           if (m.beat) setBeat(m.beat);
           setNotice(m.notice || null);
-          // the streaming signal check has no impedance messages — the clean-read
+          // the streaming signal check has no impedance messages, the clean-read
           // verdict arrives on canonical state instead.
           if (typeof m.fitAllGood === 'boolean') setFitAllGood(m.fitAllGood);
           // self-heal: session/state carries the archetype, so a missed one-shot
@@ -167,7 +167,7 @@
         else if (m.type === S.IMPEDANCE) setFitAllGood(!!m.allGood); // real-hardware fit path
         else if (m.type === S.INTERRUPT) {
           setInterruption({ onMind: m.onMind, t: m.t });
-          // Phase 2A.2 correction 2: report the VISUAL marker back — the card's actual
+          // Phase 2A.2 correction 2: report the VISUAL marker back, the card's actual
           // committed-paint time (double-rAF), with the iPad's OWN monotonic clock
           // (performance.now, ipad-browser domain) alongside the master-clock wall time.
           // This is the visual half of the multimodal event; the audio-duck marker is
@@ -202,7 +202,7 @@
     }, []);
 
     // tell main when the guest actually starts reading (timed against the stream).
-    // Once per session — a reconnecting iPad that re-enters 'reading' must not
+    // Once per session, a reconnecting iPad that re-enters 'reading' must not
     // re-send and skew the timeline.
     useEffect(() => {
       if (synced && beat === 'reading' && !readingStartedRef.current) {
@@ -211,7 +211,7 @@
       }
       if (beat === 'idle' || beat === 'welcome') readingStartedRef.current = false; // new session
       // PRIVACY: the room returns to idle when a guest leaves, but this iPad is
-      // never reloaded between guests — so every answer stayed in state. The
+      // never reloaded between guests, so every answer stayed in state. The
       // next guest found the previous one's belief answers pre-selected, their
       // "what's pulling at you" text in the box, and their EMAIL prefilled and
       // valid, one tap from sending guest A's report to guest B. Wipe on idle.
@@ -221,7 +221,7 @@
 
     // `overrides` carries answer fields set IN THE SAME tap that advances the
     // beat. aRef syncs on render, and React batches the tap's setAnswers until
-    // after the handler — so a synchronous go() read the PRE-tap state: the
+    // after the handler, so a synchronous go() read the PRE-tap state: the
     // first tap on a reading card sent reading:null (a dead tap the guest had
     // to repeat), and the typed on-mind text was silently dropped. Screens must
     // pass such fields here rather than racing the render (the old setTimeout
@@ -288,7 +288,7 @@
 
     const params = new URLSearchParams(location.search);
     // Real iPad: launched from the home screen (navigator.standalone / the
-    // standalone display-mode), forced with ?kiosk=1 — or simply a TOUCH
+    // standalone display-mode), forced with ?kiosk=1, or simply a TOUCH
     // device on the plain URL (a guest's iPad in Safari used to get the
     // desktop bezel preview until someone remembered the query string).
     // ?kiosk=0 is the debug escape back to the framed preview on any device.
@@ -304,7 +304,7 @@
       let s;
       if (deviceMode) {
         // COVER only when the screen is essentially the designed 816×1172
-        // shape (within 2.5%) — on anything squarer (4:3 iPads) cover cropped
+        // shape (within 2.5%), on anything squarer (4:3 iPads) cover cropped
         // ~8% of the UI off the edges, so CONTAIN and let the room's own dark
         // field letterbox the sliver instead.
         const want = 816 / 1172;
@@ -316,7 +316,7 @@
       }
       room.style.transform = 'scale(' + s + ')';
     }
-    // iOS home-screen apps drop plain resize events on rotation — listen on
+    // iOS home-screen apps drop plain resize events on rotation, listen on
     // every channel a rotation or viewport change can announce itself.
     window.addEventListener('resize', fit);
     window.addEventListener('orientationchange', () => setTimeout(fit, 60));

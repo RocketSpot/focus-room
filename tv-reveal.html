@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>The Focus Room — TV · The Reveal</title>
+<title>The Focus Room, TV · The Reveal</title>
 <link rel="stylesheet" href="tokens.css">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -36,7 +36,7 @@
   .title { position: absolute; left: 120px; top: 180px; font-family: var(--font-display); font-weight: 400;
            font-size: 72px; line-height: 1.04; letter-spacing: -0.03em; color: var(--fg-strong); max-width: 1010px; }
 
-  /* the measured figure — the proof, given the weight of a headline */
+  /* the measured figure, the proof, given the weight of a headline */
   .stat { position: absolute; right: 120px; top: 146px; width: 720px; text-align: right; }
   .stat .v { font-family: var(--font-display); font-weight: 400; font-size: 78px; line-height: 1;
              letter-spacing: -0.03em; color: var(--c-signal); white-space: nowrap; }
@@ -97,7 +97,7 @@
     <div id="tv">
       <div class="glow a"></div>
       <div class="head">
-        <div class="brand"><span class="mark"></span><span class="label">ZONE — THE FOCUS ROOM</span></div>
+        <div class="brand"><span class="mark"></span><span class="label">ZONE, THE FOCUS ROOM</span></div>
         <div class="right">The Reveal</div>
       </div>
 
@@ -120,11 +120,11 @@
       </svg>
 
       <div class="prose" id="prose">
-        <div class="sentence" id="sentence">—</div>
+        <div class="sentence" id="sentence">, </div>
         <div class="bandnote" id="bandnote"></div>
         <div class="ledger off" id="ledger">
-          <div class="row"><div class="k">You said</div><div class="said" id="said">—</div></div>
-          <div class="row"><div class="k">Your reading</div><div class="did" id="did">—</div></div>
+          <div class="row"><div class="k">You said</div><div class="said" id="said">, </div></div>
+          <div class="row"><div class="k">Your reading</div><div class="did" id="did">, </div></div>
         </div>
       </div>
 
@@ -172,11 +172,11 @@
     var RIBY  = BOX.y + BOX.h + 56;   // 744 · baseline of the reading-pace ribbon
     var TLY   = BOX.y + BOX.h + 74;   // 762 · the event timeline
     var BANDS = [
-      { k: 'delta', gl: 'δ', nm: 'Delta', ds: 'slow waves',        col: 'var(--w-delta)' },
+      { k: 'delta', gl: 'δ', nm: 'Delta', ds: 'slow waves',       col: 'var(--w-delta)' },
       { k: 'theta', gl: 'θ', nm: 'Theta', ds: 'internal thinking', col: 'var(--w-theta)' },
       { k: 'alpha', gl: 'α', nm: 'Alpha', ds: 'relaxed alertness', col: 'var(--w-alpha)' },
-      { k: 'beta',  gl: 'β', nm: 'Beta',  ds: 'focused thinking',  col: 'var(--w-beta)' },
-      { k: 'gamma', gl: 'γ', nm: 'Gamma', ds: 'peak processing',   col: 'var(--w-gamma)' }
+      { k: 'beta', gl: 'β', nm: 'Beta', ds: 'focused thinking', col: 'var(--w-beta)' },
+      { k: 'gamma', gl: 'γ', nm: 'Gamma', ds: 'peak processing',  col: 'var(--w-gamma)' }
     ];
     function el(tag, a) { var e = document.createElementNS(NS, tag); for (var k in a) e.setAttribute(k, a[k]); return e; }
     function mean(a){ var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return a.length? s/a.length : 0; }
@@ -209,7 +209,7 @@
     // ---------------------------------------------------------------
     // Real band power is 1/f: delta carries tens of percent of the signal and
     // gamma a fraction of one percent, so the five bands span roughly two
-    // decades. The old chart threw that away — it normalised each band to its
+    // decades. The old chart threw that away, it normalised each band to its
     // own range and parked it in a fixed lane, which made five unrelated
     // squiggles of identical amplitude and told the guest nothing.
     //
@@ -242,14 +242,14 @@
       if (bandStream.length < 4) return;
       // A recording can OPEN on a stray pre-anchor row (t≈2.4, then the clock
       // restarts at 0). The path started at x(2.4s), jumped back to x(0), and
-      // drew over itself — a little fork on every band's left edge. Trim any
+      // drew over itself, a little fork on every band's left edge. Trim any
       // leading rows that sit before a clock restart.
       var rows = bandStream, cut = 0;
       for (var ci = 1; ci < Math.min(rows.length, 12); ci++) if (rows[ci].t < rows[ci-1].t - 1e-6) cut = ci;
       if (cut) rows = rows.slice(cut);
       if (rows.length < 4) return;
       // MERGE the L/R samples that land at the same instant. They arrive as pairs
-      // (dt≈0 then ≈1-2s), and plotting both created vertical steps — the
+      // (dt≈0 then ≈1-2s), and plotting both created vertical steps, the
       // staircase. Averaging them into one moment gives a clean ~1Hz envelope.
       var merged = [];
       for (var mi = 0; mi < rows.length; mi++) {
@@ -274,7 +274,7 @@
         tot = tot || 1e-9;
         BANDS.forEach(function(b){ shares[b.k].push(Math.max(0, +merged[i][b.k] || 0) / tot); });
       }
-      // smooth on a PHYSICAL window, not a sample count — a short/sparse read
+      // smooth on a PHYSICAL window, not a sample count, a short/sparse read
       // under-smoothed into a staircase before
       var dt = (useT && n > 1) ? (lastT / (n-1)) : 1;
       var win = Math.max(3, Math.round(SMOOTH_SEC / Math.max(dt, 0.4)));
@@ -283,7 +283,7 @@
       // Domain from the SUPPORTABLE bands only, and floored. Pooling every band's
       // shares let the noise-floor bands (gamma, ~0.3%) set the axis bottom, so on
       // a log scale a meaningless gamma wiggle took a third of the plot height
-      // while delta — the band with real signal — got a sliver. Now the floor is
+      // while delta, the band with real signal, got a sliver. Now the floor is
       // a real share, and bands below it rest at the bottom instead of ballooning.
       var all = [];
       BANDS.forEach(function(b){ if (sessMed[b.k] >= CHART_FLOOR) shares[b.k].forEach(function(v){ if (v > 0) all.push(v); }); });
@@ -313,7 +313,7 @@
       if (!scale) return;
       // Value axis: real percentages of the guest's own signal power. The
       // candidate list is dense enough that a NARROW domain (a session where all
-      // five bands sit between 8% and 40%) still gets several labelled lines —
+      // five bands sit between 8% and 40%) still gets several labelled lines,
       // a decade-only list left such a chart with two ticks on it.
       var CAND = [0.002,0.003,0.005,0.007,0.01,0.015,0.02,0.03,0.05,0.07,0.1,0.15,0.2,0.3,0.5,0.7];
       var inside = CAND.filter(function(v){ var y = scale.yOf(v); return y >= BOX.y + 8 && y <= BOX.y + BOX.h - 8; });
@@ -359,7 +359,7 @@
       var runs = [], cur = [];
       for (var i = 0; i < pix.length; i++) {
         // pix is indexed on the MERGED rows (buildScale averages L/R pairs and
-        // trims pre-anchor rows) — indexing raw bandStream here read a
+        // trims pre-anchor rows), indexing raw bandStream here read a
         // timestamp about half the real time, so line breaks landed at the
         // wrong x and real dropouts could be drawn straight through.
         var t = scale.merged[i] && isFinite(scale.merged[i].t) ? scale.merged[i].t : null;
@@ -513,14 +513,14 @@
           'font-family':'var(--font-mono)', 'font-size':13, 'letter-spacing':'2.2' });
         lb.textContent = String(rd.k).toUpperCase() + '  ·  ' + String(rd.v || '').toUpperCase();
         tlG.appendChild(lb);
-        // clamp by the label's REAL half-width — a fixed 70px margin let a long
+        // clamp by the label's REAL half-width, a fixed 70px margin let a long
         // caption on an edge window ("STRONGEST · …") run past the chart's rail
         try {
           var hw = lb.getBBox().width / 2 + 4;
           lb.setAttribute('x', Math.max(BOX.x + hw, Math.min((a+b)/2, BOX.x + BOX.w - hw)));
         } catch (e) {}
       });
-      // the notification, marked wherever it actually landed — and not at all
+      // the notification, marked wherever it actually landed, and not at all
       // when it never fired (interruptT null)
       if (interruptT != null) {
         var xi = BOX.x + BOX.w*Math.max(0,Math.min(1,interruptT));
@@ -535,7 +535,7 @@
         });
         tlG.appendChild(el('path', { d: FL.smooth(pix), fill:'none', stroke:'var(--fg-muted)', 'stroke-opacity':0.55,
           'stroke-width':1.8, 'stroke-linecap':'round' }));
-        // in the left margin, clear of the ribbon itself — sitting it over the
+        // in the left margin, clear of the ribbon itself, sitting it over the
         // plot put the label directly under the line it was naming
         var rl = el('text', { x:BOX.x-16, y:RIBY, 'text-anchor':'end', fill:'var(--fg-faint)',
           'font-family':'var(--font-mono)', 'font-size':11, 'letter-spacing':'1.6' });
@@ -567,7 +567,7 @@
         anno.appendChild(el('circle', { cx:xi, cy:BOX.y-26, r:5, fill:'var(--c-orange)' }));
       }
       // Light the band lines this read is actually about, dim the rest. The
-      // guest is told "your beta fell 31%" — this is which line that is.
+      // guest is told "your beta fell 31%", this is which line that is.
       var focus = read.bandFocus && read.bandFocus.length ? read.bandFocus : null;
       BANDS.forEach(function(b){
         var on = !focus || focus.indexOf(b.k) !== -1;
@@ -782,7 +782,7 @@
     // over LAN for QA): synthetic preview.
     var SERVED = !!location.host && location.search.indexOf('preview') === -1;
     // HONESTY: ?preview on the SERVED host runs the synthetic driver on a real
-    // TV — that fabricated motion must carry a label (sim is always labeled).
+    // TV, that fabricated motion must carry a label (sim is always labeled).
     if (location.host && !SERVED) {
       var _pv = document.createElement('div');
       _pv.textContent = 'PREVIEW \u00b7 SYNTHETIC DATA';

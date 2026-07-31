@@ -1,10 +1,10 @@
 'use strict';
 // ============================================================
-// Zone — The Focus Room :: MESSAGE CONTRACT (single source of truth)
+// Zone, The Focus Room :: MESSAGE CONTRACT (single source of truth)
 // ------------------------------------------------------------
 // Two links share this vocabulary:
-//   1. LAN WebSocket   — Electron main  <->  TV window + iPad client
-//   2. localhost TCP   — Electron main  <->  Python sidecar (NDJSON)
+//   1. LAN WebSocket  , Electron main  <->  TV window + iPad client
+//   2. localhost TCP  , Electron main  <->  Python sidecar (NDJSON)
 //
 // The sidecar mirrors these exact strings in sidecar/protocol.py. Keep them
 // in lock-step. Every message is a JSON object: { type, t, ...payload } where
@@ -44,7 +44,7 @@ const SERVER = Object.freeze({
   // a guest's dot joining the wall in the moment. { dot:{archetype,sx,sy} }
   CONSTELLATION_JOIN: 'constellation/join',
   // a serene UI sound cue for the room audio (console-menu feel). Fired only for
-  // accepted guest inputs OUTSIDE the reading — never mid-session. { kind:'select' }
+  // accepted guest inputs OUTSIDE the reading, never mid-session. { kind:'select' }
   UI_CUE: 'ui/cue',
   // generic ack/heartbeat
   PONG: 'pong',
@@ -52,14 +52,14 @@ const SERVER = Object.freeze({
 
 // ---- LAN WebSocket: clients (iPad) -> server (main), all timestamped -----
 const CLIENT = Object.freeze({
-  // who am i ("tv" | "ipad" | "diagnostic") — sent on connect for the sync handshake
+  // who am i ("tv" | "ipad" | "diagnostic"), sent on connect for the sync handshake
   HELLO: 'client/hello',
   // { answers:{q1,q2,q3}, onMind, reading, t }
   GUEST_INTAKE: 'guest/intake',
   // { type: <one of the GUEST_EVENT sub-types below>, payload, t }
   GUEST_EVENT: 'guest/event',
   // Phase 2A.2 correction 2: the room-audio host (role 'audio') reports its interruption
-  // DUCK marker back — { kind:'ducked', payload:{scheduledAudioContextTime, requestMonotonicMs,
+  // DUCK marker back, { kind:'ducked', payload:{scheduledAudioContextTime, requestMonotonicMs,
   // estimatedStartMonotonicMs, clockDomain:'room-audio-browser'} }. Instrumentation only; the
   // audio host never drives the FSM (room-core routes this to orchestrator.onRoomAudioEvent).
   AUDIO_EVENT: 'audio/event',
@@ -71,7 +71,7 @@ const GUEST_EVENT = Object.freeze({
   EARBUD_SEATED: 'earbud_seated',
   // the guest is settled and has asked to start the 15s resting baseline
   BASELINE_START: 'baseline_start',
-  // the signal check + baseline are done — "I'm ready" advances to intake
+  // the signal check + baseline are done, "I'm ready" advances to intake
   FIT_CONFIRMED: 'fit_confirmed',
   READING_STARTED: 'reading_started',
   // how far down the piece the guest has scrolled, sampled while they read
@@ -88,10 +88,10 @@ const GUEST_EVENT = Object.freeze({
 
 // ---- localhost TCP: sidecar -> main --------------------------------------
 const SIDECAR_OUT = Object.freeze({
-  HELLO: 'hello',            // { proto, simulate, pid, source: "zone"|"sim" }
-  READY: 'ready',            // sidecar finished init, awaiting commands
-  LOG: 'log',                // { level, msg }
-  ERROR: 'error',            // { code, msg }
+  HELLO: 'hello',           // { proto, simulate, pid, source: "zone"|"sim" }
+  READY: 'ready',           // sidecar finished init, awaiting commands
+  LOG: 'log',               // { level, msg }
+  ERROR: 'error',           // { code, msg }
   // discovery result during pairing. { devices:[{name,address,rssi,side}] }
   DISCOVERED: 'discovered',
   // raw native metrics (full rate, for diagnostic + engine). MetricsData fields.
@@ -107,20 +107,20 @@ const SIDECAR_OUT = Object.freeze({
   BATTERY: 'fit/battery',
   IMPEDANCE: 'fit/impedance',
   // engine signals
-  PLATEAU: 'session/plateau',   // a real sustained high plateau was detected
-  DIP: 'session/dip',           // a real (non-artifact) dip confirmed
+  PLATEAU: 'session/plateau',  // a real sustained high plateau was detected
+  DIP: 'session/dip',          // a real (non-artifact) dip confirmed
   ARCHETYPE: 'session/archetype', // computed features + label at session end
   SESSION_SAMPLES: 'session/samples', // the recorded relative sample array for replay/outputs
-  // Phase 2A — raw per-channel EEG (ADC counts) + honest quality, versioned.
-  EEG_CONFIG: 'eeg/config-v1',   // channel labels, sample-rate expectation, calibration status
-  EEG_RAW: 'eeg/raw-v1',         // batched ADC-count samples per channel + continuity
+  // Phase 2A, raw per-channel EEG (ADC counts) + honest quality, versioned.
+  EEG_CONFIG: 'eeg/config-v1',  // channel labels, sample-rate expectation, calibration status
+  EEG_RAW: 'eeg/raw-v1',        // batched ADC-count samples per channel + continuity
   EEG_QUALITY: 'eeg/quality-v1', // per-channel quality + consumer selection + overall status
 });
 
 // ---- localhost TCP: main -> sidecar (commands) ---------------------------
 const SIDECAR_IN = Object.freeze({
   PING: 'ping',
-  // scan for buds (Zone.discover) without connecting — emits `discovered`
+  // scan for buds (Zone.discover) without connecting, emits `discovered`
   DISCOVER: 'discover',
   // discover (if needed) + profile-validated connect (real mode). sim ignores addresses.
   CONNECT: 'connect',
@@ -132,7 +132,7 @@ const SIDECAR_IN = Object.freeze({
   START_SESSION: 'start_session',
   STOP_SESSION: 'stop_session',
   // align a guest event onto the EEG timeline (main relays iPad events)
-  MARK: 'mark',                // { kind, t }
+  MARK: 'mark',               // { kind, t }
   // diagnostic: inject the deterministic test signal through the real pipeline
   TEST_SIGNAL: 'test_signal',
   SHUTDOWN: 'shutdown',
@@ -148,15 +148,15 @@ const STATE_WORD = Object.freeze({
 
 // ---- session beats (Document.pdf run-of-show) ----------------------------
 const BEAT = Object.freeze({
-  IDLE: 'idle',                 // constellation on the TV, no guest
+  IDLE: 'idle',                // constellation on the TV, no guest
   WELCOME: 'welcome',
-  FIT_CHECK: 'fit_check',       // battery + impedance coaching
-  INTAKE: 'intake',             // 3 belief questions + on-mind + reading pick
-  LIVE: 'live',                 // reading; live line on TV
+  FIT_CHECK: 'fit_check',      // battery + impedance coaching
+  INTAKE: 'intake',            // 3 belief questions + on-mind + reading pick
+  LIVE: 'live',                // reading; live line on TV
   INTERRUPTION: 'interruption', // the single fire
-  STRONGEST_Q: 'strongest_q',   // brief-pause strongest-stretch question
-  REVEAL: 'reveal',             // TV walks the 4 reads; iPad dark standby
-  TAKEAWAY: 'takeaway',         // card/profile/email + matched close + dot joins
+  STRONGEST_Q: 'strongest_q',  // brief-pause strongest-stretch question
+  REVEAL: 'reveal',            // TV walks the 4 reads; iPad dark standby
+  TAKEAWAY: 'takeaway',        // card/profile/email + matched close + dot joins
   CLOSE: 'close',
 });
 

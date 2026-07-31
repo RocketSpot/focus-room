@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================
-// outputs.js — the takeaway mechanism, built once.
+// outputs.js, the takeaway mechanism, built once.
 // Take a Claude Design template (card.html / profile.html / email.html), inject
 // this guest's archetype + sentence + their REAL focus-line path, then render:
 //   • card    → print-ready 4×6 PDF (CSS @page) + auto-print to the printer
@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 // Electron is optional: the web deployment has no renderer, so the card PDF /
 // profile PNG / email-line image are honestly SKIPPED there (each render path
-// already fails soft into its own try/catch) — the email itself still sends.
+// already fails soft into its own try/catch), the email itself still sends.
 let BrowserWindow = null;
 try { BrowserWindow = require('electron').BrowserWindow || null; } catch (e) { BrowserWindow = null; }
 const config = require('./config');
@@ -25,7 +25,7 @@ const b64 = (obj) => Buffer.from(JSON.stringify(obj), 'utf8').toString('base64')
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 const stripQuotes = (s) => String(s || '').replace(/^[“"]|[”"]$/g, '');
 
-// matched soft close (Document.pdf Beat 4) — mirrors the iPad Close doors
+// matched soft close (Document.pdf Beat 4), mirrors the iPad Close doors
 const DOORS = {
   investor: { cta: 'See where this goes',
     next: 'Today was one room and one reading. The roadmap is the same signal, every workday, for years, with your focus learning its own shape over time.' },
@@ -44,7 +44,7 @@ function buildData(reveal, answers, dateStr) {
   const region = reveal && reveal.region ? reveal.region : 'your reading';
   const r = (i, fallback) => (reads[i] ? (reads[i].ledger ? reads[i].ledger.did : reads[i].sentence) : fallback);
   // Phase 2A.2 correction 1: a staff/demonstration override marks the session invalid
-  // for EEG interpretation — the takeaway must not present any EEG-derived claim and
+  // for EEG interpretation, the takeaway must not present any EEG-derived claim and
   // must not read as "measured". "Signal ran light" would be a false claim about the
   // signal (a demo can have a fine signal, just overridden), so it gets its own copy.
   const demo = !!(reveal && reveal.dataQualityStatus === 'invalid-for-eeg-interpretation');
@@ -57,7 +57,7 @@ function buildData(reveal, answers, dateStr) {
         'No brain-signal reading was recorded or claimed.',
         'Nothing here is measured or estimated.',
       ].map((line, i) => honest(line, `card.cap${i + 1}`)),
-      desc: honest('A demonstration session — no EEG reading was claimed.', 'profile.desc'),
+      desc: honest('A demonstration session, no EEG reading was claimed.', 'profile.desc'),
       heroCaption: honest('A demonstration walk-through. No focus signal was measured.', 'email.caption'),
       read_1: honest('This session ran in demonstration mode.', 'email.read1'),
       read_2: honest('No brain-signal reading was recorded.', 'email.read2'),
@@ -86,7 +86,7 @@ function buildData(reveal, answers, dateStr) {
       // only. interruptSec is null when the notification never fired.
       st.interruptSec != null ? 'One notification arrived while you read.'
         : 'You finished before the notification was due.',
-      // On a very short session both clocks can round to the same value — a
+      // On a very short session both clocks can round to the same value, a
       // "0:15 to 0:15" run is the exact nonsense claim reads.js guards its own
       // wall copy against, so the card falls back the same way.
       st.strongToSec > st.strongFromSec
@@ -111,7 +111,7 @@ function buildData(reveal, answers, dateStr) {
     date: dateStr,
     samples: (reveal && reveal.samplesForReveal) || [],
     // null (no orange marker on the card/profile/email line) when the
-    // notification never fired — interruptT is null exactly then.
+    // notification never fired, interruptT is null exactly then.
     troughT: reveal && reveal.interruptT != null && reads[2] ? reads[2].anchorT : null,
     // card: 3 short lines
     caption: caption.map((line, i) => honest(line, `card.cap${i + 1}`)),
@@ -134,15 +134,15 @@ function buildData(reveal, answers, dateStr) {
 }
 
 // ---- offscreen render helper ----
-// Small payloads ride the legacy ?d= querystring (back-compat — also the only
+// Small payloads ride the legacy ?d= querystring (back-compat, also the only
 // path for pages without window.__setData). Anything bigger is injected after
 // load via window.__setData(...): a long session's sample array used to push
 // the ?d= URL past Node's 16KB header cap, silently killing card, profile and
 // email line on sessions over ~5 minutes.
-const MAX_D_QUERY = 12000; // encoded querystring chars — well under the 16KB header cap
+const MAX_D_QUERY = 12000; // encoded querystring chars, well under the 16KB header cap
 
 async function withPage(urlPath, data, size, fn) {
-  if (!BrowserWindow) throw new Error('no renderer on this host (web mode) — visual output skipped');
+  if (!BrowserWindow) throw new Error('no renderer on this host (web mode), visual output skipped');
   const win = new BrowserWindow({
     width: size.width, height: size.height, show: false,
     frame: false, useContentSize: true, // exact content size for capturePage
@@ -162,7 +162,7 @@ async function withPage(urlPath, data, size, fn) {
         `typeof window.__setData === 'function' ? (window.__setData(${inject}), true) : false`);
       if (ok !== true) throw new Error(`${urlPath} does not expose window.__setData (payload too large for ?d=)`);
     }
-    // Wait until the page signals it finished rendering (data-rendered) — capped.
+    // Wait until the page signals it finished rendering (data-rendered), capped.
     // If it never does, THROW rather than capture: a page that hasn't rendered
     // the guest's data would otherwise be printed/emailed as a blank or (worse)
     // a synthetic sheet. Better a loud failure the operator sees than a
@@ -177,7 +177,7 @@ async function withPage(urlPath, data, size, fn) {
       if (err) throw new Error(`${urlPath} failed to render the session payload: ${err}`);
       await new Promise((r) => setTimeout(r, 80));
     }
-    if (!rendered) throw new Error(`${urlPath} never finished rendering — refusing to output an unrendered page`);
+    if (!rendered) throw new Error(`${urlPath} never finished rendering, refusing to output an unrendered page`);
     return await fn(win);
   } finally {
     if (!win.isDestroyed()) win.destroy();
@@ -221,15 +221,15 @@ async function renderProfile(data) {
   ensureOutDir();
   const pngPath = path.join(OUT_DIR, `profile-${Date.now()}.png`);
   await withPage('profile.html', data, { width: 1120, height: 900 }, async (win) => {
-    // Rasterize the SVG to an exact 1080×1080 canvas in-page — independent of the
+    // Rasterize the SVG to an exact 1080×1080 canvas in-page, independent of the
     // physical screen size (capturePage is constrained by the display). An SVG
     // drawn through <img> cannot load external webfonts, so the brand faces are
     // fetched same-origin, base64-inlined as @font-face rules INSIDE the SVG
-    // before serializing — the raster carries the real type.
+    // before serializing, the raster carries the real type.
     const res = await win.webContents.executeJavaScript(`(() => new Promise((resolve) => {
       var FONTS = [
         // optional: true faces may be absent (the licensed PP Neue Montreal
-        // ships separately) — they embed automatically once the owner drops
+        // ships separately), they embed automatically once the owner drops
         // the files into assets/fonts/files/, and are skipped until then
         // instead of failing the whole raster.
         { face: 'font-family:"PP Neue Montreal";font-style:normal;font-weight:400;', url: 'assets/fonts/files/PPNeueMontreal-Regular.woff2', fmt: 'woff2', optional: true },
@@ -331,19 +331,31 @@ async function sendEmail(data, toEmail, provider) {
   catch (e) { console.log(`[outputs] email line image skipped: ${e.message}`); }
   const html = composeEmail(templateHtml, data, !!linePng);
   if (!provider) provider = makeEmailProvider({ outDir: OUT_DIR });
+  // The Zone wordmark rides along as an inline (cid) attachment. Gmail and Outlook
+  // both strip data: URIs on images, and the room is offline first with no CDN to
+  // link to, which leaves cid as the only reliable way to show a logo in an inbox.
+  const attachments = [];
+  if (linePng) attachments.push({ name: 'focus-line.png', content: linePng, contentType: 'image/png', cid: 'focusline' });
+  try {
+    const logoPath = path.join(config.webRoot, 'assets', 'brand', 'zone-logo-white@2x.png');
+    attachments.push({
+      name: 'zone.png', content: fs.readFileSync(logoPath).toString('base64'),
+      contentType: 'image/png', cid: 'zonelogo',
+    });
+  } catch (e) {
+    console.log(`[outputs] logo skipped: ${e.message}`);
+  }
   const result = await provider.send({
     to: toEmail,
     subject: `Your Focus Room read · ${data.name}`,
     htmlBody: html,
-    attachments: linePng
-      ? [{ name: 'focus-line.png', content: linePng, contentType: 'image/png', cid: 'focusline' }]
-      : [],
+    attachments,
   });
   return result;
 }
 
 // ---- the two entry points the orchestrator calls ----
-// "the moment results are processed" — card auto-prints + profile renders.
+// "the moment results are processed", card auto-prints + profile renders.
 // buildData runs INSIDE each output's try/catch: one bad string (an honesty
 // throw in dev) can no longer abort card + profile + email together.
 async function processResults(reveal, answers) {
@@ -368,9 +380,9 @@ async function sendReport(reveal, answers, toEmail) {
   const to = String(toEmail == null ? '' : toEmail).trim();
   const data = buildData(reveal, answers, dateStr());
   if (!EMAIL_RE.test(to)) {
-    // skip the send with a logged reason — but still write the dev-file
+    // skip the send with a logged reason, but still write the dev-file
     // artifact so the rendered report stays recoverable.
-    console.error(`[outputs] email send skipped: invalid address ${JSON.stringify(to)} — report saved to disk instead`);
+    console.error(`[outputs] email send skipped: invalid address ${JSON.stringify(to)}, report saved to disk instead`);
     const saved = await sendEmail(data, to, new DevFileProvider(OUT_DIR));
     return { ...saved, ok: false, skipped: 'invalid-address' };
   }

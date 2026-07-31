@@ -1,17 +1,17 @@
 'use strict';
 // ============================================================
-// Zone — The Focus Room :: the room BRAIN, Electron-free.
+// Zone, The Focus Room :: the room BRAIN, Electron-free.
 // ------------------------------------------------------------
 // Everything the room does that is not a window lives here: the sidecar
 // supervisor, the LAN surface server, the orchestrator, the constellation
 // store, the outputs wiring, the ops-console gate, and the crash guard.
 // Two entries consume it:
-//   app/main.js      — the Electron room (adds the TV window, the hidden
+//   app/main.js     , the Electron room (adds the TV window, the hidden
 //                      audio host, shortcuts, and the printed card path)
-//   app/web-main.js  — the headless web deployment (Replit): the TV is
+//   app/web-main.js , the headless web deployment (Replit): the TV is
 //                      /tv.html in a browser, the guest is /ipad-flow.html,
 //                      the operator is /ops.html
-// Extracted from main.js verbatim where possible — behavior identical.
+// Extracted from main.js verbatim where possible, behavior identical.
 // ============================================================
 const path = require('path');
 const fs = require('fs');
@@ -24,7 +24,7 @@ const outputs = require('./outputs');
 const { SERVER, SIDECAR_OUT, SIDECAR_IN } = require('./protocol');
 
 // Commands the served operator console may fire at the sidecar. An EXPLICIT
-// allow-list, NOT all of SIDECAR_IN — the contract also contains 'shutdown',
+// allow-list, NOT all of SIDECAR_IN, the contract also contains 'shutdown',
 // which would let any device on the room Wi-Fi kill the signal engine over the
 // wire. Killing the engine is never an operator action (it self-manages); the
 // console only gets the buttons a human in the room legitimately needs.
@@ -39,21 +39,21 @@ const OPS_COMMANDS = new Set([
 // TV/iPad as-is (the strings already match the LAN contract).
 const SURFACE_FORWARD = new Set([
   SIDECAR_OUT.FRAME,
-  SIDECAR_OUT.BRAINWAVES,   // guest signal surface renders these as NUMBER-FREE relative presence
+  SIDECAR_OUT.BRAINWAVES,  // guest signal surface renders these as NUMBER-FREE relative presence
   SIDECAR_OUT.CONNECTION,
   SIDECAR_OUT.BATTERY,
   SIDECAR_OUT.IMPEDANCE,
-  // NOTE: EEG_CONFIG / EEG_RAW / EEG_QUALITY are intentionally NOT here — they are
+  // NOTE: EEG_CONFIG / EEG_RAW / EEG_QUALITY are intentionally NOT here, they are
   // routed to the TV role only (item 11), handled explicitly in wireSidecar.
 ]);
 
 // hooks (all optional):
-//   onDiag(channel, payload)  — extra diagnostic sink (Electron's legacy window)
-//   onBeat({surface, beat})   — Electron navigates its TV window here
-//   onServerUp()              — Electron reloads its windows after a late bind
+//   onDiag(channel, payload) , extra diagnostic sink (Electron's legacy window)
+//   onBeat({surface, beat})  , Electron navigates its TV window here
+//   onServerUp()             , Electron reloads its windows after a late bind
 function createRoom(hooks = {}) {
   const server = new SurfaceServer();
-  // The signal engine: local by default (the sidecar spawned on THIS machine —
+  // The signal engine: local by default (the sidecar spawned on THIS machine,
   // sim or real hardware); FOCUSROOM_SIGNAL=bridge instead accepts the stream
   // from a desktop bridge dialing in over the WS (web room + real earbuds).
   let supervisor;
@@ -70,7 +70,7 @@ function createRoom(hooks = {}) {
   // connected operator console over the WS bus, under the 'ops' role.
   function pushDiag(channel, payload) {
     try { if (hooks.onDiag) hooks.onDiag(channel, payload); } catch (_) {}
-    // Only serialize + fan out when an operator console is actually connected —
+    // Only serialize + fan out when an operator console is actually connected,
     // the feed carries every EEG frame (~1/s), and nobody should pay for it when
     // no one is watching.
     try { if (server && server.hasRole('ops')) server.broadcast('ops/feed', { channel, payload }, 'ops'); } catch (_) {}
@@ -83,19 +83,19 @@ function createRoom(hooks = {}) {
   });
 
   // Last-known engine facts, replayed to a LATE-JOINING operator console. The
-  // one-shot ready/status/battery messages fire at boot and during the fit —
-  // long before an operator usually opens the page — so without a replay the
+  // one-shot ready/status/battery messages fire at boot and during the fit,
+  // long before an operator usually opens the page, so without a replay the
   // console sat on "Waiting for the signal engine…" with dash chips in the
   // middle of a live session.
   const opsLast = new Map();   // msg.type → last raw sidecar message
   // Phase 2A: a TV loading tv-signal after the fit stream started would miss the
-  // one-shot config (channel labels) and the latest quality — cache + replay them.
+  // one-shot config (channel labels) and the latest quality, cache + replay them.
   let lastEegConfig = null;
   let lastEegQuality = null;
 
   function wireSidecar() {
     // Demo autopilot is OPT-IN (FOCUSROOM_DEMO=1, sim only): by default the room
-    // waits for a real guest — open the iPad URL from the console and drive the
+    // waits for a real guest, open the iPad URL from the console and drive the
     // whole flow by hand (the sim sidecar fakes the earbuds/EEG once you do).
     // An unattended ghost session walking itself feels broken, not alive.
     if (config.SIMULATE && process.env.FOCUSROOM_DEMO === '1') orchestrator.enableDemo();
@@ -103,9 +103,9 @@ function createRoom(hooks = {}) {
     supervisor.on('ready', () => {
       pushDiag('sidecar:status', supervisor.info);
       // A restart mid-beat leaves fit/reading silently dead (commands are
-      // fire-and-forget) — the orchestrator re-issues what the beat depends on.
+      // fire-and-forget), the orchestrator re-issues what the beat depends on.
       orchestrator.onSidecarReady();
-      // The orchestrator owns session lifecycle now — no auto-start. Re-broadcast
+      // The orchestrator owns session lifecycle now, no auto-start. Re-broadcast
       // current state so any already-connected surface syncs.
       orchestrator._broadcastState({ sidecar: supervisor.info });
       orchestrator.startDemo(); // no-op unless demo enabled + idle (sim only)
@@ -114,7 +114,7 @@ function createRoom(hooks = {}) {
     supervisor.on('message', (msg) => {
       const isRaw = msg.type === SIDECAR_OUT.EEG_RAW
         || msg.type === SIDECAR_OUT.EEG_CONFIG || msg.type === SIDECAR_OUT.EEG_QUALITY;
-      // Everything goes to the diagnostic view (the honest mirror) — EXCEPT the raw-EEG
+      // Everything goes to the diagnostic view (the honest mirror), EXCEPT the raw-EEG
       // message types (finding #5): the ops/feed fanout goes to the self-declared 'ops'
       // role, which is NOT raw-authorized, so raw ADC/channel/quality data must never ride it.
       if (!isRaw) pushDiag('sidecar:message', msg);
@@ -122,10 +122,10 @@ function createRoom(hooks = {}) {
       orchestrator.onSidecar(msg);
       // Phase 2A.1 raw-EEG routing (item 11) + finding #5: the raw per-channel stream (and its
       // config/quality) is delivered ONLY to sockets the server AUTHENTICATED for the eeg-raw
-      // capability (launcher token + loopback in packaged mode) — never by the client-declared
+      // capability (launcher token + loopback in packaged mode), never by the client-declared
       // 'tv' role. It is NOT sent to the iPad, reveal, audio, ops, email, or analytics.
       if (isRaw) {
-        // Electron: deliver to the AUTHORIZED TV renderer over IPC (finding #5 — the token stays
+        // Electron: deliver to the AUTHORIZED TV renderer over IPC (finding #5, the token stays
         // in main; the renderer never holds it). WS: broadcastRaw stays as fail-closed defense for
         // any future launcher-authenticated WebSocket client (a plain/LAN socket is never authorized).
         if (hooks.onRawEeg) { try { hooks.onRawEeg(msg); } catch (_) {} }
@@ -160,7 +160,7 @@ function createRoom(hooks = {}) {
     // A surface attached (iPad starts a session / TV resyncs).
     server.on('client-hello', (info) => {
       pushDiag('surface:client', { hello: info });
-      // a hello from a role that had gone quiet is a RECONNECT, not a new guest —
+      // a hello from a role that had gone quiet is a RECONNECT, not a new guest,
       // tell the orchestrator so it can stop holding the session open
       orchestrator.onClientRejoined(info.role);
       orchestrator.onClientHello(info);
@@ -175,7 +175,7 @@ function createRoom(hooks = {}) {
       // hand a freshly-loaded TV the whole constellation (+ a dot to land if pending)
       if (info.role === 'tv') {
         // a TV that just loaded the signal-check surface mid-stream missed the one-shot EEG
-        // config (channel labels) and latest quality — replay them, but ONLY to a socket the
+        // config (channel labels) and latest quality, replay them, but ONLY to a socket the
         // server AUTHENTICATED for raw (finding #5): a spoofed 'tv' hello with no launcher token
         // is not raw-authorized (info.rawEeg false) and must not receive even the config/quality.
         if (info.rawEeg && server.sendRawTo) {
@@ -185,16 +185,16 @@ function createRoom(hooks = {}) {
         sendOr(SERVER.CONSTELLATION_DATA,
           { dots: store.list(), count: store.count(), joinId: pendingJoin ? pendingJoin.id : null }, 'tv');
         // a TV that just (re)loaded into the reveal missed the one-time reveal/data
-        // broadcast — re-send it + the current step so the reveal isn't blank.
+        // broadcast, re-send it + the current step so the reveal isn't blank.
         if (orchestrator.beat === 'standby' && orchestrator.reveal) {
           if (!orchestrator.revealShown) {
             // Still inside the post-scan processing pause. Re-sending reveal/data
             // here skipped the processing moment on every real reveal (the TV
-            // reloads into standby and hellos DURING the pause) — hand the fresh
+            // reloads into standby and hellos DURING the pause), hand the fresh
             // TV the processing screen instead; reveal/data follows on the timer.
             sendOr(SERVER.REVEAL_PROCESSING, { archetype: orchestrator.reveal.archetype }, 'tv');
           } else {
-            // one canonical builder — never hand-copy this payload (a drifted copy
+            // one canonical builder, never hand-copy this payload (a drifted copy
             // dropped `bands` and the reveal rendered with empty charts)
             sendOr(SERVER.REVEAL_DATA, orchestrator.revealPayload(), 'tv');
             if (orchestrator.revealStep >= 1) sendOr(SERVER.REVEAL_STEP, { index: orchestrator.revealStep }, 'tv');
@@ -203,12 +203,12 @@ function createRoom(hooks = {}) {
       }
       // An iPad that reloaded late in the session (Safari purges background
       // pages) lost its reveal state, and the Close screen would have fallen
-      // back to the synthetic archetype curve — hand it the guest's REAL data.
+      // back to the synthetic archetype curve, hand it the guest's REAL data.
       if (info.role === 'ipad' && orchestrator.reveal && orchestrator.revealShown
         && (orchestrator.beat === 'standby' || orchestrator.beat === 'email' || orchestrator.beat === 'close')) {
         sendOr(SERVER.REVEAL_DATA, orchestrator.revealPayload(), 'ipad');
       }
-      // a LATE operator console gets the engine's standing facts replayed —
+      // a LATE operator console gets the engine's standing facts replayed,
       // otherwise it waits forever for one-shots that fired at boot
       if (info.role === 'ops') {
         pushDiag('sidecar:status', supervisor.info);
@@ -223,13 +223,13 @@ function createRoom(hooks = {}) {
       // the orchestrator.
       if (role === 'bridge') return;
       // The operator console drives the sidecar directly (Discover/Connect/…). Its
-      // commands must NOT flow into the guest orchestrator — validate against the
+      // commands must NOT flow into the guest orchestrator, validate against the
       // sidecar contract and forward, same gate the old IPC bridge used.
       if (role === 'ops' && msg && msg.type === 'ops/cmd') {
         const cmd = msg.cmd;
         if (cmd === SIDECAR_IN.MARK && (msg.payload || {}).kind === 'interruption') {
           // "Fire the interruption" must do what it says: show the guest the card
-          // and mark the real timeline. The raw sidecar `mark` did neither — it
+          // and mark the real timeline. The raw sidecar `mark` did neither, it
           // only annotated the recording. Route through the orchestrator, which
           // only fires during the reading.
           const fired = orchestrator.forceInterruption();
@@ -245,7 +245,7 @@ function createRoom(hooks = {}) {
         } else if (cmd === SIDECAR_IN.TEST_SIGNAL) {
           // The test signal injects a synthetic waveform THROUGH the real pipeline.
           // Fired mid-session it would blend fabricated samples into the guest's
-          // actual recording — a silent violation of "nothing fabricated". Only
+          // actual recording, a silent violation of "nothing fabricated". Only
           // allow it when no guest is in session.
           if (orchestrator.beat === 'idle') {
             const ok = supervisor.send(cmd, msg.payload || {});
@@ -263,7 +263,7 @@ function createRoom(hooks = {}) {
       }
       // Phase 2A.2 correction 2: the room-audio host reports its interruption DUCK
       // marker (scheduled Web-Audio clock time). It is NOT a guest and must never drive
-      // the FSM — route only this one event to the timing instrumentation, then stop.
+      // the FSM, route only this one event to the timing instrumentation, then stop.
       if (role === 'audio') {
         if (msg && msg.type === 'audio/event' && msg.kind === 'ducked') orchestrator.onRoomAudioEvent(msg);
         return;
@@ -306,7 +306,7 @@ function createRoom(hooks = {}) {
     });
 
     // The FULL session (focus line, band/metric stream, reads, archetype, answers)
-    // is written to disk — the constellation dot is only the anonymous pin.
+    // is written to disk, the constellation dot is only the anonymous pin.
     orchestrator.on('session-record', (rec) => {
       const p = store.saveSession(rec);
       // always log the path (not just in dev): the operator needs to find a
@@ -337,7 +337,7 @@ function createRoom(hooks = {}) {
         return;
       } catch (e) {
         const delayMs = attempt <= 5 ? 3000 : 30000;
-        console.error(`[server] failed to start (attempt ${attempt}): ${e.message} — retrying in ${delayMs / 1000}s`);
+        console.error(`[server] failed to start (attempt ${attempt}): ${e.message}, retrying in ${delayMs / 1000}s`);
         pushDiag('server:retry', { attempt, delayMs, error: e.message });
         await new Promise((r) => setTimeout(r, delayMs));
       }
@@ -355,7 +355,7 @@ function createRoom(hooks = {}) {
 
   // ---------------- crash guard ----------------
   // A crash must not leave the room dark: log it (console + crash log under the
-  // data dir), attempt the normal cleanup, then hand the host its relaunch —
+  // data dir), attempt the normal cleanup, then hand the host its relaunch,
   // unless we're crash-looping (more than 3 crashes in 10 minutes), in which
   // case stay down.
   const CRASH_WINDOW_MS = 10 * 60 * 1000;
@@ -383,11 +383,11 @@ function createRoom(hooks = {}) {
     return stamps.length;
   }
 
-  // relaunch(looping: boolean) — host decides how to restart/exit
+  // relaunch(looping: boolean), host decides how to restart/exit
   function attachCrashGuard(relaunch) {
     let fatalHandled = false;
     function onFatal(kind, err) {
-      if (fatalHandled) return; // one fatal at a time — never recurse
+      if (fatalHandled) return; // one fatal at a time, never recurse
       fatalHandled = true;
       const now = Date.now();
       const detail = err && err.stack ? err.stack : String(err);
@@ -397,8 +397,8 @@ function createRoom(hooks = {}) {
       const finish = () => {
         const looping = recent > CRASH_MAX_IN_WINDOW;
         if (looping) {
-          console.error(`[crash] ${recent} crashes in 10 minutes — loop breaker, NOT relaunching`);
-          logCrash(`[${new Date().toISOString()}] loop breaker: ${recent} crashes in window — staying down\n`);
+          console.error(`[crash] ${recent} crashes in 10 minutes, loop breaker, NOT relaunching`);
+          logCrash(`[${new Date().toISOString()}] loop breaker: ${recent} crashes in window, staying down\n`);
         }
         relaunch(looping);
       };
@@ -415,7 +415,7 @@ function createRoom(hooks = {}) {
   function banner(label) {
     const line = '─'.repeat(54);
     console.log(`\n${line}`);
-    console.log('  ZONE — THE FOCUS ROOM');
+    console.log('  ZONE, THE FOCUS ROOM');
     console.log(`  mode      : ${label || (config.isDev ? 'DEV' : 'PACKAGED')}`);
     console.log(`  signal    : ${config.SIMULATE ? '*** SIMULATION (no real guest) ***' : 'REAL EEG'}`);
     console.log(`  sidecar   : ${config.sidecar.frozen ? 'frozen binary' : 'python (dev)'}`);

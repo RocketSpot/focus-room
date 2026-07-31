@@ -1,15 +1,15 @@
 'use strict';
 // ============================================================
-// reads.js — the four reads, computed from the guest's own session.
+// reads.js, the four reads, computed from the guest's own session.
 // ------------------------------------------------------------
-// Everything here is relative, directional, and about THIS session — never an
+// Everything here is relative, directional, and about THIS session, never an
 // absolute/clinical score, never a claim against a population. The
 // committed-vs-actual contrasts come from the Beat-1 answers + the
 // strongest-stretch guess.
 //
 // NUMBERS. Every read carries a `stat` (one measured figure, the headline) and
 // its prose quotes real figures. All of them are things we actually recorded:
-//   • durations, from the sample clock (rounded to 5s — measured, not to-the-
+//   • durations, from the sample clock (rounded to 5s, measured, not to-the-
 //     second theatre)
 //   • movement, as a percentage of THE GUEST'S OWN session range
 //   • band share, as each rhythm's percentage of the guest's own total signal
@@ -19,7 +19,7 @@
 //
 // Two scales matter:
 //   • the RAW smoothed signal (vr) tells us how much the guest's engagement
-//     actually MOVED — that's what flags a flat/unremarkable session and sets
+//     actually MOVED, that's what flags a flat/unremarkable session and sets
 //     the interruption-dip magnitude. We never stretch this.
 //   • a min-span rescale gives the reveal LINE a legible "low for you → high for
 //     you" shape WITHOUT exaggerating a tiny flat range into false drama.
@@ -32,12 +32,12 @@ function clamp01(x) { return Math.max(0, Math.min(1, x)); }
 function mean(a) { return a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0; }
 function std(a) { const m = mean(a); return a.length ? Math.sqrt(mean(a.map((x) => (x - m) ** 2))) : 0; }
 function regionOf(t) { return t < 0.34 ? 'the opening' : t < 0.67 ? 'the middle' : 'the ending'; }
-function quote(s) { return s ? '“' + String(s).replace(/^[—\s]+/, '') + '”' : '—'; }
+function quote(s) { return s ? '“' + String(s).replace(/^[, \s]+/, '') + '”' : ', '; }
 
 // ---- number formatting -------------------------------------------------
 // Durations round to 5 seconds. The room measures, it doesn't stopwatch: a
 // to-the-second figure would claim a precision the smoothed signal can't carry.
-// A DURATION also floors at 5 ("0 sec" would be a nonsense claim) — but a CLOCK
+// A DURATION also floors at 5 ("0 sec" would be a nonsense claim), but a CLOCK
 // POSITION must not: 0:00 is a real place in the reading, and flooring it to
 // 0:05 once put "your strongest 10 sec ran from 0:05 to 0:10" on the wall.
 const round5 = (s) => Math.max(5, Math.round(s / 5) * 5);
@@ -53,7 +53,7 @@ function fmtClock(sec) {
   const s = roundClock(sec);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
-// The notification is a discrete EVENT with an exact timestamp — unlike the
+// The notification is a discrete EVENT with an exact timestamp, unlike the
 // smoothed-line figures it needs no 5-second grid, and gridding it drifted the
 // copy visibly off the chart marker ("at 1:15" over a marker drawn at 1:13).
 function fmtClockExact(sec) {
@@ -83,19 +83,19 @@ const GUESS_REGION = {
 
 // plain-language band names for the reveal narrative
 const BAND_SHORT = { delta: 'delta', theta: 'theta', alpha: 'alpha', beta: 'beta', gamma: 'gamma' };
-// The room's canonical brainwave vocabulary — the same words used in the iPad
+// The room's canonical brainwave vocabulary, the same words used in the iPad
 // onboarding, the live-rhythms screen, the four-part reveal and the closing key.
 const BAND_MEANS = { delta: 'slow waves', theta: 'internal thinking', alpha: 'relaxed alertness',
   beta: 'focused thinking', gamma: 'peak processing' };
 const BANDS5 = ['delta', 'theta', 'alpha', 'beta', 'gamma'];
 // A rhythm holding only a few percent of total power is at the noise floor of a
 // 4-electrode ear read (gamma always is; on a drift-heavy read beta can be too).
-// A tiny absolute wobble there becomes a huge percentage — an early build put
+// A tiny absolute wobble there becomes a huge percentage, an early build put
 // "beta ran 393% above its session level" on the wall off a band holding 3% of
 // the signal. Below this share we never build a sentence on the band at all.
 const SHARE_FLOOR = 0.04;
 
-// Per-region band narrative — which measured rhythm led each read's window, what
+// Per-region band narrative, which measured rhythm led each read's window, what
 // share of the guest's signal power it held there, and how that compares to their
 // own session. Relative band power is measured directly (unlike a derived "focus"
 // score), so the reveal tells its story through the bands and quotes the figures.
@@ -156,9 +156,9 @@ function bandLayer(bands, reads) {
       const topMove = mv[0] && Math.abs(mv[0].d) >= Math.abs((mv[mv.length - 1] || {}).d || 0) ? mv[0] : mv[mv.length - 1];
       // quote a figure only when there IS one; "rose 0%" would be a fabricated finding
       if (topMove && topMove.d !== null && Math.abs(topMove.d) >= 1) {
-        return { focus: [topMove.k], note: `At the notification your ${BAND_SHORT[topMove.k]} rhythm — your ${BAND_MEANS[topMove.k]} — ${topMove.d >= 0 ? rose(topMove.d) : fell(topMove.d)}.` };
+        return { focus: [topMove.k], note: `At the notification your ${BAND_SHORT[topMove.k]} rhythm, your ${BAND_MEANS[topMove.k]}, ${topMove.d >= 0 ? rose(topMove.d) : fell(topMove.d)}.` };
       }
-      return { focus: [loud], note: `At the notification your rhythms rearranged around it — ${BAND_SHORT[loud]}, your ${BAND_MEANS[loud]}, led the moment at ${loudPct}% of your measured band power.` };
+      return { focus: [loud], note: `At the notification your rhythms rearranged around it, ${BAND_SHORT[loud]}, your ${BAND_MEANS[loud]}, led the moment at ${loudPct}% of your measured band power.` };
     }
     if (rd.k === 'Settle') {
       if (up && up.d >= 4 && down && down.d <= -4) return { focus: [up.k, down.k], note: `As you settled, ${BAND_SHORT[up.k]} ${rose(up.d)} and ${BAND_SHORT[down.k]} ${fellT(down.d)}. ${cap(BAND_SHORT[loud])} held ${loudPct}% of the measured band power.` };
@@ -176,7 +176,7 @@ function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 
 // The band whose REACTION to the notification is clearest: the change from the
 // few seconds BEFORE the marker to the few seconds AFTER. That is the honest
-// measure of "the notification's effect" — not the deviation from the whole
+// measure of "the notification's effect", not the deviation from the whole
 // session (which conflates the reaction with everything else). Only the
 // attention bands (theta/alpha/beta) count: delta in awake mobile ear-EEG is
 // motion/drift, gamma is muscle, so a jump there is a flinch, not attention.
@@ -188,7 +188,7 @@ function interruptBandShift(bands, interruptT) {
   const sm = bands.map((b) => { let t = 0; BANDS5.forEach((k) => { t += Math.max(0, +b[k] || 0); }); t = t || 1e-9;
     const o = { f: b.t / totalT }; BANDS5.forEach((k) => { o[k] = Math.max(0, +b[k] || 0) / t; }); return o; });
   const sessShare = {}; BANDS5.forEach((k) => { sessShare[k] = mean(sm.map((s) => s[k])); });
-  // The reaction window: from just before the marker to a few seconds after —
+  // The reaction window: from just before the marker to a few seconds after,
   // the immediate response, NOT the minute of aftermath that follows (where the
   // band often over-corrects the other way and would flip the story).
   let win = sm.filter((s) => s.f >= interruptT - 0.02 && s.f <= interruptT + 0.06);
@@ -204,7 +204,7 @@ function interruptBandShift(bands, interruptT) {
   });
   // A CHANGE IS ALWAYS FOUND. If the attention bands all sat under the noise floor,
   // widen to all five and take the largest real movement rather than reporting
-  // nothing — something always moves at the marker, and the room's job is to say
+  // nothing, something always moves at the marker, and the room's job is to say
   // WHAT moved, not to decide the guest's notification was uninteresting.
   if (!best) {
     BANDS5.forEach((k) => {
@@ -219,13 +219,13 @@ function interruptBandShift(bands, interruptT) {
 }
 
 // ============================================================
-// THE FOCUS SIGNAL — derived from the BANDS, not the sidecar's engagement line.
+// THE FOCUS SIGNAL, derived from the BANDS, not the sidecar's engagement line.
 // ------------------------------------------------------------
 // The sidecar reports engagement as beta/(alpha+theta). On real in-ear EEG that
 // is delta-dominated with a tiny, noisy beta, so the ratio collapses and the
 // per-session scaling floors the whole line to zero. Every read then degenerates
 // ("0% of the time", "no dip", contradictions). The BANDS, though, carry real
-// structure — including the theta rise a notification actually produces. So we
+// structure, including the theta rise a notification actually produces. So we
 // rebuild the focus signal here from the smoothed band shares.
 // ============================================================
 const FOCUS_SMOOTH_S = 9;   // physical-time smoothing window, NOT sample count
@@ -240,7 +240,7 @@ const percentile = (sortedAsc, p) => {
 // which bled a post-notification decline backward so it appeared to begin BEFORE
 // the marker (Phase-1 test #18). `eventEegT` splits the smoothing at the event so
 // no post-event sample contributes to a pre-event value (or vice versa).
-// NOTE: this is DISPLAY/feature smoothing only — the canonical unsmoothed spectral
+// NOTE: this is DISPLAY/feature smoothing only, the canonical unsmoothed spectral
 // pipeline is the deferred phase; here we only stop the boundary bleed.
 function bandFocusLine(bands, eventEegT) {
   if (!bands || bands.length < 6) return null;
@@ -265,7 +265,7 @@ function bandFocusLine(bands, eventEegT) {
   //    tens of seconds; a sample-count window under-smooths short/sparse reads)
   const dt = sh.length > 1 ? (sh[sh.length - 1].t - sh[0].t) / (sh.length - 1) : 1;
   const half = Math.max(1, Math.round((FOCUS_SMOOTH_S / Math.max(dt, 0.4)) / 2));
-  // split index at the notification — smoothing never crosses it, so the dip can
+  // split index at the notification, smoothing never crosses it, so the dip can
   // never appear before the event (nor the pre-event level bleed after it).
   let splitIdx = -1;
   if (eventEegT != null) { splitIdx = sh.findIndex((s) => s.t >= eventEegT); if (splitIdx < 0) splitIdx = sh.length; }
@@ -285,7 +285,7 @@ function bandFocusLine(bands, eventEegT) {
   });
   // 4) engagement index EI = beta / (alpha + theta), on the smoothed shares.
   //    Higher = more externally focused; a notification pushes theta up, which
-  //    drives EI DOWN — the visible cost the guest is looking for.
+  //    drives EI DOWN, the visible cost the guest is looking for.
   const ei = sm.map((s) => s.beta / (s.alpha + s.theta + 1e-9));
   // 5) normalise EI to its own session spread (robust percentiles) so the line
   //    uses the full height and shows the guest's real movement.
@@ -307,12 +307,12 @@ function bandFocusLine(bands, eventEegT) {
 function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eegClaimsAllowed, dataQualityStatus }) {
   answers = answers || {};
   // Phase 2A.2 correction 1: when the session is NOT eligible for EEG-derived guest
-  // claims (a staff/demonstration override, or — in real mode — a session that never
+  // claims (a staff/demonstration override, or, in real mode, a session that never
   // reached reveal eligibility), present the reveal WITHOUT any EEG-derived number and
   // WITHOUT a "measured" archetype. The room still walks through; it just says less.
   if (eegClaimsAllowed === false) return noClaimReveal(dataQualityStatus);
   // A recording can OPEN on a stray pre-anchor row (t≈2.4, then the clock
-  // restarts at 0) — it corrupted the first seconds of everything derived from
+  // restarts at 0), it corrupted the first seconds of everything derived from
   // the bands. Trim any leading rows that sit before a clock restart.
   if (Array.isArray(bands) && bands.length > 1) {
     let cut = 0;
@@ -367,7 +367,7 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
 
   // --- interruption window: position on the line, magnitude from RAW ---
   // A guest can finish the reading before either the plateau or the 75s
-  // fallback fires — then there IS no notification, and nothing about one may
+  // fallback fires, then there IS no notification, and nothing about one may
   // be claimed. intFired gates every interruption figure and claim below;
   // the 0.6 window position survives only as neutral geometry.
   const intFired = interruptEegT != null;
@@ -408,7 +408,7 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   const region = regionOf(ssMid);
 
   // FLAT = focus stayed even. When the signal came from the bands, flatness is
-  // the EI relative-spread (level-independent) — the band line is normalised to
+  // the EI relative-spread (level-independent), the band line is normalised to
   // full height, so an absolute range can't tell even from moving. Legacy
   // focusLine path still uses the raw range.
   const flat = flatOverride != null ? (flatOverride && modest) : (rawRange < 0.30 && modest);
@@ -424,7 +424,7 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   // against the whole-session average. The session average is dragged down by
   // the cold start and the interruption dip, so a genuinely steady reader
   // scored 15% "inside their steady band" while the same slide told them they
-  // had stayed in — the two numbers were describing different baselines.
+  // had stayed in, the two numbers were describing different baselines.
   const engagedAvg = mids.length ? mean(mids.map((p) => p.v)) : sessionAvg;
   // dip depth as a share of the guest's own measured range
   const dipPctOwn = rawRange > 1e-6 ? Math.round(Math.min(1, rawDip / rawRange) * 100) : 0;
@@ -442,39 +442,39 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   const strongFromSec = secs(bestStart), strongToSec = secs(bestStart + WIN);
   // Every figure in a sentence must agree with the OTHERS ON SCREEN, not just
   // with the raw signal. Three honest-but-independent roundings once produced
-  // "your strongest 10 sec ran from 0:05 to 0:10" — so the stretch's stated
+  // "your strongest 10 sec ran from 0:05 to 0:10", so the stretch's stated
   // duration is the difference of the two clocks the guest can see, and the
   // settle percentage is computed from the settle time as DISPLAYED.
   const strongShownSec = roundClock(strongToSec) - roundClock(strongFromSec);
-  // On a very short session both clocks can round to the SAME value — "ran from
-  // 0:15 to 0:15" — so a from–to claim needs the shown clocks to actually span.
+  // On a very short session both clocks can round to the SAME value, "ran from
+  // 0:15 to 0:15", so a from–to claim needs the shown clocks to actually span.
   const strongClocksOk = strongShownSec >= 5;
   // Capped at 100: a session that never reached a settle hold has
   // settleFrac=1, and round5 could push the shown figure past the session
-  // length ("the first 102% of your reading" — a nonsense claim).
+  // length ("the first 102% of your reading", a nonsense claim).
   const settlePctShown = totalT > 0 ? Math.min(100, Math.max(1, Math.round((round5(settleSec) / Math.round(totalT)) * 100))) : 0;
 
   // ---- read flags (declared before the copy that quotes them) ----
   // Was there a drop worth putting a number on? A negligible dip used to be
   // written up as "your focus fell 0% of its own range and needed 5 sec to
-  // return" — a non-event dressed as a finding. When nothing measurable happened
+  // return", a non-event dressed as a finding. When nothing measurable happened
   // we say so.
   const realDip = intFired && dipPctOwn >= 5 && rawDip >= 0.04;
   // The rhythm read quotes `crossings`, so the wording is driven by the same
   // count rather than a separate variance flag that could disagree with it.
   const wavy = variable && crossings >= 3;
   // "You stayed in" may ONLY be said when the guest actually held their level.
-  // A low insideBand with few crossings is not steadiness and not waves — it is
+  // A low insideBand with few crossings is not steadiness and not waves, it is
   // a slow drift, and calling it "you stayed in" contradicts the number beside it.
   const steady = insideBand >= 55;
   // The interruption's VISIBLE cost lives in the bands: a notification pushes the
   // mind inward, so theta (and alpha) rise even when the smoothed focus line
   // barely dips. Find that response so the read can always point at the real,
   // visible change rather than claiming "nothing moved".
-  // A TIGHT window at the notification — a few seconds either side of the marker
-  // — so we catch the immediate response (the theta spike) and don't average it
+  // A TIGHT window at the notification, a few seconds either side of the marker
+  //, so we catch the immediate response (the theta spike) and don't average it
   // away into the minutes that follow.
-  // THE NOTIFICATION ALWAYS SHOWS A CHANGE. Something always moves at the marker —
+  // THE NOTIFICATION ALWAYS SHOWS A CHANGE. Something always moves at the marker,
   // the job is to find WHAT moved most and say so plainly. There is deliberately no
   // visibility threshold here: the room never tells a guest their notification did
   // nothing, never calls the response "small", and never leaves the read empty.
@@ -496,25 +496,25 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
       : steady ? `It ran in long stretches, crossing its own steady level only ${times(crossings)}.`
         : `It drifted slowly across its range, sitting inside its steady band only ${insideBand}% of the time.`) + lean;
   // The interruption's "your reading" line leads with whatever actually shows: a
-  // measured focus dip, or the band that moved most — there is ALWAYS one to name.
+  // measured focus dip, or the band that moved most, there is ALWAYS one to name.
   const intBandPhrase = intShift ? `${BAND_SHORT[intShift.k]}, your ${BAND_MEANS[intShift.k]}, ${intShift.d >= 0 ? roseT(intShift.d) : fellT(intShift.d)}` : '';
   // Phase 2A.1: the interpretation is HIDDEN from guests. beta/(alpha+theta) is an
   // unvalidated experimental ratio, the event time is a JS fire call (no firmware
-  // onset marker), and recovery would be read off a smoothed line — so no
+  // onset marker), and recovery would be read off a smoothed line, so no
   // focus/direction/cost/recovery claim reaches the guest. The ledger just states
   // the neutral fact that a notification arrived; the experimental figures live in
   // the internal `provisional` block for engineering only.
-  // Always describes what the notification DID — never "nothing", never "small".
+  // Always describes what the notification DID, never "nothing", never "small".
   const dipDid = !intFired
     ? 'You finished before the room sent its notification.'
     : realDip
       ? `Your focus fell ${dipPctOwn}% of its own range and needed ${fmtDur(recoverSec)} to return.`
       : intShift
-        ? `Your ${BAND_SHORT[intShift.k]} — your ${BAND_MEANS[intShift.k]} — ${intShift.d >= 0 ? roseT(intShift.d) : fellT(intShift.d)} at the marker.`
+        ? `Your ${BAND_SHORT[intShift.k]}, your ${BAND_MEANS[intShift.k]}, ${intShift.d >= 0 ? roseT(intShift.d) : fellT(intShift.d)} at the marker.`
         : 'Your rhythms rearranged themselves around it.';
 
   const guessRegion = GUESS_REGION[answers.strongest] !== undefined ? GUESS_REGION[answers.strongest] : null;
-  // "at 0:00" is a strange clock to quote — when the strongest run starts at the
+  // "at 0:00" is a strange clock to quote, when the strongest run starts at the
   // very top of the reading, say that in words instead.
   const strongAt = roundClock(strongFromSec) === 0 ? 'right from the start' : `at ${fmtClock(strongFromSec)}`;
   const strongestDid = guessRegion == null
@@ -522,7 +522,7 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
     : guessRegion === region ? `You guessed right. It peaked in ${region}, ${strongAt}.`
       : `You guessed ${guessRegion}. It peaked in ${region}, ${strongAt}.`;
 
-  // The window a read HIGHLIGHTS is a claim too — read 04 marks exactly the
+  // The window a read HIGHLIGHTS is a claim too, read 04 marks exactly the
   // stretch its copy states, so read 01's window must end where the copy says
   // the settle ended (a fixed 0.28 floor once shaded 28% of the chart under a
   // sentence claiming "the first 5%"). Both windows end at their DISPLAYED
@@ -565,7 +565,7 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
       // notification did nothing, never calls the response small, held or a ripple.
       // Something always moves at the marker; the read names WHICH rhythm moved,
       // which direction, and by how much against that rhythm's own session level.
-      v: !intFired ? 'never sent — you finished first'
+      v: !intFired ? 'never sent, you finished first'
         : (realDip ? dipWord
           : intShift ? `${BAND_SHORT[intShift.k]} ${intShift.d >= 0 ? 'rose' : 'fell'} at the marker`
             : 'one notification, mid-read'),
@@ -582,11 +582,11 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
         : realDip
           ? `One notification, at ${fmtClockExact(secs(interruptT))}. Your focus fell ${dipPctOwn}% of its own range and took ${fmtDur(recoverSec)} to climb back to the level it held before.`
           : intShift
-            ? `One notification, at ${fmtClockExact(secs(interruptT))}. Right at the marker your ${BAND_SHORT[intShift.k]} rhythm — your ${BAND_MEANS[intShift.k]} — ${intShift.d >= 0 ? rose(intShift.d) : fell(intShift.d)}. That is the notification, written in your rhythms.`
-            : `One notification, at ${fmtClockExact(secs(interruptT))}. Your rhythms rearranged themselves around it — the balance you were holding before the notification is not the balance you held after.`,
+            ? `One notification, at ${fmtClockExact(secs(interruptT))}. Right at the marker your ${BAND_SHORT[intShift.k]} rhythm, your ${BAND_MEANS[intShift.k]}, ${intShift.d >= 0 ? rose(intShift.d) : fell(intShift.d)}. That is the notification, written in your rhythms.`
+            : `One notification, at ${fmtClockExact(secs(interruptT))}. Your rhythms rearranged themselves around it, the balance you were holding before the notification is not the balance you held after.`,
       // No answer, no quotation. Omit the ledger entirely rather than fabricate.
       ledger: q1 ? { said: quote(q1), did: dipDid } : null,
-      // INTERNAL ONLY — never rendered. Flagged provisional for the deferred
+      // INTERNAL ONLY, never rendered. Flagged provisional for the deferred
       // canonical interruption-cost phase; the metric is beta/(alpha+theta), NOT a
       // validated focus model.
       provisional: intFired ? {
@@ -625,13 +625,13 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   const intRead = reads.find((r) => r.k === 'Interruption');
   if (intRead && intShift) {
     intRead.bandFocus = [intShift.k];
-    // Phase 2A: directional, not an exact figure — relative band power, associative.
-    intRead.bandNote = `At the notification, ${BAND_SHORT[intShift.k]} — your ${BAND_MEANS[intShift.k]} — ${intShift.d >= 0 ? rose(intShift.d) : fell(intShift.d)} (relative band power).`;
+    // Phase 2A: directional, not an exact figure, relative band power, associative.
+    intRead.bandNote = `At the notification, ${BAND_SHORT[intShift.k]}, your ${BAND_MEANS[intShift.k]}, ${intShift.d >= 0 ? rose(intShift.d) : fell(intShift.d)} (relative band power).`;
   }
 
   return {
     reads, archetype, flat, region,
-    // null when the notification never fired — every surface keys its orange
+    // null when the notification never fired, every surface keys its orange
     // marker off this, and a marker for an event that didn't happen is a
     // fabrication on the chart
     interruptT: intFired ? interruptT : null,
@@ -642,16 +642,16 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
       totalSec: Math.round(totalT), settleSec: round5(settleSec),
       // null, not 0, when there was no measurable dip: a downstream surface must
       // not be able to print a recovery time for a recovery that never happened.
-      // Phase 2A: interruption depth/recovery are INTERNAL + provisional — guest
+      // Phase 2A: interruption depth/recovery are INTERNAL + provisional, guest
       // surfaces must not print them (outputs.js suppresses the exact figures).
       realDip, recoverSec: realDip ? round5(recoverSec) : null,
       dipPctOwn, strongAbove, crossings, insideBand,
       strongFromSec: roundClock(strongFromSec), strongToSec: roundClock(strongToSec),
       interruptSec: intFired ? Math.round(secs(interruptT)) : null,
-      interruptionProvisional: true,   // depth/recovery not validated (see timing)
+      interruptionProvisional: true,  // depth/recovery not validated (see timing)
     },
     // Phase 2A: the focus line is beta/(alpha+theta) on smoothed relative band
-    // shares — NOT a validated focus model. Timing is the app fire call, not a
+    // shares, NOT a validated focus model. Timing is the app fire call, not a
     // measured audible onset. Downstream surfaces label accordingly.
     metric: { name: 'betaAlphaThetaRatio', validated: false, kind: 'focus_indicator' },
     timing: { method: 'app_fire_call', confidence: 'low', firmwareMarker: false },
@@ -663,14 +663,14 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
 // A reveal that makes NO EEG-derived claim (correction 1). Used for a staff/
 // demonstration override (dataQualityStatus 'invalid-for-eeg-interpretation') or a
 // real session that never reached reveal eligibility ('insufficient-usable-data').
-// No stat blocks, no measured archetype, no interruption marker — the room says only
+// No stat blocks, no measured archetype, no interruption marker, the room says only
 // what is true. `lost:true` routes the card/profile/email to their honest fallbacks.
 function noClaimReveal(status) {
   const staff = status === 'invalid-for-eeg-interpretation';
   return {
     reads: minimalReads(),
     // never labelled "successfully measured": a neutral, honest name; label 'deep' only
-    // gives a downstream dot a valid (generic) position/colour — it is not a claim.
+    // gives a downstream dot a valid (generic) position/colour, it is not a claim.
     archetype: { label: 'deep', name: staff ? 'Demonstration session' : 'Not measured this session', measured: false },
     flat: true, region: null, lost: true,
     samplesForReveal: [],
@@ -693,7 +693,7 @@ function archetypeFrom(quickly, variable) {
 }
 
 // Not enough signal to measure. No stat blocks here on purpose: a number we
-// couldn't compute must not appear at all — and no QUALITATIVE claim either
+// couldn't compute must not appear at all, and no QUALITATIVE claim either
 // ("started cleanly and held" was an assertion about a session with almost no
 // usable data). Each sentence says only what is true: the signal ran light,
 // so the room says less rather than guessing.

@@ -1,8 +1,8 @@
 'use strict';
 // ============================================================
-// server.js — the LAN-facing surface server.
+// server.js, the LAN-facing surface server.
 // ------------------------------------------------------------
-// One HTTP server (static design surfaces, served locally — never a CDN)
+// One HTTP server (static design surfaces, served locally, never a CDN)
 // with a WebSocket upgrade at /ws. The TV window and the guest's iPad both
 // connect here. Bound to 0.0.0.0 so the iPad reaches it over the room LAN by
 // typing the URL in Safari. This file is pure transport: it broadcasts what
@@ -61,7 +61,7 @@ class SurfaceServer extends EventEmitter {
     // Raw-EEG capability authorization (finding #5). Off until the launcher configures
     // a per-launch token. FAIL-CLOSED: with no token, no socket can ever be authorized.
     this._rawAuth = { token: null, requireLoopback: false };
-    this._rawFailWindow = new Map(); // remoteAddr → { count, first } — rate-limit failed attempts
+    this._rawFailWindow = new Map(); // remoteAddr → { count, first }, rate-limit failed attempts
   }
 
   // The launcher calls this once at startup with an EPHEMERAL, per-launch capability token
@@ -75,7 +75,7 @@ class SurfaceServer extends EventEmitter {
       this.http = http.createServer((req, res) => this._serve(req, res));
       this.wss = new WebSocketServer({ server: this.http, path: '/ws' });
       this.wss.on('connection', (ws, req) => this._onWs(ws, req));
-      // room-core retries start() in a loop when the port is squatted — a
+      // room-core retries start() in a loop when the port is squatted, a
       // failed attempt must tear its half-built pair down, or every retry
       // leaks an http server + WebSocketServer with live listeners.
       this.http.on('error', (err) => {
@@ -116,7 +116,7 @@ class SurfaceServer extends EventEmitter {
       if (pathname === '/__info') return this._info(res);
 
       // PRIVACY: in dev (and on a web host) webRoot is the repo root, which
-      // contains the writable data dir — session records with the guest's
+      // contains the writable data dir, session records with the guest's
       // typed thoughts and email, plus pending report files. None of that is a
       // surface; never serve it. Dotfiles (.env, .git) are off-limits too.
       const seg = pathname.toLowerCase().split('/').filter(Boolean);
@@ -141,7 +141,7 @@ class SurfaceServer extends EventEmitter {
           'Access-Control-Allow-Origin': '*',
         };
         // Renderer containment (finding #5, §4): the TV surfaces host the raw-EEG scope, so
-        // they get a restrictive first-party CSP — no remote scripts/objects, no framing, no
+        // they get a restrictive first-party CSP, no remote scripts/objects, no framing, no
         // remote navigation. The app is local-first (no CDN), so 'self' + inline suffices; ws:
         // is allowed for the LAN socket. Other surfaces keep their existing headers.
         if (/^\/tv-[a-z-]+\.html$/.test(pathname)) {
@@ -177,7 +177,7 @@ class SurfaceServer extends EventEmitter {
     ws.role = 'unknown';
     ws.isAlive = true;
     ws.remoteAddress = (req && req.socket && req.socket.remoteAddress) || '';
-    // SERVER-OWNED authorization — the ONLY thing raw routing consults. A socket starts
+    // SERVER-OWNED authorization, the ONLY thing raw routing consults. A socket starts
     // unauthenticated and can gain raw-EEG access exactly once (its first hello). A later
     // message can never upgrade it, and a client-declared role never grants raw access.
     ws.authorization = { authenticated: false, role: 'unknown', rawEeg: false, source: null, authenticatedAtMonotonicMs: null };
@@ -218,7 +218,7 @@ class SurfaceServer extends EventEmitter {
 
   // ---- outbound ----
   // Is anyone with this role currently connected? The orchestrator uses this to
-  // distinguish "the guest walked away" from "the Wi-Fi dropped" — they are the
+  // distinguish "the guest walked away" from "the Wi-Fi dropped", they are the
   // same silence, and only one of them should ever end a session.
   hasRole(role) {
     for (const ws of this.clients) if (ws.role === role && ws.readyState === 1) return true;
@@ -267,7 +267,7 @@ class SurfaceServer extends EventEmitter {
     return LOOPBACK_ADDRS.has(String(addr || ''));
   }
 
-  // Minimal local security event on a failed raw-auth attempt — NEVER the supplied token,
+  // Minimal local security event on a failed raw-auth attempt, NEVER the supplied token,
   // NEVER a raw sample, NEVER which requirement failed. Rate-limited; closes after repeats.
   _rawAuthFailure(ws) {
     const key = ws.remoteAddress || 'unknown';
@@ -305,7 +305,7 @@ class SurfaceServer extends EventEmitter {
   }
 
   // Send to ONE client by id (the id handed out in client-hello). Replays and
-  // re-sends belong to the client that just arrived — broadcasting them to the
+  // re-sends belong to the client that just arrived, broadcasting them to the
   // whole role re-ran animations and re-fired stale chips on everyone else.
   sendTo(id, type, payload = {}) {
     for (const ws of this.clients) {

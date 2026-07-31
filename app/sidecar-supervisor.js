@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================
-// sidecar-supervisor.js — spawn + supervise the Python sidecar.
+// sidecar-supervisor.js, spawn + supervise the Python sidecar.
 // ------------------------------------------------------------
 // Electron main owns a localhost-only TCP server. It spawns the sidecar
 // (frozen binary in prod, venv python in dev) and hands it the port; the
@@ -68,7 +68,7 @@ class SidecarSupervisor extends EventEmitter {
         this._log('error', `sidecar control server error: ${err.message}`);
         this.emit('fault', err);
       });
-      // Ephemeral port on loopback only — never exposed off-box.
+      // Ephemeral port on loopback only, never exposed off-box.
       const wantPort = config.net.SIDECAR_PORT || 0;
       this.server.listen(wantPort, config.net.SIDECAR_HOST, () => {
         listening = true;
@@ -100,12 +100,12 @@ class SidecarSupervisor extends EventEmitter {
     this.child.on('error', (err) => {
       this._log('error', `sidecar spawn error: ${err.message}`);
       // 'fault', never 'error': with no listener registered, emitting 'error'
-      // THREW out of this handler — the restart below never ran, and the crash
+      // THREW out of this handler, the restart below never ran, and the crash
       // guard relaunched the whole app into the same spawn error until the
       // loop breaker kept the room down. A missing interpreter must degrade to
       // the capped-backoff retry ladder, not an outage.
       this.emit('fault', err);
-      // ENOENT/EACCES fire 'error' but not 'exit' — recover here too.
+      // ENOENT/EACCES fire 'error' but not 'exit', recover here too.
       if (!this._stopping) this._scheduleRestart();
     });
 
@@ -147,7 +147,7 @@ class SidecarSupervisor extends EventEmitter {
       this.socket = null;
       this._ready = false;
       this.emit('disconnected');
-      // The header promises a restart when "the link drops unexpectedly" — but a
+      // The header promises a restart when "the link drops unexpectedly", but a
       // hung sidecar can close its socket while the process survives, which used
       // to leave the room signal-dead forever (send() false, no backoff, nothing
       // on the ops console able to revive it). Give the sidecar a grace window
@@ -159,7 +159,7 @@ class SidecarSupervisor extends EventEmitter {
           this._reconnectGrace = null;
           if (this._stopping || this.socket) return; // reconnected or shutting down
           if (this.child && this.child.exitCode === null) {
-            this._log('warn', 'sidecar link closed and never redialed — restarting the process');
+            this._log('warn', 'sidecar link closed and never redialed, restarting the process');
             try { this.child.kill(); } catch (_) {}
           }
         }, 6000);

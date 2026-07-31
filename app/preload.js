@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================
-// preload.js — minimal, whitelisted bridge for Electron windows.
+// preload.js, minimal, whitelisted bridge for Electron windows.
 // The TV/boot window talks to the server over a plain WebSocket (exactly as
 // the iPad does, so its rendering path is identical). The hidden diagnostic
 // window gets a richer IPC channel: the live sidecar feed + the ability to
@@ -12,7 +12,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 // a private process channel). staff.uiEnabled is false in production guest builds; staff.pin is a
 // locally configured credential (FOCUSROOM_STAFF_TOKEN), empty ⇒ PIN unlock disabled. A page with no
 // launcher (a plain browser on the LAN surface) gets the locked default: no staff UI. The raw-EEG
-// capability token is DELIBERATELY not here (finding #5) — see the raw relay below.
+// capability token is DELIBERATELY not here (finding #5), see the raw relay below.
 function windowConfig() {
   try {
     const arg = (process.argv || []).find((a) => a.indexOf('--focusroom-cfg=') === 0);
@@ -28,7 +28,7 @@ const _cfg = windowConfig();
 
 // ---- authenticated raw-EEG relay (finding #5 credential containment) ----
 // Raw config/raw/quality arrive from the MAIN process over IPC (main holds the capability token and
-// authorizes delivery by process boundary — the renderer never receives, stores, or can read the
+// authorizes delivery by process boundary, the renderer never receives, stores, or can read the
 // token). The preload forwards them to the page ONLY through subscribeRawEeg(); NO token accessor is
 // exposed, and there is no raw WebSocket in the renderer. Sandbox-safe (ipcRenderer only).
 let _rawSubs = [];
