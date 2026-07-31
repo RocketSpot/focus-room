@@ -24,6 +24,64 @@ from pathlib import Path
 from protocol import OUT
 from eeg_stream import EegStream
 
+# ===================================================================================
+# MOBILE EAR-EEG TUNING — why delta was eating the whole spectrum
+# -----------------------------------------------------------------------------------
+# A real recorded session measured delta at 77% of total band power (median 83%, peak
+# 99.8%) on a guest who was awake and reading. That is not brain delta. In an in-ear
+# montage, head/jaw movement and electrode-contact drift dump enormous power into
+# 0.5–2 Hz — routinely 10–100x the real EEG — and the stock config band-passed from
+# 0.5 Hz with delta defined as 0.5–4 Hz, so the drift landed squarely inside delta and
+# swamped every other band. Because the bands are reported as RELATIVE shares, a
+# delta at 80% crushes alpha/beta/theta into the noise floor, which is also why the
+# notification "showed no change": the beta/(alpha+theta) ratio had nothing left to move.
+#
+# The fix is the standard one for ambulatory/ear EEG: put the analysis high-pass ABOVE
+# the drift floor and define delta above it too. The guest can then move naturally —
+# which is the whole point; nobody should have to hold their head still to be measured.
+#
+# This is applied by mutating the SDK's module-level CONFIG *before* Zone() constructs
+# its SignalProcessor (every sub-processor reads CONFIG in __init__), so the vendored
+# SDK source stays untouched.
+# ===================================================================================
+ANALYSIS_HP_HZ = float(os.environ.get("FOCUSROOM_ANALYSIS_HP_HZ", "2.0"))
+DELTA_BAND = (ANALYSIS_HP_HZ, 4.0)
+# A window whose (now narrow, 2–4 Hz) delta STILL dominates this much is a movement
+# artifact, not a brain state. Such windows are OMITTED — never interpolated, never
+# bridged, never smoothed over. Omission is honest; fabrication is not.
+DRIFT_OMIT_SHARE = float(os.environ.get("FOCUSROOM_DRIFT_OMIT_SHARE", "0.62"))
+
+
+def _tune_for_mobile_ear_eeg(log=None):
+    """Raise the analysis high-pass above the motion/drift floor. Idempotent."""
+    try:
+        from zone_sdk import processors as P
+    except Exception as e:                     # pragma: no cover - real mode only
+        if log:
+            log(f"processing tune skipped (sdk import): {e}")
+        return
+    f = P.CONFIG["filter"]
+    if f.get("_focusroom_tuned"):
+        return
+    before_hp, before_delta = f["bandpass_low_hz"], list(P.CONFIG["bands"]["delta"])
+    f["bandpass_low_hz"] = ANALYSIS_HP_HZ            # 0.5 -> 2.0 : drop the drift floor
+    # A steeper skirt is what actually buys movement tolerance. Measured on synthesised
+    # drift (tests/eeg-drift-rejection.test.py): at a violent 800 uV movement, order 4
+    # lets delta reach 55% and alpha collapse to 38%, while order 6 holds delta at 22%
+    # and keeps alpha dominant at 65%. That is the difference between a guest having to
+    # sit rigidly and a guest being allowed to shift, chew and look around.
+    f["bandpass_order"] = max(int(f.get("bandpass_order", 4)), 6)
+    P.CONFIG["bands"]["delta"] = list(DELTA_BAND)    # [0.5,4] -> [2,4] : delta above drift
+    # Never bridge artifacts. The stock artifact stage linearly INTERPOLATES up to 30%
+    # of a window, i.e. it invents samples across the very movement we care about.
+    # Setting the cap to 0 makes that path unreachable; bad windows are dropped instead.
+    P.CONFIG["artifact"]["max_interpolation_pct"] = 0.0
+    f["_focusroom_tuned"] = True
+    if log:
+        log(f"processing tuned for mobile ear-EEG: high-pass {before_hp}->{ANALYSIS_HP_HZ} Hz, "
+            f"delta {before_delta}->{list(DELTA_BAND)}, artifact interpolation disabled "
+            f"(drift-dominated windows are omitted, never bridged)")
+
 SAFE_BATTERY_PCT = 25          # refuse to start below this so a session never dies mid-read
 IMPEDANCE_OK_STATES = {"low_z", "pair_ok"}
 
@@ -66,6 +124,7 @@ class ZoneSource:
         self.log = log
         self.Zone = Zone
         self._ensure_profiles()        # legacy fallback only — connect() no longer needs the catalogue
+        _tune_for_mobile_ear_eeg(log)  # MUST run before Zone() builds its SignalProcessor
         self.sdk = Zone()
         self.sdk.set_stream_chunk(50)
         self.sdk.set_stream_idle_sleep(0.01)
@@ -669,6 +728,19 @@ class ZoneSource:
             self.log(f"eeg_stream ingest error: {e}")
 
     def _on_brainwaves(self, b):
+        # Drift/movement guard. Delta is now a NARROW 2–4 Hz band sitting above the
+        # motion floor, so a window where it still dominates is a movement artifact
+        # rather than a brain state. Those windows are OMITTED — not interpolated,
+        # not smoothed, not bridged — so an ordinary shift in the chair costs a
+        # window or two instead of poisoning the whole session's band shares.
+        # The reveal already renders real gaps honestly.
+        total = (b.delta + b.theta + b.alpha + b.beta + b.gamma)
+        if total > 0 and (b.delta / total) > DRIFT_OMIT_SHARE:
+            self._drift_omitted = getattr(self, "_drift_omitted", 0) + 1
+            if self._drift_omitted in (1, 10, 50) or self._drift_omitted % 100 == 0:
+                self.log(f"movement window omitted (delta {b.delta / total:.0%} of a 2–4 Hz band) "
+                         f"— {self._drift_omitted} so far this session; nothing interpolated")
+            return
         denom = (b.alpha + b.theta)
         eng_index = (b.beta / denom) if denom else 0.0
         self.tx.send(OUT.BRAINWAVES, delta=b.delta, theta=b.theta, alpha=b.alpha,
