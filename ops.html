@@ -280,6 +280,10 @@
       // main mirrors EVERY sidecar message to us over ops/feed, so we rely on
       // that (not the direct guest-surface broadcasts) to avoid double-counting.
       if(m.type==='ops/feed'){ onFeed(m.channel,m.payload); }
+      // OPERATOR-ONLY bud coaching. The guest is never told anything about their
+      // signal; when a side stops reading well the advice comes here instead, with
+      // the exact words to use. Carries no raw EEG — just a side, a reason, a line.
+      else if(m.type==='ops/coach'){ paintCoach(m); }
       else if(m.type==='session/state'){
         if(m.beat)S.beat=m.beat; S.link=m.link||S.link;
         // the streaming signal check has no impedance messages — its clean-read
@@ -293,6 +297,33 @@
     ws.onclose=function(){ conn=false; setLink(false); schedule(); };
     bus.send=function(o){ try{ ws.send(JSON.stringify(o)); }catch(e){} };
   }
+  // ---- operator bud-coaching popup ----------------------------------------
+  // A small, quiet card in the corner. It names the side to help with and gives a
+  // line to say that never mentions the signal — the guest's experience stays
+  // free of signal talk while the operator still knows what to do.
+  function paintCoach(m){
+    var el=$('coach');
+    if(!el){
+      el=document.createElement('div'); el.id='coach';
+      el.style.cssText='position:fixed;right:18px;bottom:18px;z-index:200;max-width:330px;'
+        +'background:rgba(28,26,22,0.96);border:1px solid rgba(224,166,87,0.5);border-radius:12px;'
+        +'padding:14px 16px;box-shadow:0 10px 34px rgba(0,0,0,0.45);'
+        +'font-family:var(--font-sans),system-ui,sans-serif;color:#F0EEE8;'
+        +'opacity:0;transform:translateY(8px);transition:opacity 260ms ease,transform 260ms ease;';
+      document.body.appendChild(el);
+    }
+    if(!m || !m.active){ el.style.opacity='0'; el.style.transform='translateY(8px)'; return; }
+    var side = m.side==='left' ? 'LEFT earbud' : m.side==='right' ? 'RIGHT earbud' : 'BOTH earbuds';
+    el.innerHTML =
+      '<div style="font-family:var(--font-mono),monospace;font-size:10px;letter-spacing:0.16em;'
+      +'text-transform:uppercase;color:#E0A657;margin-bottom:7px;">Quiet nudge · operator only</div>'
+      +'<div style="font-size:15px;font-weight:600;margin-bottom:6px;">'+esc(side)+'</div>'
+      +'<div style="font-size:13px;line-height:1.5;color:rgba(240,238,232,0.8);">'+esc(m.say||'')+'</div>'
+      +'<div style="font-family:var(--font-mono),monospace;font-size:10px;letter-spacing:0.1em;'
+      +'text-transform:uppercase;color:rgba(240,238,232,0.42);margin-top:9px;">The guest is never shown this</div>';
+    el.style.opacity='1'; el.style.transform='translateY(0)';
+  }
+
   function schedule(){ var base=Math.min(8000,500*Math.pow(2,Math.min(attempt,4))); attempt++; setTimeout(connect, base+Math.random()*base*0.4); }
   function setLink(on){ var b=$('linkBadge'); b.textContent=on?'live':'reconnecting'; b.className='badge '+(on?'link-on':'link-off'); }
 

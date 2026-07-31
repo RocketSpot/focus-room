@@ -233,14 +233,19 @@
       const t1 = requestAnimationFrame(() => { t2 = requestAnimationFrame(() => setClosed(true)); });
       return () => { cancelAnimationFrame(t1); if (t2 != null) cancelAnimationFrame(t2); };
     }, []);
-    return e('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 } },
+    // The caption floats OUT OF FLOW beneath the ring, so the container's box is exactly
+    // the ring's box and centring the container centres the RING itself — the thing the
+    // guest is actually looking at — rather than the ring-plus-caption group.
+    return e('div', { style: { position: 'relative', width: size, height: size, lineHeight: 0 } },
       e('svg', { width: size, height: size, style: { transform: 'rotate(-90deg)' } },
         e('circle', { cx: size / 2, cy: size / 2, r: R, fill: 'none', stroke: 'var(--hair-strong)', strokeWidth: 1.5 }),
         e('circle', { cx: size / 2, cy: size / 2, r: R, fill: 'none', stroke: 'var(--c-signal)',
           strokeWidth: 2.5, strokeLinecap: 'round', strokeDasharray: C,
           strokeDashoffset: closed ? 0 : C,
           style: { transition: `stroke-dashoffset ${BASELINE_S}s linear` } })),
-      e(Mono, { style: { color: 'var(--fg-faint)' } }, 'Recording your baseline'));
+      e('div', { style: { position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
+        marginTop: 18, whiteSpace: 'nowrap', lineHeight: 1.4 } },
+        e(Mono, { style: { color: 'var(--fg-faint)' } }, 'Recording your baseline')));
   }
 
   function FitCheck(props) {
@@ -248,12 +253,12 @@
     const [phase, setPhase] = useState('listening'); // listening → ready
     const [left, setLeft] = useState(BASELINE_S);    // baseline countdown
     const [counting, setCounting] = useState(false);
-    // SYNCED: readiness comes from the real impedance fit check (props.ready =
-    // allGood). STANDALONE preview (file://): fall back to a short timer. When
-    // served with no reading yet, stay listening — never fake "signal is clear".
+    // Readiness is a short SETTLE, never a verdict on the signal: the room does not
+    // inspect signal quality to let anyone through, and never says a word about it.
+    // Standalone preview (file://) falls back to its own brief timer.
     useEffect(() => {
       if (location.host || props.ready != null) return;
-      const t = setTimeout(() => setPhase('ready'), 3200); return () => clearTimeout(t);
+      const t = setTimeout(() => setPhase('ready'), 1800); return () => clearTimeout(t);
     }, [props.ready]);
     const ready = props.ready != null ? props.ready : phase === 'ready';
 
@@ -270,12 +275,22 @@
       const t = setTimeout(() => setLeft((n) => n - 1), 1000);
       return () => clearTimeout(t);
     }, [counting, left]);
-    // canonical 'fit_slow' notice: the room has listened a while without a clean
-    // read — offer one quiet, honest nudge instead of waiting in silence forever.
-    const slow = !ready && props.notice === 'fit_slow';
+    // THE BASELINE — the ring the guest actually stares at sits DEAD CENTRE of the
+    // screen, on its own. The instruction floats near the top so nothing competes with
+    // the ring for the middle of the display, and their eyes have one place to rest.
+    if (counting) {
+      return e(DarkField, null,
+        e('div', { style: wrap({ padding: 0, justifyContent: 'center', alignItems: 'center', textAlign: 'center', position: 'relative' }) },
+          e('div', { style: { position: 'absolute', top: 104, left: 0, right: 0, padding: '0 56px' } },
+            e('h2', { className: 't-h2', style: { color: 'var(--fg-strong)', fontSize: 38, marginBottom: 14 } }, 'Stay just like that.'),
+            e('p', { className: 't-body', style: { color: 'var(--fg-muted)', fontSize: 18, lineHeight: 1.5, maxWidth: 460, margin: '0 auto' } },
+              'Watch the ring close, and breathe normally.')),
+          e(BaselineRing, { size: 280 })));
+    }
+
     return e(DarkField, null,
       e('div', { style: wrap({ padding: '88px 64px 72px', justifyContent: 'space-between', alignItems: 'center', textAlign: 'center' }) },
-        e('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } }, e(DotMark, { size: 10, glow: false, color: 'var(--fg-muted)' }), e(Mono, null, 'Seating the earbud')),
+        e('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } }, e(DotMark, { size: 10, glow: false, color: 'var(--fg-muted)' }), e(Mono, null, 'Settling in')),
         // signal rings
         e('div', { style: { position: 'relative', width: 280, height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
           [0, 1, 2].map(i => e('div', { key: i, style: {
@@ -291,25 +306,20 @@
             boxShadow: ready ? '0 0 50px 6px rgba(221,202,142,0.4)' : 'none', transition: 'all 700ms var(--ease-out)'
           } }, ready ? e(window.I, { name: 'check', size: 34, color: '#1E1D1C' }) : null)
         ),
+        // NO SIGNAL VERDICTS. The room never tells a guest their signal is clear,
+        // limited, or missing, and never asks them to wait on it — the copy is about
+        // getting comfortable, nothing more. (Signal quality now reaches the operator
+        // only.) The wall beside them already shows their live brainwaves.
         e('div', { style: { maxWidth: 520, minHeight: 200 } },
           e('h2', { className: 't-h2', style: { color: 'var(--fg-strong)', fontSize: 38, marginBottom: 16, transition: 'opacity 400ms' } },
-            counting ? 'Stay just like that.' : ready ? 'Signal is clear.' : 'Finding a clean read…'),
-          e('p', { className: 't-body', style: { color: 'var(--fg-muted)', fontSize: 18, lineHeight: 1.5, marginBottom: slow ? 14 : 30 } },
-            counting
-              // The ring is the only thing they're asked to do. No count to watch
-              // (a number turns fifteen still seconds into a test), and no
-              // instruction about where to look beyond the ring itself.
-              ? 'Watch the ring close, and breathe normally.'
-              : ready
-                ? 'Now fifteen still seconds, so we know what your calm looks like. Everything after this is measured against it.'
-                : 'Adjust the earbud until it sits snug. The screen shows your live brainwaves, and we wait for a clean, steady signal before anything begins.'),
-          slow && !counting ? e('p', { className: 't-body-2', style: { color: 'var(--fg-faint)', fontSize: 15, lineHeight: 1.5, marginBottom: 20 } },
-            'Still listening. It can help to lift the earbud out and seat it again.') : null,
-          counting
-            ? e(BaselineRing, null)
-            : ready
-              ? e(PillBtn, { dark: true, onClick: startBaseline, style: { padding: '20px 44px' } }, "I'm ready")
-              : e(Mono, { style: { color: 'var(--fg-faint)' } }, 'Listening')
+            ready ? 'Ready when you are.' : 'Make yourself comfortable.'),
+          e('p', { className: 't-body', style: { color: 'var(--fg-muted)', fontSize: 18, lineHeight: 1.5, marginBottom: 30 } },
+            ready
+              ? 'Now fifteen still seconds, so we know what your calm looks like. Everything after this is measured against it.'
+              : 'Settle the earbuds so they sit snug, and get comfortable. The screen beside you is showing your live brainwaves.'),
+          ready
+            ? e(PillBtn, { dark: true, onClick: startBaseline, style: { padding: '20px 44px' } }, "I'm ready")
+            : null
         )
       )
     );

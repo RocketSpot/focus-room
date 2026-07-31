@@ -86,15 +86,18 @@ const intake = (fields) => orch.onClientMessage({ type: 'guest/intake', ...field
     sentTypes()[0] === 'connect' && sentTypes()[1] === 'start_session', sentTypes().join(','));
   check('a fit restart does not set signalIssue', orch.signalIssue === false);
 
-  // ---- A3: fit escalation → canonical fit_slow notice ------------------------
-  console.log('\n-- fit escalation --');
-  await sleep(160); // > the 80ms hint window, and no allGood has arrived
+  // ---- A3: the signal check SETTLES, it does not gate -------------------------
+  // The room never waits on signal quality and never narrates the signal to a guest.
+  // After a short settle it is simply ready, and no coaching notice is ever broadcast.
+  console.log('\n-- signal check settles (never gated, never narrated) --');
+  await sleep(160); // > the 80ms settle window; NO signal information has arrived
   let last = states[states.length - 1];
-  check('no allGood inside the hint window → notice fit_slow broadcast',
-    orch.beat === 'fit' && last && last.notice === 'fit_slow', JSON.stringify(last));
-  orch.onSidecar({ type: 'fit/impedance', channels: {}, allGood: true });
-  last = states[states.length - 1];
-  check('an allGood snapshot clears the notice immediately', last && last.notice === null, JSON.stringify(last));
+  check('the settle makes the room ready with no signal at all',
+    orch.beat === 'fit' && orch._fitAllGood === true && last && last.fitAllGood === true, JSON.stringify(last));
+  check('no guest-facing coaching notice is ever broadcast', last && last.notice === null, JSON.stringify(last));
+  check('_notice() is null even with the stream down + reseat active',
+    (() => { orch._eegDown = true; orch._reseatActive = true; orch._fitSlow = true;
+      const n = orch._notice(); orch._eegDown = false; orch._reseatActive = false; orch._fitSlow = false; return n === null; })());
 
   // ---- A2 (reading): re-issue START_SESSION + sticky signalIssue -------------
   console.log('\n-- sidecar re-issue during reading --');

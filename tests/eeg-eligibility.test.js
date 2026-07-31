@@ -59,19 +59,27 @@ function toReveal(orch) {
   ev(orch, 'strongest_stretch_guess', { choice: 'The ending' });  // strongest → standby (reveal computed)
 }
 
-// ---- 1) packet arrival alone cannot advance; analysisEligible does ----
-console.log('\n-- transport receipt != advance --');
+// ---- 1) the room is NEVER gated or held by signal quality ----
+// The guest experience must not depend on the signal being good, and the room must
+// never narrate the signal. Eligibility is still COMPUTED (it gates EEG-derived
+// CLAIMS further down, and it is the validation evidence) — it just never blocks.
+console.log('\n-- the room is never gated by signal quality --');
 {
   const { orch } = makeOrch();
   toFit(orch);
-  quality(orch, ELIG({ transportReady: true, analysisEligible: false }), false);
+  quality(orch, ELIG({ transportReady: true, analysisEligible: false }), false);   // a POOR signal
   for (let i = 0; i < 5; i++) frame(orch, 1.0);
-  check('transportReady-only quality does NOT make the fit ready', orch._fitAllGood === false, `fitAllGood=${orch._fitAllGood}`);
-  quality(orch, ELIG(Object.assign({ analysisEligible: true, eligibilityStatus: 'provisional-pass' }, BOTH_EARS)), false);
-  for (let i = 0; i < 3; i++) frame(orch, 1.0);
-  check('analysisEligible quality DOES make the fit ready', orch._fitAllGood === true, `fitAllGood=${orch._fitAllGood}`);
-  const state = orch._broadcastState ? null : null;
-  check('session/state carries a signal-eligibility summary', orch._signalEligibilitySummary() && orch._signalEligibilitySummary().analysisEligible === true);
+  check('a poor / analysis-ineligible signal still lets the room become ready', orch._fitAllGood === true, `fitAllGood=${orch._fitAllGood}`);
+  check('eligibility is still computed and kept for engineering', !!orch._eegEligibility && orch._eegEligibility.analysisEligible === false);
+  check('session/state still carries the eligibility summary', !!orch._signalEligibilitySummary());
+  check('NO guest-facing signal notice is ever produced', orch._notice() === null);
+}
+// even with NO quality stream at all, the settle alone opens the room
+{
+  const { orch } = makeOrch();
+  toFit(orch);
+  for (let i = 0; i < 3; i++) frame(orch, 0.05);   // terrible frame quality, no eeg/quality-v1
+  check('a terrible signal with no quality stream still opens the room', orch._fitAllGood === true, `fitAllGood=${orch._fitAllGood}`);
 }
 
 // ---- 2) staff override: navigation allowed, EEG-derived reveal disabled ----

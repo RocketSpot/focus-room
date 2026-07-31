@@ -96,7 +96,8 @@
      reserves for the one notification. */
   function LinkStrip({ reconnecting, findingSignal }) {
     if (!reconnecting && !findingSignal) return null;
-    const label = findingSignal ? 'Finding your signal again' : 'Reconnecting';
+    // never 'finding your signal' — the room does not narrate the signal to a guest
+    const label = 'Reconnecting';
     return e('div', {
       style: {
         position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 90,

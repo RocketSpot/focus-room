@@ -98,10 +98,14 @@ const WATCHDOG_BUDGET_MS = {
 // Deliberately far beyond any plausible outage.
 const LINK_LOST_CEILING_MS = parseInt(process.env.FOCUSROOM_LINK_LOST_MS || String(45 * MIN_MS), 10);
 
-// Fit escalation: on a degraded link the impedance can pin 'measuring' and the
-// fit screen would wait forever with no coaching — if no allGood snapshot has
-// arrived this long after entering fit, surface the 'fit_slow' notice.
-const FIT_HINT_MS = parseInt(process.env.FOCUSROOM_FIT_HINT_MS || '90000', 10);
+// THE ROOM NEVER WAITS ON SIGNAL QUALITY. The signal check is a moment to look at
+// your own brain, not a gate to pass: after this short settle the room is simply
+// ready, whatever the signal is doing. (It used to require N clean frames AND
+// analysis eligibility, so a marginal fit could lock the room and leave a guest
+// staring at "Adjusting the fit" forever.) Quality is still measured — it just goes
+// to the operator now, never to the guest, and never blocks anyone.
+const FIT_SETTLE_MS = parseInt(process.env.FOCUSROOM_FIT_SETTLE_MS
+  || process.env.FOCUSROOM_FIT_HINT_MS || '1800', 10);
 
 class Orchestrator extends EventEmitter {
   constructor({ supervisor, server, log }) {
@@ -155,6 +159,7 @@ class Orchestrator extends EventEmitter {
     this._eegEligibility = null;     // last eligibility object from the sidecar
     this._eegSimulation = null;      // whether the quality stream is simulated
     this._eegEligKey = null;         // change-detection so we only rebroadcast on a real change
+    this._coachKey = null;           // last operator coaching prompt (de-dup)
     this.sessionDataQualityStatus = null;   // 'ok' | 'insufficient-usable-data' | 'invalid-for-eeg-interpretation'
     this.sessionSamples = null;
     this.reveal = null;
@@ -246,15 +251,41 @@ class Orchestrator extends EventEmitter {
     });
   }
 
-  // The one canonical source for the guest-facing coaching notice.
-  // 'signal_lost' outranks the others: while the stream is down we have nothing
-  // to coach WITH, so telling someone to reseat a bud that is already seated
-  // would just be noise on top of a dropout.
+  // GUEST-FACING COACHING IS OFF. The room never tells a guest about the state of
+  // their signal — not "signal lost", not "reseat", not "we're still checking". A
+  // guest can do nothing useful with a signal verdict, and being told their brain
+  // isn't reading properly is the opposite of the experience. The same information
+  // now goes to the OPERATOR instead (see _coachOps), who can quietly help.
+  // Kept as a function (every broadcast calls it) so the contract is unchanged.
   _notice() {
-    if (this._eegDown) return 'signal_lost'; // the stream went quiet; we're waiting
-    if (this._reseatActive) return 'reseat'; // signal degraded mid-reading
-    if (this._fitSlow) return 'fit_slow';    // impedance pinned 'measuring' too long
     return null;
+  }
+
+  // Operator-only coaching. Computes a short, actionable prompt — which bud to
+  // adjust and what to say to the guest — and sends it to the 'ops' role ONLY.
+  // Carries NO raw EEG: just a side, a reason word, and a suggested line.
+  _coachOps() {
+    const e = this._eegEligibility;
+    let side = null, reason = null;
+    if (this._eegDown) { side = 'both'; reason = 'link'; }
+    else if (e && e.ears) {
+      const l = !!(e.ears.left && e.ears.left.usable), r = !!(e.ears.right && e.ears.right.usable);
+      if (!l && !r) { side = 'both'; reason = 'contact'; }
+      else if (!l) { side = 'left'; reason = 'contact'; }
+      else if (!r) { side = 'right'; reason = 'contact'; }
+    }
+    const key = side ? `${side}:${reason}` : 'none';
+    if (key === this._coachKey) return;          // only speak when the advice changes
+    this._coachKey = key;
+    const SAY = {
+      left: 'Ask them to gently push the LEFT earbud in and settle — no need to mention the signal.',
+      right: 'Ask them to gently push the RIGHT earbud in and settle — no need to mention the signal.',
+      both: 'Ask them to settle both earbuds and sit still for a moment — keep it casual.',
+    };
+    const payload = side
+      ? { active: true, side, reason, say: SAY[side], t: this.now() }
+      : { active: false, side: null, reason: null, say: null, t: this.now() };
+    try { this.server.broadcast('ops/coach', payload, 'ops'); } catch (_) {}
   }
 
   // Can we currently reach the guest's iPad? A server that doesn't track
@@ -747,6 +778,7 @@ class Orchestrator extends EventEmitter {
     this.signalIssue = true;              // sticky: the reveal leans on clean stretches
     this._gapOpenT = this._streamT();     // the data has a hole from here
     this._broadcastState();
+    this._coachOps();
     this.log(`EEG stream went quiet in '${this.beat}' — holding the session and waiting for the link`);
   }
 
@@ -767,6 +799,7 @@ class Orchestrator extends EventEmitter {
       this.log('EEG stream resumed');
     }
     this._broadcastState();
+    this._coachOps();
   }
 
   // ---------------- guest link (Wi-Fi) ----------------
@@ -853,6 +886,8 @@ class Orchestrator extends EventEmitter {
   // If no allGood impedance snapshot arrives within the hint window, surface the
   // canonical 'fit_slow' notice — cleared the moment an allGood lands or the
   // beat leaves fit. (The iPad copy consuming it lands separately.)
+  // Entering the signal check arms a SETTLE, not a gate: after a short beat the room
+  // is ready regardless of what the signal is doing. Nothing here inspects quality.
   _armFitHint() {
     this._clearFitHint();
     this._fitAllGood = false;
@@ -860,10 +895,10 @@ class Orchestrator extends EventEmitter {
     this._fitHint = setTimeout(() => {
       this._fitHint = null;
       if (this.beat !== 'fit' || this._fitAllGood) return;
-      this._fitSlow = true;
+      this._fitAllGood = true;                 // ready — never conditional on the signal
       this._broadcastState();
-      this.log(`fit: no allGood impedance snapshot after ${Math.round(FIT_HINT_MS / 1000)}s — fit_slow coaching`);
-    }, FIT_HINT_MS);
+      this.log(`signal check: settled after ${Math.round(FIT_SETTLE_MS)}ms — ready (not gated on signal quality)`);
+    }, FIT_SETTLE_MS);
   }
 
   _clearFitHint() {
@@ -1128,20 +1163,17 @@ class Orchestrator extends EventEmitter {
   // During the signal check (fit beat, streaming), mark ready once the live signal
   // has held clean for a moment — the honest "signal is clear" gate, from the real
   // signal itself rather than an electrode/impedance readout.
+  // The signal check no longer GATES on the signal at all. A live frame simply lets the
+  // room settle a touch sooner than the timer; a poor one never holds anyone back.
+  // (Previously N clean frames AND analysis eligibility were required, which could lock
+  // the room on a marginal fit.) Signal quality now only informs the OPERATOR.
   _watchFitSignal(frame) {
     if (this.beat !== 'fit' || this._fitAllGood) return;
-    const sq = typeof frame.signalQuality === 'number' ? frame.signalQuality : 1;
-    if (sq >= 0.5) {
-      this._fitGood = (this._fitGood || 0) + 1;
-      // Phase 2A / 2A.2: "signal is clear" must not come from packet receipt alone.
-      // When a real EEG-quality stream (eeg/quality-v1) is present this session, ALSO
-      // require ANALYSIS ELIGIBILITY (both ears grossly usable) via _fitQualityOk —
-      // transportReady/'received' is not enough. Staff override also satisfies the gate
-      // (demo navigation). When no quality stream exists (legacy/unit paths that inject
-      // frames directly), fall back to the frame signal-quality gate so nothing regresses.
-      const qualityOk = !this._eegQualitySeen || this._fitQualityOk;
-      if (this._fitGood >= 3 && qualityOk) { this._fitAllGood = true; this._clearFitHint(); this._broadcastState(); this.log('signal-check: live signal + analysis-eligible EEG → ready'); }
-    } else { this._fitGood = 0; }
+    this._fitGood = (this._fitGood || 0) + 1;
+    if (this._fitGood >= 3) {
+      this._fitAllGood = true; this._clearFitHint(); this._broadcastState();
+      this.log('signal check: stream is live → ready (signal quality is NOT a gate)');
+    }
   }
 
   // Phase 2A / 2A.2: consume the honest per-channel EEG quality (eeg/quality-v1).
@@ -1157,9 +1189,11 @@ class Orchestrator extends EventEmitter {
     this._eegQualityStatus = msg.overallStatus;
     this._eegEligibility = msg.eligibility || null;
     if (typeof msg.simulation === 'boolean') this._eegSimulation = msg.simulation;
+    // Eligibility is still COMPUTED and recorded (engineering + validation evidence and
+    // the reveal-claim gate depend on it) — it just no longer holds the guest up.
     const analysisOk = !!(this._eegEligibility && this._eegEligibility.analysisEligible);
     this._fitQualityOk = analysisOk || this._staffOverride;
-    if (!this._fitQualityOk && this.beat === 'fit' && !this._fitAllGood) this._fitGood = 0;
+    this._coachOps();      // quality goes to the OPERATOR, never to the guest
     // surface a truthful partial/one-ear/neither-ear state to the iPad + TV, but only
     // when the summary actually changes (quality streams ~3×/s — don't spam state).
     const e = this._eegEligibility;

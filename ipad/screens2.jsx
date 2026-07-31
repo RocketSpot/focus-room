@@ -123,7 +123,7 @@
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, zIndex: 30 } },
           e(DotMark, { size: 8, glow: false, color: 'var(--fg-light-muted)' }),
           e('span', { style: { fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--fg-light-muted)' } },
-            'Settling the earbud for a sharper read')
+            'One moment')
         ) : null
       )
     );

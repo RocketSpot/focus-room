@@ -134,7 +134,9 @@ const frame = (o, tRel, v) => o.onSidecar({
     await sleep(300);   // > EEG_STALL_MS with no frames at all
     check('the stall is detected', o._eegDown === true);
     check('the beat did NOT change when the stream died', o.beat === 'reading', `beat=${o.beat}`);
-    check('the guest-facing notice is the calm signal_lost', o._notice() === 'signal_lost');
+    // The guest is NEVER told the signal dropped — the room holds quietly and the
+    // operator gets the nudge instead. The stall is still detected and recorded.
+    check('no guest-facing notice, even on a dropped stream', o._notice() === null);
     check('link state reads holding, not failed', o._linkState().eeg === 'holding');
     check('the session is flagged so the reveal leans on clean stretches', o.signalIssue === true);
 
