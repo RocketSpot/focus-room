@@ -9,12 +9,22 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; background: #000; overflow: hidden; font-family: var(--font-sans); }
   #wrap { position: fixed; inset: 0; background: #060605; }
-  /* stacked video layers, crossfaded by the live signal */
-  /* contain, never cover: cover crops the sphere against the TV's aspect and the
-     orb loses its edge. Long crossfades so a state change reads as a slow bloom. */
-  .orb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0;
-    transition: opacity 2600ms var(--ease-in-out); pointer-events: none; will-change: opacity; }
-  .orb.base { opacity: 1; }
+  /* Stacked video CHANNELS handed off by the live signal. Each state is a CHANNEL — a
+     group whose opacity is the state's weight (the slow bloom). Inside a channel sit TWO
+     copies of its clip that CROSS-DISSOLVE across the loop seam, so native `loop`'s
+     last-frame→first-frame CUT is never seen. #orbstack isolates its own stacking context
+     so the aura / mist / smoke still layer ABOVE the orb, and z-order hand-off between
+     channels stays contained. */
+  #orbstack { position: absolute; inset: 0; isolation: isolate; }
+  .chan { position: absolute; inset: 0; opacity: 0; pointer-events: none;
+    transition: opacity 2600ms var(--ease-in-out); will-change: opacity; }
+  .chan.base { opacity: 1; }                 /* gold underlies everything */
+  .chan.flash { transition: none; }          /* red is driven per frame, not blooming */
+  /* contain, never cover: cover crops the sphere against the TV's aspect and the orb
+     loses its edge. The two clips in a channel cross-dissolve over the seam (700ms). */
+  .chan video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+    opacity: 0; transition: opacity 700ms linear; pointer-events: none; will-change: opacity; }
+  .chan video.on { opacity: 1; }
   /* full aura around the orb — additive over the black field, tinted to the
      active state video in apply() and repainted EVERY frame so it snaps with
      the state the instant the orb changes; breathes with the signal */
@@ -50,12 +60,16 @@
 </head>
 <body>
   <div id="wrap">
-    <!-- gold is the base; the others crossfade over it with the live signal -->
-    <video class="orb base" id="v_gold"     src="assets/orb/gold.mp4"      muted loop autoplay playsinline preload="auto"></video>
-    <video class="orb"      id="v_lockedin" src="assets/orb/locked-in.mp4" muted loop autoplay playsinline preload="auto"></video>
-    <video class="orb"      id="v_drifting" src="assets/orb/drifting.mp4"  muted loop autoplay playsinline preload="auto"></video>
-    <video class="orb"      id="v_depleted" src="assets/orb/depleted.mp4"  muted loop autoplay playsinline preload="auto"></video>
-    <video class="orb"      id="v_red"      src="assets/orb/red.mp4"       muted loop autoplay playsinline preload="auto"></video>
+    <!-- Each state is a CHANNEL (a group faded by its state weight). The two <video>s
+         inside each channel are created in JS and hand off across the loop seam so the
+         loop never shows a cut. gold is the base channel; the others bloom over it. -->
+    <div id="orbstack">
+      <div class="chan base"  id="c_gold"     data-src="assets/orb/gold.mp4"></div>
+      <div class="chan"       id="c_lockedin" data-src="assets/orb/locked-in.mp4"></div>
+      <div class="chan"       id="c_drifting" data-src="assets/orb/drifting.mp4"></div>
+      <div class="chan"       id="c_depleted" data-src="assets/orb/depleted.mp4"></div>
+      <div class="chan flash" id="c_red"      data-src="assets/orb/red.mp4"></div>
+    </div>
     <div class="aura" id="aura"></div>
     <div class="mist m1"></div>
     <div class="mist m2"></div>
@@ -75,7 +89,7 @@
     // TV — that fabricated motion must carry a label (sim is always labeled).
     if (location.host && !SERVED) {
       var _pv = document.createElement('div');
-      _pv.textContent = 'PREVIEW \u00b7 SYNTHETIC DATA';
+      _pv.textContent = 'PREVIEW · SYNTHETIC DATA';
       _pv.style.cssText = 'position:fixed;top:14px;right:16px;z-index:999;font-family:var(--font-mono),monospace;'
         + 'font-size:11px;letter-spacing:0.14em;color:#E0A657;border:1px solid rgba(224,166,87,0.5);'
         + 'padding:5px 9px;border-radius:4px;background:rgba(0,0,0,0.35);pointer-events:none;';
@@ -83,8 +97,50 @@
     }
 
     var STATIC = location.search.indexOf('static') !== -1;   // test harness: no synthetic drift
-    var V = { gold: document.getElementById('v_gold'), lockedin: document.getElementById('v_lockedin'),
-      drifting: document.getElementById('v_drifting'), depleted: document.getElementById('v_depleted'), red: document.getElementById('v_red') };
+
+    // ---- video CHANNELS: two copies per clip, cross-dissolved across the loop seam ----
+    // Native <video loop> snaps last-frame → first-frame (a visible CUT). Instead each
+    // channel keeps a "current" copy playing and, a beat before it ends, restarts the
+    // "next" copy from 0 and dissolves between them over 700ms — so the wrap is a soft
+    // dissolve, never a cut. Only the current copy decodes at rest; the second spins up
+    // briefly at the seam, so the decode load matches the old single-video-per-state.
+    var STATES = ['gold', 'lockedin', 'drifting', 'depleted', 'red'];
+    var C = {};   // name -> { el, cur, nxt, seaming }
+    var SEAM_LEAD = 0.7;   // seconds before the end to begin the seam dissolve (matches the 700ms css)
+    STATES.forEach(function (name) {
+      var el = document.getElementById('c_' + name);
+      var src = el.getAttribute('data-src');
+      var a = document.createElement('video'), b = document.createElement('video');
+      a.autoplay = true; a.setAttribute('autoplay', '');   // the visible copy AUTOPLAYS (muted autoplay is allowed)
+      [a, b].forEach(function (v) {
+        v.muted = true; v.defaultMuted = true; v.playsInline = true; v.preload = 'auto';
+        v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
+        v.src = src;                         // src AFTER muted/autoplay so the autoplay is honoured
+        el.appendChild(v);
+      });
+      a.classList.add('on');                 // 'a' is the visible copy to start
+      C[name] = { el: el, cur: a, nxt: b, seaming: false };
+      var p = a.play(); if (p && p.catch) p.catch(function () {});   // belt-and-suspenders; 'b' stays paused at 0
+    });
+    document.getElementById('c_red').style.zIndex = 9999;   // red always overlays the states
+
+    function loopChannel(ch) {
+      var v = ch.cur, d = v.duration;
+      if (!d || !isFinite(d) || ch.seaming) return;
+      if (v.currentTime >= d - SEAM_LEAD) {
+        ch.seaming = true;
+        var old = ch.cur, nw = ch.nxt;
+        try { nw.currentTime = 0; } catch (e) {}
+        var pp = nw.play(); if (pp && pp.catch) pp.catch(function () {});
+        nw.classList.add('on');              // dissolve the fresh copy IN (700ms)
+        old.classList.remove('on');          // dissolve the ending copy OUT (700ms)
+        ch.cur = nw; ch.nxt = old;
+        // once the dissolve is done the old copy is invisible — pause it so we never
+        // decode two streams longer than the seam, then it waits, ready as 'nxt' again.
+        setTimeout(function () { try { old.pause(); } catch (e) {} ch.seaming = false; }, 820);
+      }
+    }
+
     var aura = document.getElementById('aura'), auraFrame = 0;
     var mists = document.querySelectorAll('.mist');
     var glowR = 221, glowG = 202, glowB = 142; // live aura tint (gold until data)
@@ -140,9 +196,8 @@
       }
       sctx.globalCompositeOperation = 'source-over';
     }
-    Object.keys(V).forEach(function (k) { var p = V[k].play(); if (p && p.catch) p.catch(function () {}); });
 
-    // reactive state: crossfade the state videos over the gold base with the live
+    // reactive state: bloom the state channel over the gold base with the live
     // signal. Engagement (relative) picks locked-in ↔ drifting ↔ depleted; an
     // interruption flashes red. All driven by measured signal — no numbers shown.
     var eng = 0.4, engT = 0.4, engHist = [];
@@ -154,6 +209,27 @@
       var lo = Infinity, hi = -Infinity; for (var i = 0; i < engHist.length; i++) { if (engHist[i] < lo) lo = engHist[i]; if (engHist[i] > hi) hi = engHist[i]; }
       return (hi - lo) > 1e-9 ? (v - lo) / (hi - lo) : 0.5; }
     function sstep(a, b, x) { x = Math.max(0, Math.min(1, (x - a) / (b - a))); return x * x * (3 - 2 * x); }
+
+    // ---- clean state hand-off: reveal, never cross-dissolve ----
+    // The incoming channel fades in ON TOP (raised z) while the OUTGOING channel holds
+    // full opacity beneath it — so the gold base never bleeds through mid-fade (the old
+    // muddy triple-blend). Once the incoming has fully covered, the covered channels are
+    // dropped to 0. name === null → no state (the gold base shows on its own).
+    var zc = 10, shownState = null, hideTimer = null;
+    var STATE_CH = ['lockedin', 'drifting', 'depleted'];
+    function showState(name) {
+      if (name === shownState) return;
+      shownState = name;
+      clearTimeout(hideTimer);
+      if (name) {
+        zc += 1; C[name].el.style.zIndex = zc; C[name].el.style.opacity = '1';
+        hideTimer = setTimeout(function () {
+          STATE_CH.forEach(function (s) { if (s !== shownState) C[s].el.style.opacity = '0'; });
+        }, 2700);   // > the 2600ms bloom, so the outgoing holds until fully covered
+      } else {
+        STATE_CH.forEach(function (s) { C[s].el.style.opacity = '0'; });   // fade back to gold
+      }
+    }
 
     function apply() {
       // Very slow signal smoothing (~4s), so the orb never twitches with the EEG.
@@ -175,24 +251,28 @@
           else if (nowMs - pendingSince >= MIN_DWELL) { state = want; pendingState = null; }
         } else { pendingState = null; }
       }
-      var lockedin = (haveData && state === 'lockedin') ? 1 : 0;
-      var drifting = (haveData && state === 'drifting') ? 1 : 0;
-      var depleted = (haveData && state === 'depleted') ? 1 : 0;
-      // red takes over when it fires
-      var k = 1 - red;
-      V.lockedin.style.opacity = (lockedin * k).toFixed(3);
-      V.drifting.style.opacity = (drifting * k).toFixed(3);
-      V.depleted.style.opacity = (depleted * k).toFixed(3);
-      V.red.style.opacity = red.toFixed(3);
+
+      // hand the orb to the committed state (gold base shows until data arrives), and
+      // overlay red on top per frame (its own channel — no bloom, instant response).
+      showState(haveData ? state : null);
+      C.red.el.style.opacity = red.toFixed(3);
+
+      // hold the loop seams: every channel's current copy dissolves into its twin a
+      // beat before it ends, so no clip ever shows its last-frame → first-frame cut.
+      for (var si = 0; si < STATES.length; si++) loopChannel(C[STATES[si]]);
 
       // aura + mist + smoke share one tint mixed from the same state weights as
-      // the video crossfade — repainted EVERY frame so the halo snaps with the
-      // orb the instant its state moves (red flashes the same frame it fires).
+      // the video bloom — repainted EVERY frame so the halo snaps with the orb
+      // the instant its state moves (red flashes the same frame it fires).
       // TINTS are MEASURED from the state videos themselves (bright-pixel
       // average, hue preserved, lifted to glow brightness) so every fade
       // matches the orb exactly: gold=warm sand, locked-in=teal-blue,
       // drifting=mauve, depleted=grey-lavender (kept dimmer), red=ember.
-      var wL = lockedin * k, wD = drifting * k, wDep = depleted * k, wR = red;
+      var k = 1 - red;
+      var wL = (haveData && state === 'lockedin' ? 1 : 0) * k;
+      var wD = (haveData && state === 'drifting' ? 1 : 0) * k;
+      var wDep = (haveData && state === 'depleted' ? 1 : 0) * k;
+      var wR = red;
       var wG = Math.max(0, 1 - (wL + wD + wDep + wR));
       var sum = wG + wL + wD + wDep + wR;
       glowR = (wG * 220 + wL * 104 + wD * 220 + wDep * 158 + wR * 230) / sum;
@@ -249,7 +329,7 @@
     // debug hook (harmless in production): lets a harness drive the signal and
     // read the committed state without a WebSocket.
     window.__orb = {
-      info: function () { return { state: state, pending: pendingState, eng: +eng.toFixed(3), engT: +engT.toFixed(3), haveData: haveData }; },
+      info: function () { return { state: state, shown: shownState, pending: pendingState, eng: +eng.toFixed(3), engT: +engT.toFixed(3), haveData: haveData }; },
       set: function (v) { engT = v; haveData = true; },
       snap: function (v) { engT = eng = v; haveData = true; }   // skip the slow ramp
     };
