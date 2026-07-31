@@ -311,6 +311,8 @@
     .nums{grid-template-columns:repeat(auto-fill,minmax(102px,1fr))}
     #coach{width:calc(100vw - 24px)}
   }
+  /* keep the header one line on a phone — the sticky bar should not eat the view */
+  @media (max-width:430px){ .brand .btag{display:none} }
 </style>
 </head>
 <body>
