@@ -20,9 +20,14 @@
     transition: opacity 2600ms var(--ease-in-out); will-change: opacity; }
   .chan.base { opacity: 1; }                 /* gold underlies everything */
   .chan.flash { transition: none; }          /* red is driven per frame, not blooming */
-  /* contain, never cover: cover crops the sphere against the TV's aspect and the orb
-     loses its edge. The two clips in a channel cross-dissolve over the seam (700ms). */
-  .chan video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+  /* cover, so the orb fills the TV. The clips are 1.6:1 and the TV is 16:9, so contain
+     used to pillarbox them with ~80px of dead black either side. Cover is safe here
+     because the sphere is small and centred: measured, it sits 388px clear of the top
+     and bottom edge (259px in gold), while cover crops only 54px per edge (36px in
+     gold), so nothing of the orb or its glow is ever cut. Re-check this if a clip is
+     ever re-rendered with the sphere filling more of the frame.
+     The two clips in a channel cross-dissolve over the seam (700ms). */
+  .chan video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
     opacity: 0; transition: opacity 700ms linear; pointer-events: none; will-change: opacity; }
   .chan video.on { opacity: 1; }
   /* full aura around the orb, additive over the black field, tinted to the
