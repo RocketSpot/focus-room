@@ -74,7 +74,10 @@ FILTER_HI_HZ = 90.0
 FILTER_ORDER = 4
 
 LINE_HZ = (50.0, 60.0)          # notched; both sit outside gamma and outside the fit range
-LINE_Q = 30.0                   # ~1.7 Hz wide
+LINE_Q = 45.0                   # ~1.1 Hz wide. Q=30 was costing 6% of the power at
+                                # 45 Hz, the very top of gamma; at 45 that dip is 2.7%.
+                                # Mains is frequency-stable, so a narrow notch is both
+                                # sufficient and cheaper to the band above it.
 
 # --- Welch ------------------------------------------------------------------
 # nperseg 500 at 250 Hz is a 2.0 s segment, so 0.5 Hz resolution. With a 6 s

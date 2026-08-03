@@ -43,7 +43,9 @@ HOP_SEC = 1.0
 FLATLINE_REL = 0.20        # amplitude below this fraction of reference ⇒ dead contact
 BLOWUP_REL = 3.5           # measured-band amplitude above this multiple ⇒ clench
 STEP_REL = 10.0            # a single jump this many times the robust gradient ⇒ pop
-DRIFT_REL = 12.0           # slow-component travel this many times amplitude ⇒ drift
+DRIFT_REL = 12.0           # slow-component travel this many times the REFERENCE amplitude
+DRIFT_SELF_REL = 20.0      # ...or this many times the window's OWN amplitude, which needs
+                           # no reference and so still fires on the very first window
 DRIFT_PROBE_HZ = 1.5       # the slow component drift is measured on, below the analysis band
 EDGE_GUARD_SEC = 0.5       # discarded each end of the window for the artifact tests only
 REF_WINDOWS = 60           # accepted windows contributing to the running references
@@ -185,6 +187,15 @@ class BandAnalyzer:
 
         amp_ref = float(np.median(self._amp_ref[i])) if len(self._amp_ref[i]) >= MIN_REF_WINDOWS else None
         grad_ref = float(np.median(self._grad_ref[i])) if len(self._grad_ref[i]) >= MIN_REF_WINDOWS else None
+
+        # Self-referential first, because every other relative test needs a
+        # reference built from accepted windows, and at a cold start there is
+        # none. Without this, the opening windows of a session where the buds
+        # were never seated properly sail through unchecked: measured, three of
+        # the first thirty windows of a violently drifting recording were being
+        # accepted purely because the detector had not warmed up yet.
+        if drift_range > DRIFT_SELF_REL * amp:
+            return False, "drift", None
 
         if amp_ref:
             if amp < FLATLINE_REL * amp_ref:
