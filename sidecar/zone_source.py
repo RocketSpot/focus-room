@@ -21,67 +21,24 @@ import shutil
 import time
 from pathlib import Path
 
+from band_analyzer import BandAnalyzer
 from protocol import OUT
 from eeg_stream import EegStream
 
 # ===================================================================================
-# MOBILE EAR-EEG TUNING — why delta was eating the whole spectrum
+# BAND ANALYSIS lives in spectral.py + band_analyzer.py, not in the vendored SDK.
 # -----------------------------------------------------------------------------------
-# A real recorded session measured delta at 77% of total band power (median 83%, peak
-# 99.8%) on a guest who was awake and reading. That is not brain delta. In an in-ear
-# montage, head/jaw movement and electrode-contact drift dump enormous power into
-# 0.5–2 Hz — routinely 10–100x the real EEG — and the stock config band-passed from
-# 0.5 Hz with delta defined as 0.5–4 Hz, so the drift landed squarely inside delta and
-# swamped every other band. Because the bands are reported as RELATIVE shares, a
-# delta at 80% crushes alpha/beta/theta into the noise floor, which is also why the
-# notification "showed no change": the beta/(alpha+theta) ratio had nothing left to move.
+# What used to sit here mutated the SDK's module-level CONFIG at import time to raise
+# its high-pass and narrow delta. That was action at a distance, and it was treating a
+# statistical problem as a filter problem: the SDK reports each band as a SHARE OF
+# TOTAL POWER, and on a 1/f spectrum the band nearest DC wins that comparison whatever
+# the filter does. Measured on pure 1/f noise with no oscillation at all, delta took
+# 20% of the share at exponent 1.0 and 47% at 2.0.
 #
-# The fix is the standard one for ambulatory/ear EEG: put the analysis high-pass ABOVE
-# the drift floor and define delta above it too. The guest can then move naturally —
-# which is the whole point; nobody should have to hold their head still to be measured.
-#
-# This is applied by mutating the SDK's module-level CONFIG *before* Zone() constructs
-# its SignalProcessor (every sub-processor reads CONFIG in __init__), so the vendored
-# SDK source stays untouched.
+# The room now measures how far each band rises above the guest's OWN fitted 1/f
+# background, in dB, which reads zero when there is no rhythm and reports delta
+# honestly when there is one. The SDK stays what it should have stayed: transport.
 # ===================================================================================
-ANALYSIS_HP_HZ = float(os.environ.get("FOCUSROOM_ANALYSIS_HP_HZ", "2.0"))
-DELTA_BAND = (ANALYSIS_HP_HZ, 4.0)
-# A window whose (now narrow, 2–4 Hz) delta STILL dominates this much is a movement
-# artifact, not a brain state. Such windows are OMITTED — never interpolated, never
-# bridged, never smoothed over. Omission is honest; fabrication is not.
-DRIFT_OMIT_SHARE = float(os.environ.get("FOCUSROOM_DRIFT_OMIT_SHARE", "0.62"))
-
-
-def _tune_for_mobile_ear_eeg(log=None):
-    """Raise the analysis high-pass above the motion/drift floor. Idempotent."""
-    try:
-        from zone_sdk import processors as P
-    except Exception as e:                     # pragma: no cover - real mode only
-        if log:
-            log(f"processing tune skipped (sdk import): {e}")
-        return
-    f = P.CONFIG["filter"]
-    if f.get("_focusroom_tuned"):
-        return
-    before_hp, before_delta = f["bandpass_low_hz"], list(P.CONFIG["bands"]["delta"])
-    f["bandpass_low_hz"] = ANALYSIS_HP_HZ            # 0.5 -> 2.0 : drop the drift floor
-    # A steeper skirt is what actually buys movement tolerance. Measured on synthesised
-    # drift (tests/eeg-drift-rejection.test.py): at a violent 800 uV movement, order 4
-    # lets delta reach 55% and alpha collapse to 38%, while order 6 holds delta at 22%
-    # and keeps alpha dominant at 65%. That is the difference between a guest having to
-    # sit rigidly and a guest being allowed to shift, chew and look around.
-    f["bandpass_order"] = max(int(f.get("bandpass_order", 4)), 6)
-    P.CONFIG["bands"]["delta"] = list(DELTA_BAND)    # [0.5,4] -> [2,4] : delta above drift
-    # Never bridge artifacts. The stock artifact stage linearly INTERPOLATES up to 30%
-    # of a window, i.e. it invents samples across the very movement we care about.
-    # Setting the cap to 0 makes that path unreachable; bad windows are dropped instead.
-    P.CONFIG["artifact"]["max_interpolation_pct"] = 0.0
-    f["_focusroom_tuned"] = True
-    if log:
-        log(f"processing tuned for mobile ear-EEG: high-pass {before_hp}->{ANALYSIS_HP_HZ} Hz, "
-            f"delta {before_delta}->{list(DELTA_BAND)}, artifact interpolation disabled "
-            f"(drift-dominated windows are omitted, never bridged)")
-
 SAFE_BATTERY_PCT = 25          # refuse to start below this so a session never dies mid-read
 IMPEDANCE_OK_STATES = {"low_z", "pair_ok"}
 
@@ -124,7 +81,6 @@ class ZoneSource:
         self.log = log
         self.Zone = Zone
         self._ensure_profiles()        # legacy fallback only — connect() no longer needs the catalogue
-        _tune_for_mobile_ear_eeg(log)  # MUST run before Zone() builds its SignalProcessor
         self.sdk = Zone()
         self.sdk.set_stream_chunk(50)
         self.sdk.set_stream_idle_sleep(0.01)
@@ -156,13 +112,18 @@ class ZoneSource:
         self._last_battery_r = None
 
         self.sdk.on_metrics(self._on_metrics)
-        self.sdk.on_brainwaves(self._on_brainwaves)
         self.sdk.on_stats(self._on_stats)
         self.sdk.on_connection_status(self._on_connection)
         self.sdk.on_impedance(self._on_impedance)
         # Phase 2A: raw per-channel EEG. The SDK already decodes + emits ADC counts
         # here every chunk; before 2A nothing subscribed, so raw never left the SDK.
         self.sdk.on_raw_data(self._on_raw)
+        # The room's own band analysis. It taps the SAME raw callback the transport
+        # does, so the measured numbers and the displayed trace come from one stream
+        # of samples rather than from two pipelines that can disagree.
+        self._analyzer = BandAnalyzer(fs=250.0, log=self.log)
+        self._analyzer.on_window(self._on_window)
+        self._last_analysis_report = 0.0
         self._eeg_stream = None       # per-session raw transport + quality (eeg_stream.py)
         self._left_up = False         # last-known link state, for single-bud raw labelling
         self._right_up = False
@@ -484,6 +445,9 @@ class ZoneSource:
         self._flush_stale_buffers("session start")   # drop the fit check's lead-off tone
         self._session_active = True
         self._metrics_since_stream = 0
+        # keep_references: the detector learned this guest during the signal
+        # check, so it starts the reading already calibrated to them
+        self._analyzer.reset(keep_references=True)
         # Fresh raw transport + quality per session (continuity/quality reset).
         st = self.sdk.get_buds_status()
         self._left_up = bool(st.get("left_connected"))
@@ -685,21 +649,19 @@ class ZoneSource:
 
     # ---------------- SDK callbacks ----------------
     def _on_metrics(self, m):
-        now_ms = int(time.time() * 1000)
-        self._metrics_since_stream += 1   # liveness: EEG frames are flowing
-        # raw native metrics → diagnostic + engine
+        """The SDK's own derived metrics, OPERATOR DIAGNOSTIC ONLY.
+
+        These still come from the SDK's relative band shares, so they inherit the
+        1/f problem and are not trustworthy as measurements. They stay because
+        the operator console shows them as native SDK readings and it is useful
+        to see what the vendor's own pipeline thinks. Nothing guest-facing is
+        built from them: the focus line and every band figure now come from
+        _on_window below, which only fires on a window that passed artifact
+        screening.
+        """
         self.tx.send(OUT.METRICS, engagement=m.engagement, focus=m.focus, stress=m.stress,
                      mental_readiness=m.mental_readiness, drowsiness=m.drowsiness,
                      relaxation=getattr(m, "relaxation", None), wellness=getattr(m, "wellness", None))
-        frame = self.engine.feed(m.engagement, now_ms)
-        if frame is not None:
-            events = frame.pop("events", [])
-            self.tx.send(OUT.FRAME, **frame)
-            for ev in events:
-                if ev == "plateau":
-                    self.tx.send(OUT.PLATEAU, tRel=frame["tRel"])
-                elif ev == "dip":
-                    self.tx.send(OUT.DIP, tRel=frame["tRel"])
 
     def _on_raw(self, raw):
         """Phase 2A: forward raw per-channel ADC counts through EegStream (batched
@@ -726,25 +688,55 @@ class ZoneSource:
             stream.ingest(cols, labels, sdk_rate=getattr(raw, "sample_rate", None))
         except Exception as e:
             self.log(f"eeg_stream ingest error: {e}")
+        try:
+            self._analyzer.ingest(cols, labels)
+        except Exception as e:
+            self.log(f"band analysis ingest error: {e}")
 
-    def _on_brainwaves(self, b):
-        # Drift/movement guard. Delta is now a NARROW 2–4 Hz band sitting above the
-        # motion floor, so a window where it still dominates is a movement artifact
-        # rather than a brain state. Those windows are OMITTED — not interpolated,
-        # not smoothed, not bridged — so an ordinary shift in the chair costs a
-        # window or two instead of poisoning the whole session's band shares.
-        # The reveal already renders real gaps honestly.
-        total = (b.delta + b.theta + b.alpha + b.beta + b.gamma)
-        if total > 0 and (b.delta / total) > DRIFT_OMIT_SHARE:
-            self._drift_omitted = getattr(self, "_drift_omitted", 0) + 1
-            if self._drift_omitted in (1, 10, 50) or self._drift_omitted % 100 == 0:
-                self.log(f"movement window omitted (delta {b.delta / total:.0%} of a 2–4 Hz band) "
-                         f"— {self._drift_omitted} so far this session; nothing interpolated")
-            return
-        denom = (b.alpha + b.theta)
-        eng_index = (b.beta / denom) if denom else 0.0
-        self.tx.send(OUT.BRAINWAVES, delta=b.delta, theta=b.theta, alpha=b.alpha,
-                     beta=b.beta, gamma=b.gamma, engIndex=round(eng_index, 4))
+    def _on_window(self, r):
+        """One ACCEPTED analysis window. The only source of guest-facing numbers.
+
+        This replaces two separate callbacks that could disagree. The old code
+        omitted drift-dominated windows from the band row but had no guard at all
+        on the metrics path, so a window rejected as movement still drove the
+        focus line and the diagnostic. Here the band row, the engine frame and
+        the liveness counter all come from the same accepted window, or none of
+        them do.
+        """
+        now_ms = int(time.time() * 1000)
+        self._metrics_since_stream += 1        # liveness: measured windows are flowing
+        osc, ap, q = r["osc"], r["aperiodic"], r["quality"]
+        share = r["share"]
+        self.tx.send(
+            OUT.BRAINWAVES,
+            # legacy field names carry the CORRECT half-open share, summing to 1.0,
+            # so the operator console and the room audio keep working untouched
+            delta=round(share["delta"], 5), theta=round(share["theta"], 5),
+            alpha=round(share["alpha"], 5), beta=round(share["beta"], 5),
+            gamma=round(share["gamma"], 5),
+            engIndex=round(r["engagement"], 4),
+            bandsSchema=2,
+            osc={k: round(v, 3) for k, v in osc.items()},
+            ap={"exponent": round(ap["exponent"], 3), "offsetLog10": round(ap["offsetLog10"], 4),
+                "r2": round(ap["r2"], 4), "retainedFrac": round(ap["retainedFrac"], 3),
+                "mode": ap["mode"], "ok": ap["ok"]},
+            quality=q,
+        )
+        frame = self.engine.feed(r["engagement"], now_ms)
+        if frame is not None:
+            events = frame.pop("events", [])
+            self.tx.send(OUT.FRAME, **frame)
+            for ev in events:
+                if ev == "plateau":
+                    self.tx.send(OUT.PLATEAU, tRel=frame["tRel"])
+                elif ev == "dip":
+                    self.tx.send(OUT.DIP, tRel=frame["tRel"])
+
+        # session counters, so the orchestrator can judge data quality on facts
+        now = time.monotonic()
+        if now - getattr(self, "_last_analysis_report", 0.0) >= 1.0:
+            self._last_analysis_report = now
+            self.tx.send(OUT.ANALYSIS, **self._analyzer.counters())
 
     def _on_stats(self, s):
         self.tx.send(OUT.STATS, dev1=s.get("dev1"), dev2=s.get("dev2"), elapsed=s.get("elapsed"))

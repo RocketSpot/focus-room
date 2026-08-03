@@ -17,6 +17,10 @@ class OUT:
     METRICS = "eeg/metrics"
     FRAME = "eeg/frame"
     BRAINWAVES = "eeg/brainwaves"
+    # Per-session analysis counters: how many windows were measured, how many were
+    # dropped and why, and the running 1/f exponent. Lets the orchestrator judge a
+    # session's data quality on facts rather than on a signal-quality guess.
+    ANALYSIS = "eeg/analysis-v1"
     STATS = "eeg/stats"
     CONNECTION = "eeg/connection"
     BATTERY = "fit/battery"

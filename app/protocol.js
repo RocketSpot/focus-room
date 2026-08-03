@@ -98,8 +98,15 @@ const SIDECAR_OUT = Object.freeze({
   METRICS: 'eeg/metrics',
   // the computed live line frame (downsampled for the wire). EEG_FRAME shape.
   FRAME: 'eeg/frame',
-  // band powers + computed beta/(alpha+theta) index (diagnostic cross-check).
+  // Band measurements. bandsSchema 2 carries `osc` (dB above this guest's own fitted
+  // 1/f background, the quantity every guest-facing number is built from), `ap` (the
+  // fit itself) and `quality`. The legacy delta..gamma fields remain and now carry the
+  // CORRECT half-open share of total band power, summing to 1.0, for surfaces that
+  // have not been migrated. Records with no bandsSchema are schema 1 and are read by
+  // the legacy path in reads.js.
   BRAINWAVES: 'eeg/brainwaves',
+  // { windowsAccepted, windowsDropped, acceptedFraction, dropReasons, exponentMedian }
+  ANALYSIS: 'eeg/analysis-v1',
   // per-bud packet stats from on_stats. { dev1, dev2, elapsed }
   STATS: 'eeg/stats',
   // connection status string from on_connection_status, normalized.

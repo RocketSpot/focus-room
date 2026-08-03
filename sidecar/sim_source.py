@@ -15,7 +15,10 @@ import random
 import time
 from datetime import datetime
 
+import numpy as _np
+
 from protocol import OUT
+from band_analyzer import BandAnalyzer
 from eeg_stream import EegStream
 
 
@@ -34,12 +37,16 @@ class SimSource:
         self._rng = random.Random(7)
         # scenario knob for the edge-case runs: normal | flat | dropout
         self._scenario = os.environ.get("FOCUSROOM_SIM_SCENARIO", "normal").lower()
-        # Phase 2A: a LABELLED synthetic raw stream so the live-EEG pipeline can be
-        # exercised without hardware. It is a deterministic sum of sines at real
-        # ADC-count scale — NEVER passed off as real: every payload carries
-        # simulation:true and the screen shows a persistent SIMULATED badge.
+        # A LABELLED synthetic raw stream so the whole EEG pipeline can be exercised
+        # without hardware. Deterministic 1/f noise carrying broad oscillatory bumps,
+        # at ADC-count scale, run through the SAME analyser the room ships. Never
+        # passed off as real: every payload carries simulation:true and the screen
+        # shows a persistent SIMULATED badge.
         self._eeg_stream = None
         self._raw_i = 0
+        self._pink_cache = {}
+        self._osc_cache = {}
+        self._analyzer = None
 
     RAW_FS = 250.0
     RAW_BATCH = 50            # 0.2 s of samples per emit → matches the 0.2 s loop
@@ -89,31 +96,79 @@ class SimSource:
         self._interrupt_at = None
         self.engine.set_signal_quality(0.97)
         self._eeg_stream = EegStream(self.tx, self.log, simulation=True, expected_rate_hz=int(self.RAW_FS))
+        self._analyzer = BandAnalyzer(fs=self.RAW_FS, log=self.log)
+        self._analyzer.on_window(self._on_window)
         self._raw_i = 0
+        self._engagement_now = 0.5
         self._task = asyncio.create_task(self._session_loop())
         self.log("sim session started")
 
-    def _synth_raw_batch(self, n):
-        """Deterministic synthetic EEG-like batch: a sum of sines (10 Hz alpha,
-        20 Hz beta, 6 Hz theta, 2 Hz slow) at ADC-count scale, per channel with a
-        small phase/amplitude offset so the four traces differ. NOT random noise,
-        NOT passed off as real (simulation:true everywhere)."""
-        cols = [[], [], [], []]
-        for _ in range(n):
-            t = self._raw_i / self.RAW_FS
-            env = 1.0 + 0.15 * math.sin(2 * math.pi * 0.1 * t)   # slow breathing envelope
-            for c in range(4):
-                ph = c * 0.55
-                amp = 1.0 - 0.07 * c
-                v = amp * env * (
-                    820 * math.sin(2 * math.pi * 10.0 * t + ph)
-                    + 300 * math.sin(2 * math.pi * 20.0 * t + 0.7 + ph)
-                    + 250 * math.sin(2 * math.pi * 6.0 * t + 1.3 + ph)
-                    + 200 * math.sin(2 * math.pi * 2.0 * t + ph)
-                )
-                cols[c].append(v)
-            self._raw_i += 1
+    def _synth_raw_batch(self, n, engagement=0.5):
+        """Synthetic EEG that behaves like EEG: a 1/f background carrying broad
+        oscillatory bumps whose heights follow the scripted engagement curve.
+
+        This replaces a sum of four pure sines. Sines were wrong twice over. They
+        look nothing like EEG on the signal-check screen, which is a room full of
+        people looking at a trace that is visibly not a brain. And spectrally they
+        have no 1/f background at all, so they exercised none of the analysis that
+        actually matters: a pipeline could be completely broken on real spectra and
+        still look perfect in simulation. Every dev run now drives the same
+        analyser the room ships.
+
+        Still deterministic, still labelled simulation:true everywhere.
+        """
+        alpha_amp = 26.0 - 16.0 * engagement      # alpha falls as engagement rises
+        beta_amp = 6.0 + 20.0 * engagement        # beta rises with it
+        theta_amp = 12.0 - 4.0 * engagement
+        cols = []
+        # a slow shared breathing drift, well inside what the analyser accepts
+        shared = self._pink_seg(n, 1.4, self._raw_i, seed=17) * 22.0
+        for c in range(4):
+            x = self._pink_seg(n, 1.3, self._raw_i, seed=100 + c) * 30.0
+            x = x + self._osc_seg(n, 10.0, self._raw_i, seed=200 + c) * alpha_amp
+            x = x + self._osc_seg(n, 19.0, self._raw_i, seed=300 + c) * beta_amp
+            x = x + self._osc_seg(n, 6.0, self._raw_i, seed=400 + c) * theta_amp
+            cols.append(list(x + shared))
+        self._raw_i += n
         return cols
+
+    def _pink_seg(self, n, chi, i0, seed):
+        """A continuous 1/f^chi segment. Phases are seeded per channel and the
+        segment is cut from a long precomputed buffer, so successive batches join
+        without a seam. A seam would read as an electrode pop to the analyser,
+        which is exactly the artifact it is supposed to catch."""
+        buf = self._pink_cache.get((chi, seed))
+        if buf is None:
+            rng = _np.random.default_rng(seed)
+            N = int(self.RAW_FS * 120)                 # two minutes, looped
+            f = _np.fft.rfftfreq(N, d=1.0 / self.RAW_FS)
+            amp = _np.zeros_like(f)
+            amp[1:] = f[1:] ** (-chi / 2.0)
+            spec = amp * _np.exp(1j * rng.uniform(0, 2 * _np.pi, size=f.size))
+            spec[0] = 0.0
+            buf = _np.fft.irfft(spec, n=N)
+            buf = buf / (buf.std() or 1.0)
+            self._pink_cache[(chi, seed)] = buf
+        N = len(buf)
+        idx = (_np.arange(i0, i0 + n) % N)
+        return buf[idx]
+
+    def _osc_seg(self, n, fc, i0, seed):
+        """A BROAD oscillation around fc, not a pure tone: band-limited noise, the
+        shape a real rhythm actually has on a spectrum."""
+        buf = self._osc_cache.get((fc, seed))
+        if buf is None:
+            from scipy import signal as _sg
+            rng = _np.random.default_rng(seed)
+            N = int(self.RAW_FS * 120)
+            sos = _sg.butter(4, [max(0.5, fc - 1.5), fc + 1.5], btype="band",
+                             fs=self.RAW_FS, output="sos")
+            buf = _sg.sosfiltfilt(sos, rng.standard_normal(N))
+            buf = buf / (buf.std() or 1.0)
+            self._osc_cache[(fc, seed)] = buf
+        N = len(buf)
+        idx = (_np.arange(i0, i0 + n) % N)
+        return buf[idx]
 
     def _emit_synth_raw(self, te):
         """Feed the synthetic batch through the SAME EegStream the real path uses.
@@ -127,11 +182,13 @@ class SimSource:
             # display shows a gap and continuity reports missing samples
             self._raw_i += self.RAW_BATCH
             return
-        cols = self._synth_raw_batch(self.RAW_BATCH)
+        cols = self._synth_raw_batch(self.RAW_BATCH, engagement=self._engagement_now)
         if self._scenario == "dropout" and 26.0 <= te < 32.0:
             cols[2] = [10.0] * self.RAW_BATCH    # Right-A flatline (dead contact)
             cols[3] = [12.0] * self.RAW_BATCH    # Right-B flatline
         self._eeg_stream.ingest(cols, labels, sdk_rate=int(self.RAW_FS))
+        if self._analyzer is not None:
+            self._analyzer.ingest(cols, labels)
 
     async def stop_session(self):
         self._running = False
@@ -183,14 +240,29 @@ class SimSource:
                 v -= dip_amp * fall * rec / 0.36
         return max(0.04, min(0.98, v))
 
-    def _bands(self, e: float):
-        # consistent with the engagement index beta/(alpha+theta)
-        beta = 0.5 + e * 1.6
-        alpha = 1.25 - e * 0.45
-        theta = 0.85 - e * 0.25
-        delta = 0.6 + 0.1 * (self._rng.random())
-        gamma = 0.25 + e * 0.4
-        return delta, theta, alpha, beta, gamma
+    def _on_window(self, r):
+        """One accepted analysis window, measured from the synthetic raw stream.
+
+        This is the same callback shape zone_source uses, so simulation and
+        hardware emit an identical wire message and neither can drift from the
+        other. It replaces a hand-tuned table of band constants that never went
+        near the analyser: the room's own DSP could be completely broken and
+        every simulated session would still have looked perfect.
+        """
+        osc, ap, q, share = r["osc"], r["aperiodic"], r["quality"], r["share"]
+        self.tx.send(
+            OUT.BRAINWAVES,
+            delta=round(share["delta"], 5), theta=round(share["theta"], 5),
+            alpha=round(share["alpha"], 5), beta=round(share["beta"], 5),
+            gamma=round(share["gamma"], 5),
+            engIndex=round(r["engagement"], 4),
+            bandsSchema=2,
+            osc={k: round(v, 3) for k, v in osc.items()},
+            ap={"exponent": round(ap["exponent"], 3), "offsetLog10": round(ap["offsetLog10"], 4),
+                "r2": round(ap["r2"], 4), "retainedFrac": round(ap["retainedFrac"], 3),
+                "mode": ap["mode"], "ok": ap["ok"]},
+            quality=q, simulation=True,
+        )
 
     async def _session_loop(self):
         tick = 0
@@ -198,6 +270,7 @@ class SimSource:
             while self._running:
                 te = time.monotonic() - self._t_start
                 e = self._engagement_at(te)
+                self._engagement_now = e
                 now_ms = int(time.time() * 1000)
 
                 # signal-trouble scenario: a degraded window mid-read
@@ -220,7 +293,6 @@ class SimSource:
 
                 # ~1 Hz: native metrics + band powers + stats (diagnostic cross-checks)
                 if tick % 5 == 0:
-                    d, th, a, b, g = self._bands(e)
                     self.tx.send(
                         OUT.METRICS, engagement=round(e, 4),
                         focus=round(max(0, min(1, e + 0.03 * (self._rng.random() * 2 - 1))), 4),
@@ -230,10 +302,10 @@ class SimSource:
                         relaxation=round(max(0, min(1, 1 - e * 0.6)), 4),
                         wellness=None,
                     )
-                    eng_index = b / (a + th) if (a + th) else 0.0
-                    self.tx.send(OUT.BRAINWAVES, delta=round(d, 4), theta=round(th, 4),
-                                 alpha=round(a, 4), beta=round(b, 4), gamma=round(g, 4),
-                                 engIndex=round(eng_index, 4))
+                    # Band values are NOT scripted any more. They are measured from the
+                    # synthetic raw above by the same BandAnalyzer the hardware path uses,
+                    # and arrive through _on_window. Emitting them from here as well would
+                    # be inventing a second, disagreeing answer.
                     rate = (120 + self._rng.random() * 10) if dropout else (248 + self._rng.random() * 2)
                     drop = round(0.45 if dropout else 0.0, 3)
                     self.tx.send(OUT.STATS,
