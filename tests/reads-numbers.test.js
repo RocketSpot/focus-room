@@ -90,9 +90,17 @@ ok('a real dip is SHOWN with its recovery time (the notification always shows a 
   const r = run(dippy());
   assert.strictEqual(r.stats.realDip, true, 'expected a measurable dip');
   assert.ok(r.stats.recoverSec > 0, 'recoverSec still computed internally');
-  // the notification ALWAYS shows a change — a real dip reports its recovery time
+  // The notification ALWAYS shows a change, and the change it shows is the BAND
+  // SHIFT, because that is the quantity guaranteed to exist: something always
+  // moves at the marker. Recovery time used to take this slot whenever there was
+  // a real dip, which meant the one figure the room promises could be displaced
+  // by a different figure entirely. It is not lost, it moves into the sentence,
+  // so a dipping session now reports both findings instead of one.
   assert.ok(r.reads[2].stat && r.reads[2].stat.value, 'interruption must carry a measured figure');
-  assert.ok(/sec|min/.test(r.reads[2].stat.value), 'a real dip shows the recovery time: ' + r.reads[2].stat.value);
+  assert.ok(/%|held its level/.test(r.reads[2].stat.value),
+    'the headline figure is the band shift: ' + r.reads[2].stat.value);
+  assert.ok(/sec|min/.test(r.reads[2].sentence),
+    'a real dip still reports its recovery time, in the sentence: ' + r.reads[2].sentence);
   // the exact figure is retained internally, flagged provisional/not-validated
   const p = r.reads[2].provisional;
   assert.ok(p && p.notValidated && p.metric === 'betaAlphaThetaRatio', JSON.stringify(p));

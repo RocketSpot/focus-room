@@ -571,6 +571,10 @@ class Orchestrator extends EventEmitter {
       samples: this.sessionSamples, answers: this.answers,
       interruptEegT: this.interruptEegT, signalIssue: this.signalIssue,
       bands: bandStream,
+      // the fifteen still seconds the guest already sits through. Until now the
+      // room recorded them and then used them for nothing, while telling the guest
+      // that everything is measured against their own baseline. Now it is.
+      baseline: this.baseline,
       eegClaimsAllowed, dataQualityStatus: this.sessionDataQualityStatus,
     });
     // stamp the final policy decision on the reveal so every downstream surface
@@ -991,10 +995,15 @@ class Orchestrator extends EventEmitter {
         // pre-anchor row loses ≤2s of a 1–2Hz stream; mis-stamping it lies.
         if (this.timeline.lastFrame) {
           this._recordStream('bands', { t: this._streamT(), delta: msg.delta, theta: msg.theta,
-            alpha: msg.alpha, beta: msg.beta, gamma: msg.gamma, engIndex: msg.engIndex });
+            alpha: msg.alpha, beta: msg.beta, gamma: msg.gamma, engIndex: msg.engIndex,
+            // schema 2: dB above this guest's own fitted 1/f background. Every
+            // guest-facing figure is built from this, never from the shares above,
+            // which exist only so unmigrated surfaces keep working.
+            ...(msg.bandsSchema ? { bandsSchema: msg.bandsSchema, osc: msg.osc, ap: msg.ap } : {}) });
         }
         this._recordBaseline('bands', { t: this._streamT(), delta: msg.delta, theta: msg.theta,
-          alpha: msg.alpha, beta: msg.beta, gamma: msg.gamma });
+          alpha: msg.alpha, beta: msg.beta, gamma: msg.gamma,
+          ...(msg.bandsSchema ? { bandsSchema: msg.bandsSchema, osc: msg.osc } : {}) });
         break;
       case SIDECAR_OUT.METRICS:
         this._recordStream('metrics', { t: this._streamT(), engagement: msg.engagement, focus: msg.focus,

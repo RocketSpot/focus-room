@@ -65,8 +65,13 @@ const times = (n) => (n === 0 ? 'not once' : n === 1 ? 'once' : n === 2 ? 'twice
 // A band's move against its own session level. Past ±100% the percentage stops
 // being readable (and a small band's noise can produce "393% above"), so beyond
 // that we say what happened in words instead of quoting a runaway figure.
-const rose = (d) => (d >= 100 ? 'more than doubled against its session level' : `rose ${d}% above its session level`);
-const fell = (d) => (d <= -50 ? 'dropped to less than half its session level' : `fell ${Math.abs(d)}% below its session level`);
+// A move that rounds to zero is reported as holding, never as "rose 0%". Schema-1
+// records only carry whole-percent share moves, so zero is genuinely all they can
+// say; schema 2 measures in dB and quotes a real fraction of a percent instead.
+const rose = (d) => (d >= 100 ? 'more than doubled against its session level'
+  : (Math.round(d) === 0 ? 'held its session level' : `rose ${d}% above its session level`));
+const fell = (d) => (d <= -50 ? 'dropped to less than half its session level'
+  : (Math.round(d) === 0 ? 'held its session level' : `fell ${Math.abs(d)}% below its session level`));
 // terse forms for a sentence's SECOND clause, where "its session level" has
 // already been established. Repeating it made these notes long enough to
 // overflow the prose block and force the type down to an unreadable size.
@@ -94,6 +99,56 @@ const BANDS5 = ['delta', 'theta', 'alpha', 'beta', 'gamma'];
 // "beta ran 393% above its session level" on the wall off a band holding 3% of
 // the signal. Below this share we never build a sentence on the band at all.
 const SHARE_FLOOR = 0.04;
+
+// ---------------------------------------------------------------------------
+// SCHEMA 2: bands measured as oscillatory prominence, in dB above this guest's
+// own fitted 1/f background (see sidecar/spectral.py). Everything below works on
+// that quantity. Records written before it exist carry no `osc` and are read by
+// the legacy share-based path further down, unchanged.
+//
+// Why this makes the numbers safe as well as correct: a share can approach zero,
+// and dividing by it is how an early build put "beta ran 393% above its session
+// level" on the wall off a band holding 3% of the signal. Here the denominator is
+// the guest's own baseline variation, floored at the instrument's measured noise,
+// so a floor-level band cannot manufacture a large finding.
+const MIN_SIGMA_DB = 0.35;   // measured per-window estimator noise at the shipped config
+const Z_REPORT = 1.0;        // below this, describe the change without leaning on it
+const BASELINE_MIN_WINDOWS = 6;
+
+function hasOsc(bands) {
+  return !!(bands && bands.length && bands.some((b) => b && b.osc));
+}
+const oscOf = (b, k) => (b && b.osc && Number.isFinite(+b.osc[k]) ? +b.osc[k] : 0);
+
+function medianOf(xs) {
+  const a = xs.filter(Number.isFinite).slice().sort((x, y) => x - y);
+  if (!a.length) return 0;
+  const m = a.length >> 1;
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+function madOf(xs, mu) {
+  return 1.4826 * medianOf(xs.map((v) => Math.abs(v - mu)));
+}
+
+// The guest's own reference for each rhythm. Prefers the quiet baseline they sat
+// through before reading, which is what makes "everything is measured against
+// you" literally true rather than a slogan: the room already records fifteen
+// still seconds and, until now, used them for nothing at all.
+function bandReference(bands, baseline) {
+  const base = (baseline && Array.isArray(baseline.bands)) ? baseline.bands.filter((b) => b && b.osc) : [];
+  const useBaseline = base.length >= BASELINE_MIN_WINDOWS;
+  const src = useBaseline ? base : (bands || []).filter((b) => b && b.osc);
+  const mu = {}; const sigma = {};
+  BANDS5.forEach((k) => {
+    const vals = src.map((b) => oscOf(b, k));
+    mu[k] = medianOf(vals);
+    sigma[k] = Math.max(madOf(vals, mu[k]), MIN_SIGMA_DB);
+  });
+  return { mu, sigma, kind: useBaseline ? 'baseline' : 'session' };
+}
+
+// dB above the reference -> the percentage the guest actually reads
+const pctFromDb = (d) => (Math.pow(10, d / 10) - 1) * 100;
 
 // Per-region band narrative, which measured rhythm led each read's window, what
 // share of the guest's signal power it held there, and how that compares to their
@@ -182,6 +237,38 @@ function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 // motion/drift, gamma is muscle, so a jump there is a flinch, not attention.
 // theta/alpha RISING is the classic mind-pulled-inward signal, weighted up.
 // Returns { k, d } where d is the signed % change across the notification.
+// SCHEMA 2 interruption response. Two differences from the legacy version below,
+// both of which were producing wrong answers rather than merely imprecise ones.
+//
+// The windows are ABSOLUTE SECONDS, not fractions of the session. The old code
+// used interruptT +/- 0.02/0.06 of total duration, so a five minute reading got a
+// twenty-four second "immediate response" while a ninety second one got seven.
+//
+// And ALL FIVE bands compete. The old code ranked only theta, alpha and beta,
+// then fell back to all five only if those three were under a floor.
+function interruptBandShiftOsc(bands, interruptT, ref) {
+  const rows = (bands || []).filter((b) => b && b.osc);
+  if (rows.length < 4) return null;
+  const totalT = rows[rows.length - 1].t || 1;
+  const markT = interruptT * totalT;
+  const pre = rows.filter((b) => b.t >= markT - 6 && b.t < markT - 1);
+  const post = rows.filter((b) => b.t > markT + 1 && b.t <= markT + 8);
+  const nearest = (n) => [...rows].sort((a, b) => Math.abs(a.t - markT) - Math.abs(b.t - markT)).slice(0, n);
+  const preSrc = pre.length >= 2 ? pre : nearest(3);
+  const postSrc = post.length >= 2 ? post : nearest(3);
+  let best = null;
+  BANDS5.forEach((k) => {
+    const d = medianOf(postSrc.map((b) => oscOf(b, k))) - medianOf(preSrc.map((b) => oscOf(b, k)));
+    const z = d / (ref.sigma[k] || MIN_SIGMA_DB);
+    // the editorial preference for a theta or alpha RISE is a stated house
+    // preference about which story to tell, never a claim about significance
+    const score = Math.abs(z) * (((k === 'theta' || k === 'alpha') && d > 0) ? 1.4 : 1);
+    if (!best || score > best.score) best = { k, db: d, z, pct: pctFromDb(d), score };
+  });
+  if (best) best.d = Math.round(best.pct);
+  return best;
+}
+
 function interruptBandShift(bands, interruptT) {
   if (!bands || bands.length < 6) return null;
   const totalT = bands[bands.length - 1].t || 1;
@@ -195,7 +282,11 @@ function interruptBandShift(bands, interruptT) {
   if (win.length < 2) { const c = interruptT; win = [...sm].sort((a, b) => Math.abs(a.f - c) - Math.abs(b.f - c)).slice(0, 3); }
   let best = null;
   ['theta', 'alpha', 'beta'].forEach((k) => {
-    if (sessShare[k] < 0.02) return;                 // at the noise floor
+    // SHARE_FLOOR, not the looser 0.02 this used to carry. The narrative layer was
+    // hardened against runaway percentages at 0.04 but this one was not, so the
+    // interruption read, the most quoted number in the whole reveal, was the least
+    // protected: a band holding 6.2% of the signal produced "more than doubled".
+    if (sessShare[k] < SHARE_FLOOR) return;
     const wm = mean(win.map((s) => s[k]));
     const abs = wm - sessShare[k];                   // share-point swing (what's visible)
     const d = Math.round((abs / sessShare[k]) * 100);
@@ -304,7 +395,7 @@ function bandFocusLine(bands, eventEegT) {
   return { line, flat: relSpread < 0.28, ei, shares: sm };
 }
 
-function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eegClaimsAllowed, dataQualityStatus }) {
+function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eegClaimsAllowed, dataQualityStatus, baseline }) {
   answers = answers || {};
   // Phase 2A.2 correction 1: when the session is NOT eligible for EEG-derived guest
   // claims (a staff/demonstration override, or, in real mode, a session that never
@@ -478,10 +569,34 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   // the job is to find WHAT moved most and say so plainly. There is deliberately no
   // visibility threshold here: the room never tells a guest their notification did
   // nothing, never calls the response "small", and never leaves the read empty.
-  const intShiftRaw = intFired ? interruptBandShift(bands, interruptT) : null;
-  // Describe the change always; quote a NUMBER only when there is a real one to quote
-  // (a "rose 0%" headline would be a fabricated finding).
-  const intShift = (intShiftRaw && Math.abs(intShiftRaw.d) >= 1) ? intShiftRaw : null;
+  const bandRef = hasOsc(bands) ? bandReference(bands, baseline) : null;
+  const intShift = intFired
+    ? (bandRef ? interruptBandShiftOsc(bands, interruptT, bandRef)
+      : interruptBandShift(bands, interruptT))
+    : null;
+  // The number is ALWAYS quoted when there is a marker. The old code dropped it
+  // whenever the shift rounded below one percent, which is exactly the case where
+  // a guest is most likely to think the room measured nothing, so the read fell
+  // silent at the worst possible moment. A real change under 1% is quoted to one
+  // decimal instead. It is never rounded to "0%", and it is never omitted.
+  const intPctText = (s) => {
+    const a = Math.abs(s.pct != null ? s.pct : s.d);
+    if (a >= 1) return `${Math.round(a)}%`;
+    // Never "0%". A change too small to round to a whole percent is still a
+    // change, and telling a guest their notification moved them 0% is the one
+    // thing this read must never say. Two decimals if a single one would round
+    // to zero as well.
+    return a >= 0.05 ? `${a.toFixed(1)}%` : `${Math.max(a, 0.01).toFixed(2)}%`;
+  };
+  // Schema-2 phrasing, which can name the reference the guest was measured against.
+  const intMoveText = (s) => {
+    const up = (s.db != null ? s.db : s.d) >= 0;
+    const ref = bandRef && bandRef.kind === 'baseline'
+      ? 'where you sat at rest' : 'its own session level';
+    const a = Math.abs(s.pct != null ? s.pct : s.d);
+    if (up) return a >= 100 ? `more than doubled against ${ref}` : `rose ${intPctText(s)} above ${ref}`;
+    return a >= 50 ? `dropped to less than half of ${ref}` : `fell ${intPctText(s)} below ${ref}`;
+  };
 
   // ---- copy ----
   const settleWord = flat ? 'a calm, even settle' : (quickly ? 'quick to settle' : (settleFrac > 0.55 ? 'a slow burn' : 'an easy settle'));
@@ -566,23 +681,32 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
       // Something always moves at the marker; the read names WHICH rhythm moved,
       // which direction, and by how much against that rhythm's own session level.
       v: !intFired ? 'never sent, you finished first'
-        : (realDip ? dipWord
-          : intShift ? `${BAND_SHORT[intShift.k]} ${intShift.d >= 0 ? 'rose' : 'fell'} at the marker`
-            : 'one notification, mid-read'),
+        : (intShift ? `${BAND_SHORT[intShift.k]} ${intShift.db >= 0 || intShift.d >= 0 ? 'rose' : 'fell'} at the marker`
+          : dipWord),
       color: 'orange',
+      // The band shift is the stat, ALWAYS, because it is the quantity guaranteed
+      // to exist: something always moves at the marker. Recovery time used to win
+      // this slot whenever there was a real dip, which meant the one number the
+      // room promises to show could be displaced by a different number entirely.
+      // The recovery time is not lost, it moves into the sentence below.
       stat: !intFired ? null
-        : realDip
-          ? { value: fmtDur(recoverSec), label: 'to get back to where you were' }
-          : intShift
-            ? { value: `${cap(BAND_SHORT[intShift.k])} ${intShift.d >= 0 ? 'rose' : 'fell'} ${Math.abs(intShift.d)}%`,
-                label: `in your ${BAND_MEANS[intShift.k]}, at the notification` }
-            : null,
+        : intShift
+          ? { value: (intShift.db == null && Math.round(intShift.d) === 0)
+              // a schema-1 record carries only whole-percent shares, so quoting a
+              // fraction of one here would be inventing precision the record has not got
+              ? `${cap(BAND_SHORT[intShift.k])} held its level`
+              : `${cap(BAND_SHORT[intShift.k])} ${intShift.d >= 0 ? 'rose' : 'fell'} ${intPctText(intShift)}`,
+              label: `in your ${BAND_MEANS[intShift.k]}, at the notification` }
+          : (realDip ? { value: fmtDur(recoverSec), label: 'to get back to where you were' } : null),
+      // The band shift always leads, because it is always there. When there was
+      // also a real dip in the focus line, the recovery time is appended rather
+      // than swapped in, so the guest gets both findings instead of one of them.
       sentence: !intFired
         ? 'You finished the reading before the room sent its one notification. That speed is its own finding.'
-        : realDip
-          ? `One notification, at ${fmtClockExact(secs(interruptT))}. Your focus fell ${dipPctOwn}% of its own range and took ${fmtDur(recoverSec)} to climb back to the level it held before.`
-          : intShift
-            ? `One notification, at ${fmtClockExact(secs(interruptT))}. Right at the marker your ${BAND_SHORT[intShift.k]} rhythm, your ${BAND_MEANS[intShift.k]}, ${intShift.d >= 0 ? rose(intShift.d) : fell(intShift.d)}. That is the notification, written in your rhythms.`
+        : intShift
+          ? `One notification, at ${fmtClockExact(secs(interruptT))}. Right at the marker your ${BAND_SHORT[intShift.k]} rhythm, your ${BAND_MEANS[intShift.k]}, ${intShift.db != null ? intMoveText(intShift) : (intShift.d >= 0 ? rose(intShift.d) : fell(intShift.d))}.${realDip ? ` Your focus fell ${dipPctOwn}% of its own range with it, and took ${fmtDur(recoverSec)} to climb back.` : ' That is the notification, written in your rhythms.'}`
+          : realDip
+            ? `One notification, at ${fmtClockExact(secs(interruptT))}. Your focus fell ${dipPctOwn}% of its own range and took ${fmtDur(recoverSec)} to climb back to the level it held before.`
             : `One notification, at ${fmtClockExact(secs(interruptT))}. Your rhythms rearranged themselves around it, the balance you were holding before the notification is not the balance you held after.`,
       // No answer, no quotation. Omit the ledger entirely rather than fabricate.
       ledger: q1 ? { said: quote(q1), did: dipDid } : null,
