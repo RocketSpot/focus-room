@@ -5,7 +5,7 @@
   const e = React.createElement;
   const { Mono, DotMark, PillBtn, ArrowRow, Arrow, DarkField, LightField } = window;
   const FL = window.FocusLine;
-  const wrap = (extra) => ({ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', ...extra });
+  const wrap = (extra) => ({ position: 'relative', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', ...extra });
 
   // Curated reading bodies, keyed to the picked piece id. Content slots, each
   // array is the full body of one piece; the Reading screen renders the paragraphs

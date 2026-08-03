@@ -5,7 +5,12 @@
   const e = React.createElement;
   const { Mono, DotMark, PillBtn, ArrowRow, Arrow, Progress, DarkField, LightField } = window;
 
-  const wrap = (extra) => ({ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', ...extra });
+  // minHeight: 0 is load-bearing. In a flex column a `flex: 1` child defaults to
+  // min-height:auto and so refuses to shrink below its content, which meant a tall
+  // slide grew past the canvas, justifyContent had nothing left to distribute, and
+  // the Back / Progress / NEXT row slid under an overflow:hidden edge. That is the
+  // "cut off", and it took the Next button with it.
+  const wrap = (extra) => ({ position: 'relative', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', ...extra });
 
   /* The real orb, the same state videos the TV runs, so the object the guest
      meets on the iPad is the object they watch on the wall. It carries the TV's
@@ -94,23 +99,39 @@
      interruption: anticipating it would change the very thing we measure. */
 
   // the five rhythms, in the room's shared band colours + the plain-word key
+  // Real band centre frequencies, the geometric mean of each band's own edges, so
+  // the sketch beside a rhythm oscillates at that rhythm's actual speed. The old
+  // table used 6 / 10 / 15 / 22 / 30, which drew delta in theta's territory, theta
+  // in alpha's and alpha in beta's: the whole set sat about one band too high, and
+  // its slowest-to-fastest spread was 1:5 where the truth is closer to 1:13.
   const RHYTHMS = [
-    { gl: 'δ', nm: 'Delta', ds: 'slow waves',       v: 'var(--w-delta)', hz: 6 },
-    { gl: 'θ', nm: 'Theta', ds: 'internal thinking', v: 'var(--w-theta)', hz: 10 },
-    { gl: 'α', nm: 'Alpha', ds: 'relaxed alertness', v: 'var(--w-alpha)', hz: 15 },
-    { gl: 'β', nm: 'Beta', ds: 'focused thinking', v: 'var(--w-beta)', hz: 22 },
-    { gl: 'γ', nm: 'Gamma', ds: 'peak processing',  v: 'var(--w-gamma)', hz: 30 },
+    { gl: 'δ', nm: 'Delta', ds: 'slow waves',        v: 'var(--w-delta)', hz: 2.8 },
+    { gl: 'θ', nm: 'Theta', ds: 'internal thinking', v: 'var(--w-theta)', hz: 5.7 },
+    { gl: 'α', nm: 'Alpha', ds: 'relaxed alertness', v: 'var(--w-alpha)', hz: 10.2 },
+    { gl: 'β', nm: 'Beta',  ds: 'focused thinking',  v: 'var(--w-beta)',  hz: 19.7 },
+    { gl: 'γ', nm: 'Gamma', ds: 'peak processing',   v: 'var(--w-gamma)', hz: 36.7 },
   ];
-  // a little wave glyph whose frequency matches the band it labels
-  function WaveGlyph({ color, cycles, w = 76, h = 20 }) {
+  // All five sketches share ONE time window, so they are directly comparable:
+  // across 0.36 s delta draws a single cycle and gamma draws thirteen.
+  const GLYPH_SEC = 0.36;
+  // A sketch of one rhythm. Amplitude falls with frequency, because EEG power
+  // genuinely does; the old glyphs were all drawn the same height, which is the
+  // opposite of what the reveal's own chart shows. It falls as 1/sqrt(f) rather
+  // than the true 1/f so that gamma is still visible rather than a flat line:
+  // the ordering is honest, the ratio is compressed for legibility.
+  function WaveGlyph({ color, hz, w = 76, h = 22 }) {
+    const cycles = hz * GLYPH_SEC;
+    const amp = (h / 2 - 2) * Math.sqrt(2.8 / hz);
+    const steps = Math.max(64, Math.ceil(cycles * 14));   // keep the fast ones smooth
     let d = '';
-    for (let i = 0; i <= 48; i++) {
-      const x = (i / 48) * w;
-      const y = h / 2 - Math.sin((i / 48) * cycles * Math.PI * 2) * (h / 2 - 3);
+    for (let i = 0; i <= steps; i++) {
+      const x = (i / steps) * w;
+      const y = h / 2 - Math.sin((i / steps) * cycles * Math.PI * 2) * amp;
       d += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1);
     }
     return e('svg', { width: w, height: h, style: { flex: 'none' } },
-      e('path', { d, fill: 'none', stroke: color, strokeWidth: 1.6, strokeLinecap: 'round' }));
+      e('path', { d, fill: 'none', stroke: color, strokeWidth: 1.6,
+        strokeLinecap: 'round', strokeLinejoin: 'round' }));
   }
 
   /* WHERE THE SIGNAL COMES FROM, an honest topographic map.
@@ -209,14 +230,14 @@
         e('div', { style: { maxWidth: 580, textAlign: 'center' } },
           e('p', body, 'Your neurons talk in small electrical pulses. When enough of them fire together, the rhythm reaches the surface, and the contacts resting in your ear pick it up.'),
           e('p', { className: 't-body-2', style: { color: 'var(--fg-faint)', fontSize: 15, lineHeight: 1.55 } },
-            'The ear sits closest to your temporal lobe, so that is the part it hears best. It reads the surface nearby, never deep inside.'))),
+            'The ear sits closest to your temporal lobe, the part that handles sound, language and memory, so that is the part it hears best.'))),
       // 03, the rhythms
       e('div', { key: 'c', style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' } },
         e('div', { style: { width: '100%', maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 2 } },
           RHYTHMS.map((r) => e('div', { key: r.nm, style: {
             display: 'flex', alignItems: 'center', gap: 18, padding: '11px 4px',
             borderBottom: '1px solid var(--hair)' } },
-            e(WaveGlyph, { color: r.v, cycles: r.hz / 5 }),
+            e(WaveGlyph, { color: r.v, hz: r.hz }),
             e('span', { style: { fontFamily: 'var(--font-display)', fontSize: 22, color: r.v, width: 26 } }, r.gl),
             e('span', { className: 't-body', style: { fontSize: 17, color: 'var(--fg-strong)', width: 78 } }, r.nm),
             e('span', { className: 't-body-2', style: { fontSize: 15, color: 'var(--fg-muted)' } }, r.ds)))),
@@ -242,7 +263,13 @@
           e(DotMark, { size: 10 }), e(Mono, null, 'ZONE · BEFORE YOUR SESSION')),
 
         // the slide
-        e('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22, flex: 1, justifyContent: 'center' } },
+        // flex-start with a FIXED offset, not centre. Centring each slide independently
+      // is what made the deck jump: the four panels are 231 to 475 units tall, so a
+      // centred block put the eyebrow, the headline and the panel at a different
+      // height on every slide. Anchoring them all to one offset holds a common
+      // baseline across the deck, and minHeight:0 above still lets a tall slide
+      // shrink rather than push the footer off the canvas.
+      e('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22, flex: 1, minHeight: 0, justifyContent: 'flex-start', paddingTop: 118 } },
           e(Mono, { style: { color: 'var(--c-signal)' } }, `0${i + 1} · ${s.eyebrow}`),
           e('h1', { className: 't-h1', style: { color: 'var(--fg-strong)', fontSize: 42, lineHeight: 1.12, maxWidth: 700, margin: 0 } }, s.title),
           panel),

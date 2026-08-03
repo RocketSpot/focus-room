@@ -494,15 +494,15 @@
   // ever calls for a glance
   var chipEls=null, chipPrev=[];
   function paintChips(){
-    var eng = S.sidecar.running===false?['Stopped','bad'] : S.sidecar.ready?['Ready','ok'] : S.sidecar.running?['Starting','warn']:[', ','mut'];
+    var eng = S.sidecar.running===false?['Stopped','bad'] : S.sidecar.ready?['Ready','ok'] : S.sidecar.running?['Starting','warn']:['\u2013','mut'];
     var buds = (function(){ var l=S.buds.left,rr=S.buds.right;
       if(l==null&&rr==null) return ['Unknown','mut'];
       if(l&&rr) return ['Both','ok']; if(!l&&!rr) return ['None','bad']; return [(l?'Left':'Right')+' only','warn']; })();
-    var bat = (function(){ var a=S.battery.leftPct,c=S.battery.rightPct; if(a==null&&c==null) return [', ','mut'];
-      var lo=Math.min(a==null?100:a,c==null?100:c); return [(a==null?', ':a+'%')+' / '+(c==null?', ':c+'%'), lo<20?'warn':'ok']; })();
-    var contact = S.impedance? (S.impedance.allGood?['Clean','ok']:['Not yet','warn']) : [', ','mut'];
-    var sq = S.signalQuality==null?[', ','mut'] : S.signalQuality>=0.7?['Good','ok'] : S.signalQuality>=0.5?['Fair','warn']:['Poor','bad'];
-    var beat = [D.BEAT_PLAIN[S.beat]||', ','mut'];
+    var bat = (function(){ var a=S.battery.leftPct,c=S.battery.rightPct; if(a==null&&c==null) return ['\u2013','mut'];
+      var lo=Math.min(a==null?100:a,c==null?100:c); return [(a==null? '–' :a+'%')+' / '+(c==null? '–' :c+'%'), lo<20?'warn':'ok']; })();
+    var contact = S.impedance? (S.impedance.allGood?['Clean','ok']:['Not yet','warn']) : ['\u2013','mut'];
+    var sq = S.signalQuality==null?['\u2013','mut'] : S.signalQuality>=0.7?['Good','ok'] : S.signalQuality>=0.5?['Fair','warn']:['Poor','bad'];
+    var beat = [D.BEAT_PLAIN[S.beat]||'–','mut'];
     var chips=[['Signal engine',eng],['Earbuds',buds],['Battery L/R',bat],['Contact',contact],['Signal quality',sq],['Room',beat]];
     var host=$('chips');
     if(!chipEls || chipEls.length!==chips.length){
@@ -531,7 +531,7 @@
   function paintNums(){
     var nb=live.bands, nm=live.metrics, nf=live.frame;
     var nums=[['δ delta',fx3(nb.delta)],['θ theta',fx3(nb.theta)],['α alpha',fx3(nb.alpha)],['β beta',fx3(nb.beta)],['γ gamma',fx3(nb.gamma)],
-      ['β/(α+θ)',fx3(nb.engIndex)],['engagement',fx3(nf.engagementRel)],['state',nf.stateWord||', '],
+      ['β/(α+θ)',fx3(nb.engIndex)],['engagement',fx3(nf.engagementRel)],['state',nf.stateWord||'–'],
       ['focus',fx3(nm.focus)],['stress',fx3(nm.stress)],['drowsiness',fx3(nm.drowsiness)]];
     var host=$('nums');
     if(!numEls || numEls.length!==nums.length){
@@ -547,7 +547,7 @@
       var t=String(n[1]); if(numPrev[i]===t) return; numPrev[i]=t; numEls[i].textContent=t;
     });
   }
-  function fx3(x){ return (x==null||isNaN(x))?', ':Number(x).toFixed(3); }
+  function fx3(x){ return (x==null||isNaN(x))? '–' :Number(x).toFixed(3); }
   function esc(s){ return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
 
   // ---- websocket (reconnects forever, jittered) ----
@@ -605,7 +605,7 @@
 
   // mode badge
   function tickBadges(){ var mb=$('modeBadge'); if(S.mode==='sim'){mb.textContent='Simulation';mb.className='badge sim';}
-    else if(S.mode==='real'){mb.textContent='Real EEG';mb.className='badge real';} else {mb.textContent=', ';mb.className='badge';} }
+    else if(S.mode==='real'){mb.textContent='Real EEG';mb.className='badge real';} else {mb.textContent='–';mb.className='badge';} }
 
   // controls → ops command over the same socket
   document.querySelectorAll('button[data-cmd]').forEach(function(btn){

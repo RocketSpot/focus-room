@@ -602,13 +602,22 @@
     // overflow it, step the type down until it fits. Nothing can spill into the
     // chart, and no slide silently loses its last line.
     function fitProse() {
+      // This used to set a PERCENTAGE font-size on the parent while every child
+      // declared an absolute px size (.sentence 28px, .bandnote 20px, .ledger
+      // 14/20px). A percentage on a parent cannot touch a px child, so scrollHeight
+      // never moved, the loop spun down to its floor and gave up, and
+      // overflow:hidden sliced the last line through the middle of its descenders.
+      // Scaling the whole block with a transform DOES affect px children, and it
+      // shrinks toward the top-left so the text stays anchored where it was laid out.
+      prose.style.transform = '';
+      prose.style.width = '';
+      var avail = prose.clientHeight;
       var scaleF = 1;
-      prose.style.fontSize = '';
-      var inner = prose.scrollHeight, avail = prose.clientHeight;
-      while (inner > avail && scaleF > 0.74) {
+      while (prose.scrollHeight > avail && scaleF > 0.72) {
         scaleF -= 0.04;
-        prose.style.fontSize = (scaleF * 100) + '%';
-        inner = prose.scrollHeight;
+        prose.style.transformOrigin = 'top left';
+        prose.style.width = (100 / scaleF) + '%';   // reflow at the pre-scale width
+        prose.style.transform = 'scale(' + scaleF + ')';
       }
     }
 
