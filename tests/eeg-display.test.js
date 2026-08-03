@@ -143,8 +143,20 @@ ok('no invented noise in the render/filter path (Math.random only in reconnect j
 ok('draws straight segments (lineTo) into a canvas ring buffer', () => {
   assert.ok(/getContext\('2d'\)/.test(html) && /lineTo\(/.test(html));
 });
-ok('no decorative band lanes / "peak processing" on the raw scope', () => {
-  assert.ok(!/peak processing/.test(html) && !/lane:/.test(html));
+ok('the band lanes are filtered RAW SAMPLES, never decorative band-power lines', () => {
+  // The scope now shows five lanes again, but they are not what the pre-Phase-2A
+  // ones were. Those drew smoothed band POWER arriving on eeg/brainwaves at about
+  // 1 Hz: a decorative trend line, not a waveform. These run causal band-pass
+  // filters over the actual raw ADC samples already in the ring buffer, so every
+  // point on screen is a real sample the earbuds sent.
+  //
+  // The invariant that matters is therefore unchanged: nothing on this canvas may
+  // come from a band-power message.
+  assert.ok(/function decompose\(/.test(html), 'lanes must be decomposed from raw');
+  assert.ok(/rawRing\[ch\]\[sl\]/.test(html), 'decompose must read the raw ring');
+  assert.ok(!/eeg\/brainwaves/.test(html), 'the scope must never consume band powers: ' +
+    (html.match(/.{0,60}eeg\/brainwaves.{0,60}/) || [''])[0]);
+  assert.ok(!/pushSample\('delta'/.test(html), 'no band-power line feeding, as the old lanes had');
 });
 ok('carries a persistent SIMULATED badge and no µV unit on displayed amplitude', () => {
   assert.ok(/simBadge/.test(html) && /Simulated data/i.test(html));

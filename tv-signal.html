@@ -57,8 +57,8 @@
   /* per-ear trace labels + the honest amplitude note */
   .earLabel { position: absolute; font-family: var(--font-mono); font-size: 20px; letter-spacing: var(--tr-mono); color: var(--fg-muted);
     text-shadow: 0 0 10px #060605, 0 0 10px #060605, 0 0 6px #060605; }
-  #labL { left: 120px; top: 312px; }
-  #labR { left: 120px; top: 592px; }
+  #labL { left: 120px; top: 312px; display: none; }
+  #labR { left: 120px; top: 592px; display: none; }
   .earState { position: absolute; font-family: var(--font-mono); font-size: 13px; letter-spacing: var(--tr-mono-sm); text-transform: uppercase; color: var(--fg-faint);
     text-shadow: 0 0 10px #060605, 0 0 10px #060605, 0 0 6px #060605; }
   #stL { left: 120px; top: 340px; }
@@ -103,11 +103,20 @@
   (function () {
     'use strict';
     // ============================================================
-    // Phase 2A live signal check, renders ACTUAL raw EEG samples (eeg/raw-v1),
-    // not decorative band lines. Rules: straight segments between real samples,
-    // no splines, no invented noise, gaps stay visible, causal per-channel display
-    // filter only, robust attack/release gain, no µV labels (calibration
-    // unverified). All four transmitted channels available in the engineering view.
+    // The live signal check. ACTUAL raw EEG samples (eeg/raw-v1) from the guest's
+    // earbuds, decomposed into the five rhythms the room names everywhere else, so
+    // the screen shows what an EEG trace really looks like: delta rolling slowly,
+    // alpha a clean rhythm, gamma fast and fine.
+    //
+    // This replaces a single wideband trace per ear. That version had no mains
+    // notch at all, so 50/60 Hz hum passed at only 5 to 8 dB down and drew as a
+    // four-pixel zigzag, and its high-pass was primed backwards so every gap
+    // planted a full-height spike. Those two things were the spikes.
+    //
+    // Rules unchanged: straight segments between real samples, no splines, no
+    // invented noise, gaps stay visible and are never bridged, causal filters
+    // only, no µV labels (calibration deliberately unverified). All four
+    // transmitted channels remain available in the staff engineering view.
     // ============================================================
     var tv = document.getElementById('tv');
     function fit() { var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080); tv.style.transform = 'scale(' + s + ')'; }
@@ -144,11 +153,99 @@
       return { hp: biquad('hp', FILTER.hpHz, FILTER.q, fs), lp: biquad('lp', FILTER.lpHz, FILTER.q, fs), primed: false };
     }
     function filtStep(cf, x) {
-      if (!cf.primed && isFinite(x)) {        // prime to the first sample so the HP
-        cf.hp.z1 = 0; cf.hp.z2 = 0; cf.lp.z1 = x - (cf.lp.b0 * x); cf.lp.z2 = 0; // start with ~0 transient
+      if (!cf.primed && isFinite(x)) {
+        // Prime BOTH filters to their DC steady state for this first sample, so
+        // neither emits a startup transient.
+        //
+        // The high-pass used to be primed by zeroing its state, with a comment
+        // claiming that gave a near-zero transient. It gave the opposite: for
+        // transposed-direct-form-II, y = b0*x + z1, so zeroed state emits
+        // y0 = b0*x, i.e. essentially the WHOLE raw DC offset of the channel, and
+        // an ADC offset is thousands of counts against a signal of order tens. It
+        // then decayed over the high-pass time constant, so every stream start,
+        // every config message, every reset and every transport gap of half a
+        // second or more planted a full-height spike that sat in the window for
+        // the next seven seconds. Being a median, the gain never compressed it.
+        //
+        // Solving y = 0 in steady state gives z1 = -b0*x and z2 = b2*x, which for
+        // a high-pass (where b0 = b2 and b0 + b1 + b2 = 0) is stationary.
+        cf.hp.z1 = -cf.hp.b0 * x; cf.hp.z2 = cf.hp.b0 * x;
+        // The low-pass sits AFTER the high-pass, so its input starts at zero, not
+        // at the raw sample. Priming it for a DC of x, as the old code did, made
+        // it emit x on the very first step even once the high-pass was correct:
+        // it was primed to pass a level it was never going to be handed.
+        cf.lp.z1 = 0; cf.lp.z2 = 0;
         cf.primed = true;
       }
       return biquadStep(cf.lp, biquadStep(cf.hp, x));
+    }
+
+    // ---- the five rhythms, decomposed from ONE channel -------------------------
+    // The guest sees the same signal split into the five bands the room talks
+    // about everywhere else, which is what an EEG trace actually looks like:
+    // delta rolling slowly, alpha a clean rhythm, gamma fast and fine.
+    //
+    // Two band-pass biquads are cascaded per band for a steeper skirt, so the
+    // lanes are genuinely separated rather than five views of the same wobble.
+    var BAND_DEF = [
+      { k: 'delta', gl: 'δ', nm: 'Delta', ds: 'slow waves',        lo: 2,  hi: 4,  col: '#9D93D6' },
+      { k: 'theta', gl: 'θ', nm: 'Theta', ds: 'internal thinking', lo: 4,  hi: 8,  col: '#4FA69A' },
+      { k: 'alpha', gl: 'α', nm: 'Alpha', ds: 'relaxed alertness', lo: 8,  hi: 13, col: '#8CB16A' },
+      { k: 'beta',  gl: 'β', nm: 'Beta',  ds: 'focused thinking',  lo: 13, hi: 30, col: '#DDCA8E' },
+      { k: 'gamma', gl: 'γ', nm: 'Gamma', ds: 'peak processing',   lo: 30, hi: 45, col: '#E0A657' },
+    ];
+    // Mains hum is the single biggest reason the old trace looked nothing like
+    // EEG. There was no notch at all, and a lone second-order 40 Hz low-pass is
+    // only 5.4 dB down at 50 Hz and 7.8 dB at 60, so hum passed essentially
+    // intact and drew as a four to five pixel zigzag at 250 Hz. On a marginal ear
+    // contact it routinely exceeds the EEG itself.
+    var NOTCH_HZ = [50, 60];
+    function notchBiquad(f0, q, fs) {
+      var w0 = 2 * Math.PI * f0 / fs, c = Math.cos(w0), s = Math.sin(w0), al = s / (2 * q);
+      var b0 = 1, b1 = -2 * c, b2 = 1, a0 = 1 + al, a1 = -2 * c, a2 = 1 - al;
+      return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0, z1: 0, z2: 0 };
+    }
+    function bpBiquad(lo, hi, fs) {
+      var f0 = Math.sqrt(lo * hi), q = f0 / (hi - lo);
+      var w0 = 2 * Math.PI * f0 / fs, c = Math.cos(w0), s = Math.sin(w0), al = s / (2 * q);
+      var b0 = al, b1 = 0, b2 = -al, a0 = 1 + al, a1 = -2 * c, a2 = 1 - al;
+      return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0, z1: 0, z2: 0 };
+    }
+    // Decompose the visible window of one channel. Runs from a PRE-ROLL before the
+    // left edge so each causal filter has settled by the time the drawn part
+    // begins; nothing invented, just samples we already have, filtered earlier.
+    var PREROLL = 400;   // 1.6 s at 250 Hz
+    function decompose(ch, leftIdx, rightIdx, fs) {
+      var startIdx = leftIdx - PREROLL;
+      var n = rightIdx - startIdx + 1;
+      if (n < 8) return null;
+      var lanes = BAND_DEF.map(function () { return { x: [], y: [] }; });
+      var nf = NOTCH_HZ.map(function (f) { return notchBiquad(f, 24, fs); });
+      var bp = BAND_DEF.map(function (b) { return [bpBiquad(b.lo, b.hi, fs), bpBiquad(b.lo, b.hi, fs)]; });
+      // walk the ring oldest-to-newest across the requested span
+      var order = [];
+      for (var s = count - 1; s >= 0; s--) {
+        var slot = (head - 1 - s + CAP) % CAP;
+        var gi = idxRing[slot];
+        if (gi < startIdx || gi > rightIdx) continue;
+        order.push(slot);
+      }
+      var primed = false, dc = 0;
+      for (var i = 0; i < order.length; i++) {
+        var sl = order[i];
+        if (!presentRing[ch][sl]) { continue; }        // a real gap stays a real gap
+        var v = rawRing[ch][sl];
+        if (!isFinite(v)) continue;
+        if (!primed) { dc = v; primed = true; }
+        var u = v - dc;                                 // remove the channel's offset once
+        for (var q2 = 0; q2 < nf.length; q2++) u = biquadStep(nf[q2], u);
+        for (var b = 0; b < BAND_DEF.length; b++) {
+          var w = biquadStep(bp[b][0], u);
+          w = biquadStep(bp[b][1], w);
+          if (idxRing[sl] >= leftIdx) { lanes[b].x.push(idxRing[sl]); lanes[b].y.push(w); }
+        }
+      }
+      return lanes[0].x.length >= 8 ? lanes : null;
     }
     function filtReset(cf) { biquadReset(cf.hp); biquadReset(cf.lp); cf.primed = false; }
 
@@ -348,6 +445,59 @@
       }
     }
 
+    // ---- one rhythm's lane ----------------------------------------------------
+    // Each band is scaled to ITS OWN amplitude, because band power falls steeply
+    // with frequency: at a shared gain, delta would fill the panel and gamma
+    // would be a flat line. This is the same convention every clinical band
+    // display uses. The gain is smoothed slowly and per band, so a lane settles
+    // rather than pumping, and it is only ever how far the trace is drawn, never
+    // which samples get drawn.
+    var laneGain = {};
+    function drawLane(def, lane, yTop, yBot, leftIdx, rightIdx) {
+      var yc = (yTop + yBot) / 2, half = Math.max(6, (yBot - yTop) / 2 - 4);
+      var ys = lane.y, xs = lane.x;
+      var absv = [];
+      for (var i = 0; i < ys.length; i++) { var a = Math.abs(ys[i]); if (isFinite(a)) absv.push(a); }
+      absv.sort(function (p, q) { return p - q; });
+      var amp = absv.length ? 1.4826 * absv[Math.floor(absv.length * 0.5)] : 0;
+      var target = amp > 1e-6 ? (half * 0.62) / amp : 0;
+      var g = laneGain[def.k];
+      laneGain[def.k] = (g == null) ? target : g + (target - g) * (target < g ? 0.06 : 0.02);
+      var gain = laneGain[def.k] || 0;
+
+      // label: the glyph, the name, and the plain words the room uses everywhere
+      ctx.fillStyle = def.col; ctx.globalAlpha = 0.9;
+      ctx.font = '26px "PP Neue Montreal", "Space Grotesk", Helvetica, Arial, sans-serif';
+      ctx.fillText(def.gl, 6, yc + 8);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(214,212,201,0.72)';
+      ctx.font = '15px "IBM Plex Mono", monospace';
+      ctx.fillText(def.nm.toUpperCase(), 40, yc - 2);
+      ctx.fillStyle = 'rgba(214,212,201,0.32)';
+      ctx.font = '12px "IBM Plex Mono", monospace';
+      ctx.fillText(def.ds.toUpperCase(), 40, yc + 15);
+
+      var x0 = 150, wpx = CW - x0 - 10, span = Math.max(1, rightIdx - leftIdx);
+      ctx.beginPath();
+      var pen = false, prevPx = -99;
+      for (var j = 0; j < xs.length; j++) {
+        var px = x0 + ((xs[j] - leftIdx) / span) * wpx;
+        var py = yc - Math.max(-half, Math.min(half, ys[j] * gain));
+        // a real gap in the samples stays a real gap on the screen, never bridged
+        if (!pen || px - prevPx > 6) { ctx.moveTo(px, py); pen = true; } else { ctx.lineTo(px, py); }
+        prevPx = px;
+      }
+      // literal colour. This used to pass 'var(--c-signal)' straight to
+      // ctx.strokeStyle, which Canvas 2D cannot resolve: assigning an unparseable
+      // value is a silent no-op, so the previous value persisted, and the previous
+      // value was the faint centreline grey. The left ear and every engineering
+      // trace had been drawing at 10% opacity.
+      ctx.strokeStyle = def.col; ctx.lineWidth = 1.9;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.globalAlpha = 0.16; ctx.lineWidth = 6; ctx.stroke(); ctx.globalAlpha = 1;
+    }
+
     function drawUnavailable(yTop, yBot, text) {
       var yc = (yTop + yBot) / 2;
       ctx.strokeStyle = 'rgba(214,212,201,0.10)'; ctx.setLineDash([2, 12]); ctx.lineWidth = 1;
@@ -362,26 +512,27 @@
       var rightIdx = lastIndex, leftIdx = rightIdx - Math.round(WINDOW_S * CFG.expectedRate);
 
       if (!engOn) {
-        // --- consumer L / R ---
+        // --- the five rhythms, one signal decomposed ---
+        // A single channel split into the five bands the room names everywhere
+        // else. One channel, not an average: the two buds do not share a sample
+        // clock, so averaging them in the time domain assumes an alignment that
+        // does not exist.
         var la = selL ? { 'Left-A': 0, 'Left-B': 1 }[selL] : null;
         var ra = selR ? { 'Right-A': 2, 'Right-B': 3 }[selR] : null;
-        var ampL = (la != null) ? robustAmp(la, leftIdx) : null;
-        var ampR = (ra != null) ? robustAmp(ra, leftIdx) : null;
-        // shared gain policy so L and R amplitudes are directly comparable (same units).
-        // robustAmp is ~1 SD of the trace, and ordinary EEG regularly reaches ~3 SD, so
-        // the old CH*0.20 (≈112px for 1 SD in a 123px half-lane) put NORMAL signal at the
-        // panel edge and made every artifact rail into a flat-topped square. CH*0.05 puts
-        // 1 SD at ~28px, so a ~3 SD swing still lands inside the soft knee and only a true
-        // artifact reaches the compressing region. Same data, honestly scaled, it is only
-        // how far the trace is drawn, never which samples are drawn.
-        var ampShared = Math.max(ampL || 0, ampR || 0, GAIN_FLOOR);
-        var targetGain = (CH * 0.05) / ampShared;
-        if (gainShared == null) gainShared = targetGain;
-        else { var rate = targetGain < gainShared ? 0.10 : 0.03; gainShared += (targetGain - gainShared) * rate; } // faster attack (shrink) than release
-        if (la != null && ampL != null) drawTrace(la, 0, CW, 20, 270, leftIdx, rightIdx, gainShared, 'var(--c-signal)', selSwitchL);
-        else drawUnavailable(20, 270, staffMode ? 'left ear, no usable channel' : '');
-        if (ra != null && ampR != null) drawTrace(ra, 0, CW, 290, 540, leftIdx, rightIdx, gainShared, '#CBB26A', selSwitchR);
-        else drawUnavailable(290, 540, staffMode ? 'right ear, no usable channel' : '');
+        var src = null;
+        if (la != null && robustAmp(la, leftIdx) != null) src = la;
+        else if (ra != null && robustAmp(ra, leftIdx) != null) src = ra;
+        else { for (var c3 = 0; c3 < 4; c3++) { if (robustAmp(c3, leftIdx) != null) { src = c3; break; } } }
+        var lanes = (src != null) ? decompose(src, leftIdx, rightIdx, CFG.expectedRate) : null;
+        if (!lanes) {
+          drawUnavailable(20, 540, '');
+        } else {
+          var laneH = Math.floor(CH / BAND_DEF.length);
+          for (var b2 = 0; b2 < BAND_DEF.length; b2++) {
+            var top = b2 * laneH, bot = top + laneH - 10;
+            drawLane(BAND_DEF[b2], lanes[b2], top, bot, leftIdx, rightIdx);
+          }
+        }
       } else {
         // --- engineering: all four transmitted channels, same time axis ---
         var order = [0, 1, 2, 3], amps = [];
@@ -395,7 +546,7 @@
           for (var s2 = 0; s2 < Math.min(count, 400); s2++) { var sl = (head - 1 - s2 + CAP) % CAP; if (presentRing[q][sl]) { anyPresent = true; break; } }
           ctx.fillStyle = 'rgba(214,212,201,0.5)'; ctx.font = '15px "IBM Plex Mono", monospace';
           ctx.fillText(LABELS[q], 8, yt + 16);
-          if (anyPresent) drawTrace(q, 0, CW, yt, yb, leftIdx, rightIdx, gEng, 'var(--c-signal)');
+          if (anyPresent) drawTrace(q, 0, CW, yt, yb, leftIdx, rightIdx, gEng, '#DDCA8E');
           else drawUnavailable(yt, yb, LABELS[q] + ', absent');
         }
       }
