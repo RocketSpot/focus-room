@@ -153,6 +153,33 @@ class SurfaceServer extends EventEmitter {
           ].join('; ');
           headers['X-Frame-Options'] = 'DENY';
         }
+        // MEDIA: byte ranges, a real length, and a cache that actually caches.
+        // Without Accept-Ranges and Content-Length, Chromium runs a video in
+        // streaming mode: it cannot know the duration until the whole file has
+        // arrived and it cannot satisfy a seek from cache. Combined with
+        // no-cache on every asset, that made the orb clips the worst case for
+        // looping media on every single wrap. They are static, content-addressed
+        // by name, and rebuilt by a tool, so they can be cached hard.
+        const isMedia = ext === '.mp4' || ext === '.ogg' || ext === '.webm' ||
+          ext === '.m4a' || ext === '.woff2';
+        if (isMedia) {
+          headers['Accept-Ranges'] = 'bytes';
+          headers['Cache-Control'] = 'public, max-age=3600';
+        }
+        const range = isMedia && req.headers.range && /^bytes=\d*-\d*$/.test(req.headers.range)
+          ? req.headers.range : null;
+        if (range) {
+          const [rawStart, rawEnd] = range.replace('bytes=', '').split('-');
+          let start = rawStart === '' ? stat.size - Number(rawEnd) : Number(rawStart);
+          let end = rawStart === '' || rawEnd === '' ? stat.size - 1 : Number(rawEnd);
+          start = Math.max(0, Math.min(start, stat.size - 1));
+          end = Math.max(start, Math.min(end, stat.size - 1));
+          headers['Content-Range'] = `bytes ${start}-${end}/${stat.size}`;
+          headers['Content-Length'] = String(end - start + 1);
+          res.writeHead(206, headers);
+          return fs.createReadStream(filePath, { start, end }).pipe(res);
+        }
+        headers['Content-Length'] = String(stat.size);
         res.writeHead(200, headers);
         fs.createReadStream(filePath).pipe(res);
       });
