@@ -67,7 +67,8 @@ CMD_RESET = b"v"
 CMD_DEFAULT = b"d"
 CMD_TEST_SIGNAL = b"="
 SAMPLE_RATE = 250
-BLE_PACKET_SIZE = 9
+BLE_PACKET_SIZE = 9        # legacy: [0xA0][seq][CH1 x3][CH2 x3][0xC0]
+BLE_PACKET_SIZE_LOFF = 11  # current: ...[LOFF_P][LOFF_N][0xC0], lead-off inline per sample
 # CMD_START/CMD_STOP and lead writes: use asyncio.gather for dual-link so each
 # worker issues its GATT write without awaiting the peer first.
 
@@ -183,6 +184,7 @@ class DualBLEConnection:
         self._stats_callback: Optional[Callable] = None
         self._disconnect_callback: Optional[Callable] = None
         self._impedance_tap: Optional[Callable[[int, float, float], None]] = None
+        self._leadoff_tap: Optional[Callable[[int, int, int], None]] = None
         self._last_stats_emit = 0.0
         self._synced_count = 0
         self._stale_count = 0
@@ -487,13 +489,33 @@ class DualBLEConnection:
         self._parse_packets(data, device_id=2)
 
     def _parse_packets(self, data: bytearray, device_id: int):
+        """Accept BOTH packet layouts the firmware ships.
+
+            legacy  9 bytes : [0xA0][seq][CH1 x3][CH2 x3][0xC0]
+            current 11 bytes: [0xA0][seq][CH1 x3][CH2 x3][LOFF_P][LOFF_N][0xC0]
+
+        The 11-byte form carries per-channel lead-off bits INLINE with every
+        sample, which is the only way to know about electrode contact while a
+        session is actually running: the SDK's Goertzel impedance check has to
+        inject a current and is therefore mutually exclusive with streaming, so
+        it can only run before a guest starts reading. Reading these two bytes
+        gives the operator a live contact signal for free, on the samples that
+        were arriving anyway.
+
+        The longer form is tried first: a run of 11-byte packets can be misread
+        as 9-byte ones at the wrong offset, but not the reverse.
+        """
         data_len = len(data)
         i = 0
-        while i <= data_len - BLE_PACKET_SIZE:
-            if data[i] == 0xA0 and data[i + BLE_PACKET_SIZE - 1] == 0xC0:
-                self._process_packet(bytes(data[i : i + BLE_PACKET_SIZE]), device_id)
-                i += BLE_PACKET_SIZE
-            else:
+        while i < data_len:
+            matched = False
+            for size in (BLE_PACKET_SIZE_LOFF, BLE_PACKET_SIZE):
+                if i + size <= data_len and data[i] == 0xA0 and data[i + size - 1] == 0xC0:
+                    self._process_packet(bytes(data[i: i + size]), device_id)
+                    i += size
+                    matched = True
+                    break
+            if not matched:
                 i += 1
 
 
@@ -526,6 +548,14 @@ class DualBLEConnection:
 
     def _process_packet(self, pkt: bytes, device_id: int):
         raw_num = pkt[1]
+        # lead-off bits, when the firmware sends the longer packet. A set bit means
+        # that pin is OFF the skin. Operator-facing only: it never gates the room,
+        # and it is never shown to a guest.
+        if len(pkt) >= BLE_PACKET_SIZE_LOFF and self._leadoff_tap is not None:
+            try:
+                self._leadoff_tap(device_id, pkt[8], pkt[9])
+            except Exception:
+                logger.exception("lead-off tap error")
 
         # Extract 24-bit signed integers (RAW ADC COUNTS)
         ch1_raw = (pkt[2] << 16) | (pkt[3] << 8) | pkt[4]
@@ -737,6 +767,15 @@ class DualBLEConnection:
 
     def set_disconnect_callback(self, callback: Callable):
         self._disconnect_callback = callback
+
+    def set_leadoff_tap(self, callback: Optional[Callable[[int, int, int], None]]):
+        """Receive (device_id, loff_p, loff_n) from every 11-byte packet.
+
+        Unlike the impedance estimator this needs no injected current and does
+        not interrupt streaming, so contact can be watched DURING a reading
+        rather than only before one.
+        """
+        self._leadoff_tap = callback
 
     def set_impedance_tap(self, callback: Optional[Callable[[int, float, float], None]]):
         """Install a tap that receives (device_id, ch1_raw, ch2_raw) per sample.

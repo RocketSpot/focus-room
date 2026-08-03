@@ -42,7 +42,7 @@ const SURFACE_FORWARD = new Set([
   SIDECAR_OUT.BRAINWAVES,  // guest signal surface renders these as NUMBER-FREE relative presence
   SIDECAR_OUT.CONNECTION,
   SIDECAR_OUT.BATTERY,
-  SIDECAR_OUT.IMPEDANCE,
+  SIDECAR_OUT.IMPEDANCE, SIDECAR_OUT.LEADOFF,
   // NOTE: EEG_CONFIG / EEG_RAW / EEG_QUALITY are intentionally NOT here, they are
   // routed to the TV role only (item 11), handled explicitly in wireSidecar.
 ]);

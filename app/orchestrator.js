@@ -267,7 +267,13 @@ class Orchestrator extends EventEmitter {
   _coachOps() {
     const e = this._eegEligibility;
     let side = null, reason = null;
+    const lo = this._loffOff;
     if (this._eegDown) { side = 'both'; reason = 'link'; }
+    else if (lo && (lo.left || lo.right)) {
+      // measured contact beats inferred contact
+      side = (lo.left && lo.right) ? 'both' : (lo.left ? 'left' : 'right');
+      reason = 'contact';
+    }
     else if (e && e.ears) {
       const l = !!(e.ears.left && e.ears.left.usable), r = !!(e.ears.right && e.ears.right.usable);
       if (!l && !r) { side = 'both'; reason = 'contact'; }
@@ -985,6 +991,26 @@ class Orchestrator extends EventEmitter {
         this._recordBaseline('frames', { t: tRel, v: msg.engagementRel, q: msg.signalQuality });
         this._watchSignal(msg);
         this._watchFitSignal(msg);
+        break;
+      }
+      case SIDECAR_OUT.LEADOFF: {
+        // Live electrode contact, straight off the wire. This is a HARDER fact
+        // than the statistical eligibility the coach otherwise runs on: a set
+        // lead-off bit means that pin is physically off the skin, so when it is
+        // available it should lead. Held for three consecutive reports before it
+        // speaks, so a single bad packet cannot send an operator across the room.
+        const sides = msg.sides || {};
+        const offNow = {};
+        ['left', 'right'].forEach((sd) => {
+          const chs = sides[sd] || {};
+          offNow[sd] = Object.keys(chs).length > 0 && Object.keys(chs).every((k) => chs[k].off);
+        });
+        this._loffRun = this._loffRun || { left: 0, right: 0 };
+        ['left', 'right'].forEach((sd) => {
+          this._loffRun[sd] = offNow[sd] ? this._loffRun[sd] + 1 : 0;
+        });
+        this._loffOff = { left: this._loffRun.left >= 3, right: this._loffRun.right >= 3 };
+        this._coachOps();
         break;
       }
       case SIDECAR_OUT.BRAINWAVES:

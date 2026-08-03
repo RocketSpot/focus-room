@@ -118,6 +118,17 @@ class ZoneSource:
         # Phase 2A: raw per-channel EEG. The SDK already decodes + emits ADC counts
         # here every chunk; before 2A nothing subscribed, so raw never left the SDK.
         self.sdk.on_raw_data(self._on_raw)
+        # Live electrode contact from the inline lead-off bits. Costs nothing: the
+        # bits ride along on samples that were arriving anyway, so unlike the
+        # Goertzel impedance check (which injects a current and therefore cannot
+        # run while streaming) this works DURING a reading. Operator only.
+        try:
+            self.sdk.connection.set_leadoff_tap(self._on_leadoff)
+        except Exception:
+            pass          # older transport without the tap: contact stays pre-session only
+        self._loff = {1: [0, 0], 2: [0, 0]}      # device -> [p_bits, n_bits]
+        self._loff_seen = False
+        self._last_loff_emit = 0.0
         # The room's own band analysis. It taps the SAME raw callback the transport
         # does, so the measured numbers and the displayed trace come from one stream
         # of samples rather than from two pipelines that can disagree.
@@ -737,6 +748,31 @@ class ZoneSource:
         if now - getattr(self, "_last_analysis_report", 0.0) >= 1.0:
             self._last_analysis_report = now
             self.tx.send(OUT.ANALYSIS, **self._analyzer.counters())
+
+    def _on_leadoff(self, device_id, loff_p, loff_n):
+        """One packet's lead-off bits. A SET bit means that pin is off the skin.
+
+        Called at the sample rate, so it only stores; the summary goes out at 1 Hz
+        from here rather than from a timer, so it stops the moment samples stop.
+        """
+        self._loff[1 if device_id == 1 else 2] = [loff_p, loff_n]
+        self._loff_seen = True
+        now = time.monotonic()
+        if now - self._last_loff_emit < 1.0:
+            return
+        self._last_loff_emit = now
+        sides = {}
+        for dev, side in ((1, "left"), (2, "right")):
+            p, n = self._loff[dev]
+            chans = {}
+            for ch in (0, 1):
+                off_p = bool((p >> ch) & 1)
+                off_n = bool((n >> ch) & 1)
+                chans[f"ch{ch + 1}"] = {"p": not off_p, "n": not off_n,
+                                        "off": bool(off_p or off_n)}
+            sides[side] = chans
+        self.tx.send(OUT.LEADOFF, sides=sides,
+                     source="inline-leadoff-bits", duringStream=bool(self._streaming))
 
     def _on_stats(self, s):
         self.tx.send(OUT.STATS, dev1=s.get("dev1"), dev2=s.get("dev2"), elapsed=s.get("elapsed"))

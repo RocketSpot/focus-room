@@ -25,6 +25,10 @@ class OUT:
     CONNECTION = "eeg/connection"
     BATTERY = "fit/battery"
     IMPEDANCE = "fit/impedance"
+    # Live per-channel electrode contact, decoded from the lead-off bits the
+    # firmware sends inline with every sample. Unlike IMPEDANCE this needs no
+    # injected current, so it works DURING a reading. Operator-facing only.
+    LEADOFF = "fit/leadoff"
     PLATEAU = "session/plateau"
     DIP = "session/dip"
     ARCHETYPE = "session/archetype"

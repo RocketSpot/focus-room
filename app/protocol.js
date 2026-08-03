@@ -113,6 +113,9 @@ const SIDECAR_OUT = Object.freeze({
   CONNECTION: 'eeg/connection',
   BATTERY: 'fit/battery',
   IMPEDANCE: 'fit/impedance',
+  // { side: {ch1:{p,n,off}, ch2:{...}}, ... } live electrode contact during a
+  // reading, from the inline lead-off bits. Operator console only.
+  LEADOFF: 'fit/leadoff',
   // engine signals
   PLATEAU: 'session/plateau',  // a real sustained high plateau was detected
   DIP: 'session/dip',          // a real (non-artifact) dip confirmed
