@@ -49,7 +49,11 @@ if (!files.length) {
 let failed = 0;
 for (const f of files) {
   process.stdout.write(`\n=== ${f} ===\n`);
-  const r = spawnSync(py, [path.join(TESTS, f)], { stdio: 'inherit' });
+  // PYTHONUTF8: the tests print unicode (→, ≤); on Windows the console codec
+  // is cp1252 and a bare print() CRASHES the test file mid-run. The pipeline
+  // was fine — the environment wasn't. Force UTF-8 for the child.
+  const r = spawnSync(py, [path.join(TESTS, f)],
+    { stdio: 'inherit', env: { ...process.env, PYTHONUTF8: '1' } });
   if (r.status !== 0) failed += 1;
 }
 
