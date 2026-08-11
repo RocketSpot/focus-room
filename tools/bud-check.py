@@ -142,6 +142,11 @@ try:
 except Exception as e:
     die(f"could not import the room's DSP ({e}).",
         "Run this from inside a clone of the focus-room repo.")
+from scipy import signal as _sig
+
+# Nominal ADC scale. The calibration chain is unverified, so nothing guest-facing
+# is ever printed in uV — but a coarse "tens vs thousands" contact check is fine.
+UV_PER_COUNT = 0.02235
 
 
 def decode(payload, sink):
@@ -243,9 +248,52 @@ async def capture(seconds):
         await client.disconnect()
         die("connected, but no candidate service produced decodable EEG.",
             "The table above is the bud's real GATT — send it to engineering.")
-    sink[0].clear(); sink[1].clear(); sink["loff"].clear()
     print(f"  streaming: {u['service']}")
     print(f"  family: {family_of(u['service'])}\n")
+
+    # The buds arrive with the ADS1299 lead-off contact-check current ARMED, and
+    # the firmware leaves it running until something says stop. On a real ear
+    # that injected current painted a harmonic comb — 5/10/15/20 Hz lines up to
+    # +19 dB — straight through theta, alpha and beta: the first in-ear run
+    # measured the 10 Hz harmonic as "alpha" and Berger's test was unwinnable.
+    # The room disarms it before every reading (zone.py, 'lead0'); same here.
+    disarmed = False
+    try:
+        await client.write_gatt_char(u["rx"], b"lead0", response=False)
+        disarmed = True
+    except Exception:
+        print("  could not send lead0 — expect excitation lines in the result")
+    await asyncio.sleep(1.0)
+    sink[0].clear(); sink[1].clear(); sink["loff"].clear()
+
+    async def inband_rms(seconds=3.0):
+        """In-band (2-45 Hz) level over a short grab, in nominal uV. Seated dry
+        electrodes read tens at most; an unseated bud reads hundreds up."""
+        s0 = len(sink[0])
+        await asyncio.sleep(seconds)
+        chans = [np.asarray(sink[c][s0:], dtype=np.float64) for c in (0, 1)]
+        n = min(len(c) for c in chans)
+        if n < int(FS * 2):
+            return None
+        sos = _sig.butter(4, [2.0, 45.0], btype="bandpass", fs=FS, output="sos")
+        vals = []
+        for c in chans:
+            x = (c[:n] - np.median(c[:n])) * UV_PER_COUNT
+            vals.append(float(np.sqrt(np.mean(_sig.sosfiltfilt(sos, x) ** 2))))
+        return max(vals)
+
+    contact = None
+    for _ in range(3):
+        contact = await inband_rms()
+        if contact is not None and contact < 60.0:
+            print(f"  contact looks plausible (~{contact:.0f} in-band)")
+            break
+        lvl = "no samples" if contact is None else f"~{contact:.0f}"
+        print(f"  in-band level {lvl} — seated electrodes read tens, not that.")
+        print("  Reseat the bud (twist it snug), then hold still ...")
+        await asyncio.sleep(4.0)
+    else:
+        print("  still high — continuing, but expect windows to be rejected.")
 
     async def window(label, instruction):
         print(f"  >>> {instruction}")
@@ -276,7 +324,27 @@ async def capture(seconds):
     return sink, marks, {
         "device": name, "side": side, "family": family_of(u["service"]),
         "service": u["service"], "rx": u["rx"], "tx": u["tx"],
+        "leadOffDisarmSent": disarmed, "contactInbandRmsUv": contact,
     }
+
+
+def comb_excess_db(x):
+    """Height of the worst 5/10/15 Hz excitation line above its spectral
+    neighbours, in dB. Anything big means lead-off injection was live."""
+    x = np.asarray(x, dtype=np.float64)
+    if x.size < int(FS * 16):
+        return None
+    x = (x - np.median(x)) * UV_PER_COUNT
+    f, p = _sig.welch(x, fs=FS, nperseg=int(FS * 8), noverlap=int(FS * 4))
+    df = f[1] - f[0]
+    worst = 0.0
+    for k in (1, 2, 3):
+        i0 = int(round(5.0 * k / df))
+        if i0 + 6 >= f.size:
+            break
+        nb = np.median([p[i0 - 6], p[i0 + 6]])
+        worst = max(worst, 10.0 * np.log10(max(p[i0], 1e-30) / max(nb, 1e-30)))
+    return worst
 
 
 def analyse(sink, marks):
@@ -337,6 +405,16 @@ def report(res, meta, sink, marks, seconds):
     print("  On the old statistic an awake reader measured 77% delta. Anything")
     print("  under about 1.5 dB here means that failure mode is gone on real data.")
 
+    comb = max((c for c in (comb_excess_db(sink[0][a:b])
+                            for a, b in marks.values()) if c is not None),
+               default=None)
+    meta["combExcessDb"] = comb
+    if comb is not None and comb > 6.0:
+        print(f"\n  WARNING: a 5 Hz harmonic comb is present (+{comb:.0f} dB).")
+        print("  That is the lead-off contact-check current, not brain. This")
+        print("  firmware seems to keep injecting despite 'lead0', so the band")
+        print("  numbers above are not trustworthy. Worth telling engineering.")
+
     out_dir = os.path.join(ROOT, "data", "validation")
     os.makedirs(out_dir, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -346,6 +424,9 @@ def report(res, meta, sink, marks, seconds):
             "recordedAt": stamp, "device": meta["device"], "side": meta["side"],
             "uuidFamily": meta["family"], "service": meta["service"],
             "rx": meta["rx"], "tx": meta["tx"],
+            "leadOffDisarmSent": meta.get("leadOffDisarmSent"),
+            "contactInbandRmsUv": meta.get("contactInbandRmsUv"),
+            "combExcessDb": meta.get("combExcessDb"),
             "sampleRateAssumed": FS, "secondsPerWindow": seconds,
             "note": "raw ADC counts, never microvolts: the calibration is unverified",
             "marks": {k: list(v) for k, v in marks.items()},
