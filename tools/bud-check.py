@@ -45,22 +45,81 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, "sidecar"))
 
-# Both UUID families seen in the field. The room's own catalogue currently
-# probes only the efaecafe family, so a bud built to either 2fda set will not
-# connect to the installation today. That is worth knowing on its own, and this
-# script reports which one answered.
-FAMILIES = {
-    "bud-33": {
-        "left":  {"tx": "00000000-2fda-0000-0000-000000000243", "rx": "00000000-2fda-0000-0000-000000000242"},
-        "right": {"tx": "00000000-2fda-0000-0000-00000000024c", "rx": "00000000-2fda-0000-0000-00000000024b"},
-    },
-    "bud-35": {
-        "left":  {"tx": "00000000-2fda-0000-0000-000000000267", "rx": "00000000-2fda-0000-0000-000000000266"},
-        "right": {"tx": "00000000-2fda-0000-0000-000000000270", "rx": "00000000-2fda-0000-0000-00000000026f"},
-    },
+# No hardcoded UUIDs. An earlier version tried four characteristic pairs lifted
+# from two GUI scripts (buds 33 and 35 of the 2fda family) — but in both known
+# families every bud serial gets DIFFERENT characteristic IDs, so any other bud
+# connected and then streamed nothing. This script now does what the room's own
+# sidecar does: open the live GATT table and pick the notify(data)/write(command)
+# pair, preferring known Zone families but accepting any vendor service that
+# fits. It still reports which family answered, which is worth knowing on its own.
+SIG_BASE_SUFFIX = "-0000-1000-8000-00805f9b34fb"   # standard services (battery, device-info)
+DFU_SERVICES = {                                   # firmware-update services that would
+    "00001530-1212-efde-1523-785feabcd123",        # otherwise look like notify+write pairs
+    "8ec90001-f315-4f60-9fb8-838830daea50",
+    "fe59",
 }
+NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
+ZONE_EEG_PREFIXES = ("00000000-2fda-", "efaecafe-")
 
 FS = 250.0
+
+
+def family_of(service_uuid):
+    if service_uuid.startswith("00000000-2fda-"):
+        return "2fda (legacy GUI-script family)"
+    if service_uuid.startswith("efaecafe-"):
+        return "efaecafe (July 2026 engineering catalogue)"
+    if service_uuid == NUS_SERVICE:
+        return "Nordic UART"
+    return "unrecognised vendor service"
+
+
+def rank_candidates(services):
+    """The sidecar's discovery logic, standalone: every plausible EEG service,
+    best first. Prefer a Zone-family service with separate notify and write
+    characteristics; fall back to any vendor service that has both roles."""
+    ranked = []
+    for s in services:
+        su = str(s.uuid).lower()
+        if su.endswith(SIG_BASE_SUFFIX) or su in DFU_SERVICES:
+            continue
+        chars = list(s.characteristics)
+        notify = [c for c in chars
+                  if any(p in c.properties for p in ("notify", "indicate"))]
+        writes = [c for c in chars
+                  if any(p in c.properties for p in ("write", "write-without-response"))]
+        if not notify or not writes:
+            continue
+        tx = next((c for c in notify
+                   if not any(p in c.properties for p in ("write", "write-without-response"))),
+                  notify[0])
+        cmd_only = [c for c in writes
+                    if not any(p in c.properties for p in ("notify", "indicate"))]
+        pool = cmd_only or writes
+        rx = next((c for c in pool if "write-without-response" in c.properties), pool[0])
+        disjoint = str(tx.uuid) != str(rx.uuid)
+        zone = su.startswith(ZONE_EEG_PREFIXES)
+        tier = 0 if (zone and disjoint) else 1 if disjoint else 2 if zone else 3
+        ranked.append((tier, su, {
+            "service": su, "rx": str(rx.uuid).lower(), "tx": str(tx.uuid).lower(),
+            "notify": [str(c.uuid).lower() for c in notify],
+        }))
+    ranked.sort(key=lambda r: (r[0], r[1]))
+    return [t for _, _, t in ranked]
+
+
+def dump_gatt(services):
+    print("\n  the bud's full GATT table (ground truth for engineering):")
+    for s in services:
+        su = str(s.uuid).lower()
+        note = ""
+        if su.endswith(SIG_BASE_SUFFIX):
+            note = "  (standard)"
+        elif su in DFU_SERVICES:
+            note = "  (firmware update)"
+        print(f"    service {su}{note}")
+        for c in s.characteristics:
+            print(f"      {str(c.uuid).lower()}  {'/'.join(c.properties)}")
 
 
 def die(msg, hint=""):
@@ -135,27 +194,58 @@ async def capture(seconds):
         die("the bud would not connect.")
     print(f"  connected to {dev.name}")
 
-    used = None
-    for fam, sides in FAMILIES.items():
-        for side, u in sides.items():
+    try:
+        await client.get_services()
+    except Exception:
+        pass
+    services = list(client.services)
+    cands = rank_candidates(services)
+    if not cands:
+        dump_gatt(services)
+        await client.disconnect()
+        die("connected, but the bud exposes no notify+write service at all.",
+            "The table above is the bud's real GATT — send it to engineering.")
+
+    u = None
+    for cand in cands:
+        subs = []
+        for cu in cand["notify"]:
             try:
-                await client.start_notify(u["tx"], on_notify)
-                await client.write_gatt_char(u["rx"], b"b", response=False)
-                await asyncio.sleep(1.2)
-                if len(sink[0]) > 40:
-                    used = (fam, side, u)
-                    break
-                await client.stop_notify(u["tx"])
+                await client.start_notify(cu, on_notify)
+                subs.append(cu)
             except Exception:
                 continue
-        if used:
+        if not subs:
+            continue
+        sink[0].clear(); sink[1].clear(); sink["loff"].clear()
+        try:
+            # the SDK's real start sequence: reset, defaults, begin
+            for cmd in (b"v", b"d", b"b"):
+                await client.write_gatt_char(cand["rx"], cmd, response=False)
+                await asyncio.sleep(0.05)
+        except Exception:
+            pass
+        await asyncio.sleep(1.5)
+        if len(sink[0]) > 40:
+            u = cand
             break
-    if not used:
+        try:
+            await client.write_gatt_char(cand["rx"], b"s", response=False)
+        except Exception:
+            pass
+        for cu in subs:
+            try:
+                await client.stop_notify(cu)
+            except Exception:
+                pass
+    if not u:
+        dump_gatt(services)
         await client.disconnect()
-        die("connected, but no EEG arrived on any known characteristic.",
-            "The firmware may use a different UUID family than either GUI script.")
-    fam, side, u = used
-    print(f"  streaming: {fam}, {side} characteristics\n")
+        die("connected, but no candidate service produced decodable EEG.",
+            "The table above is the bud's real GATT — send it to engineering.")
+    sink[0].clear(); sink[1].clear(); sink["loff"].clear()
+    print(f"  streaming: {u['service']}")
+    print(f"  family: {family_of(u['service'])}\n")
 
     async def window(label, instruction):
         print(f"  >>> {instruction}")
@@ -181,7 +271,12 @@ async def capture(seconds):
     except Exception:
         pass
     await client.disconnect()
-    return sink, marks, (fam, side, dev.name)
+    name = dev.name or ""
+    side = "left" if "left" in name.lower() else "right" if "right" in name.lower() else "unknown"
+    return sink, marks, {
+        "device": name, "side": side, "family": family_of(u["service"]),
+        "service": u["service"], "rx": u["rx"], "tx": u["tx"],
+    }
 
 
 def analyse(sink, marks):
@@ -248,7 +343,9 @@ def report(res, meta, sink, marks, seconds):
     path = os.path.join(out_dir, f"bud-check-{stamp}.json")
     with open(path, "w") as f:
         json.dump({
-            "recordedAt": stamp, "device": meta[2], "uuidFamily": meta[0], "side": meta[1],
+            "recordedAt": stamp, "device": meta["device"], "side": meta["side"],
+            "uuidFamily": meta["family"], "service": meta["service"],
+            "rx": meta["rx"], "tx": meta["tx"],
             "sampleRateAssumed": FS, "secondsPerWindow": seconds,
             "note": "raw ADC counts, never microvolts: the calibration is unverified",
             "marks": {k: list(v) for k, v in marks.items()},
