@@ -256,14 +256,48 @@ async def capture(seconds):
     # that injected current painted a harmonic comb — 5/10/15/20 Hz lines up to
     # +19 dB — straight through theta, alpha and beta: the first in-ear run
     # measured the 10 Hz harmonic as "alpha" and Berger's test was unwinnable.
-    # The room disarms it before every reading (zone.py, 'lead0'); same here.
+    # A bare mid-stream 'lead0' only weakened it, so do what the room does
+    # (zone.py stop_impedance → start_streaming): stop, disarm, restart — and
+    # then VERIFY on live signal that the comb is gone, falling back to a
+    # second sequence if not.
+    async def send_seq(seq):
+        for cmd, pause in seq:
+            await client.write_gatt_char(u["rx"], cmd.encode(), response=False)
+            await asyncio.sleep(pause)
+
+    async def grab(seconds):
+        s0 = len(sink[0])
+        await asyncio.sleep(seconds)
+        return np.asarray(sink[0][s0:], dtype=np.float64)
+
     disarmed = False
-    try:
-        await client.write_gatt_char(u["rx"], b"lead0", response=False)
-        disarmed = True
-    except Exception:
+    comb_now = None
+    for seq in ((("s", 0.4), ("lead0", 0.4), ("v", 0.05), ("d", 0.05), ("b", 0.6)),
+                (("s", 0.4), ("lead0", 0.4), ("b", 0.6))):
+        try:
+            await send_seq(seq)
+            disarmed = True
+        except Exception:
+            continue
+        sink[0].clear(); sink[1].clear(); sink["loff"].clear()
+        seg = await grab(4.5)
+        if len(seg) < FS * 2:
+            # this sequence stalled the stream — bring it back, try the next
+            try:
+                await send_seq((("v", 0.05), ("d", 0.05), ("b", 0.6)))
+            except Exception:
+                pass
+            continue
+        comb_now = comb_excess_db(seg)
+        if comb_now is not None and comb_now < 6.0:
+            break
+    if not disarmed:
         print("  could not send lead0 — expect excitation lines in the result")
-    await asyncio.sleep(1.0)
+    elif comb_now is not None and comb_now >= 6.0:
+        print(f"  lead-off tone still visible (+{comb_now:.0f} dB) after both")
+        print("  disarm sequences — continuing; the result will flag it.")
+    else:
+        print("  lead-off injection disarmed, no 5 Hz comb in live signal")
     sink[0].clear(); sink[1].clear(); sink["loff"].clear()
 
     async def inband_rms(seconds=3.0):
@@ -282,16 +316,22 @@ async def capture(seconds):
             vals.append(float(np.sqrt(np.mean(_sig.sosfiltfilt(sos, x) ** 2))))
         return max(vals)
 
+    # Contact gate. The measurement must come AFTER the hands leave the bud:
+    # the first field run measured DURING the reseat and read the fingers
+    # (99 → 3321 → 14643) instead of the seated result. So: prompt, give the
+    # guest 6 s to reseat and settle, then measure 3 s of untouched signal.
     contact = None
-    for _ in range(3):
+    for attempt in range(4):
         contact = await inband_rms()
         if contact is not None and contact < 60.0:
             print(f"  contact looks plausible (~{contact:.0f} in-band)")
             break
         lvl = "no samples" if contact is None else f"~{contact:.0f}"
         print(f"  in-band level {lvl} — seated electrodes read tens, not that.")
-        print("  Reseat the bud (twist it snug), then hold still ...")
-        await asyncio.sleep(4.0)
+        if attempt < 3:
+            print("  Reseat the bud (twist it snug), take your hand away,")
+            print("  and hold still — measuring again in a few seconds ...")
+            await asyncio.sleep(6.0)
     else:
         print("  still high — continuing, but expect windows to be rejected.")
 
@@ -325,6 +365,7 @@ async def capture(seconds):
         "device": name, "side": side, "family": family_of(u["service"]),
         "service": u["service"], "rx": u["rx"], "tx": u["tx"],
         "leadOffDisarmSent": disarmed, "contactInbandRmsUv": contact,
+        "combAfterDisarmDb": comb_now,
     }
 
 
@@ -332,17 +373,19 @@ def comb_excess_db(x):
     """Height of the worst 5/10/15 Hz excitation line above its spectral
     neighbours, in dB. Anything big means lead-off injection was live."""
     x = np.asarray(x, dtype=np.float64)
-    if x.size < int(FS * 16):
+    if x.size < int(FS * 4):
         return None
     x = (x - np.median(x)) * UV_PER_COUNT
-    f, p = _sig.welch(x, fs=FS, nperseg=int(FS * 8), noverlap=int(FS * 4))
+    nper = int(min(FS * 8, x.size // 2))
+    f, p = _sig.welch(x, fs=FS, nperseg=nper, noverlap=nper // 2)
     df = f[1] - f[0]
+    w = max(2, int(round(0.75 / df)))
     worst = 0.0
     for k in (1, 2, 3):
         i0 = int(round(5.0 * k / df))
-        if i0 + 6 >= f.size:
+        if i0 + w >= f.size:
             break
-        nb = np.median([p[i0 - 6], p[i0 + 6]])
+        nb = np.median([p[i0 - w], p[i0 + w]])
         worst = max(worst, 10.0 * np.log10(max(p[i0], 1e-30) / max(nb, 1e-30)))
     return worst
 
@@ -426,6 +469,7 @@ def report(res, meta, sink, marks, seconds):
             "rx": meta["rx"], "tx": meta["tx"],
             "leadOffDisarmSent": meta.get("leadOffDisarmSent"),
             "contactInbandRmsUv": meta.get("contactInbandRmsUv"),
+            "combAfterDisarmDb": meta.get("combAfterDisarmDb"),
             "combExcessDb": meta.get("combExcessDb"),
             "sampleRateAssumed": FS, "secondsPerWindow": seconds,
             "note": "raw ADC counts, never microvolts: the calibration is unverified",
