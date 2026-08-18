@@ -86,7 +86,8 @@ class BandAnalyzer:
                                      btype="band", fs=self.fs, output="sos")
         self._edge = int(round(EDGE_GUARD_SEC * self.fs))
         self._buf = [deque(maxlen=self.window_n) for _ in range(self.n_channels)]
-        self._labels = [f"ch{i}" for i in range(self.n_channels)]
+        # canonical slot labels; ingest maps arriving labels onto these
+        self._labels = ["Left-A", "Left-B", "Right-A", "Right-B"][: self.n_channels]
         self._since_hop = 0
         # session-scoped references, seeded from accepted windows
         self._amp_ref = [deque(maxlen=REF_WINDOWS) for _ in range(self.n_channels)]
@@ -118,23 +119,38 @@ class BandAnalyzer:
 
     # ---------------- ingest ----------------
     def ingest(self, cols, labels=None):
-        """cols: list of per-channel sample lists, as zone_source._on_raw receives."""
+        """cols: per-channel sample lists, as zone_source._on_raw receives.
+
+        Channels are placed by LABEL into fixed slots (Left-A, Left-B, Right-A,
+        Right-B), never by position. The raw callback hands over two columns
+        when a single bud streams, and positionally those landed in slots 0
+        and 1 regardless of which ear they came from, so a right-bud-only
+        stretch was screened against the LEFT ear's amplitude references and
+        rejected wholesale. On the first hardware day, with buds dropping in
+        and out, single-bud stretches were the norm, not the edge case.
+        """
         if not cols:
             return
-        if labels:
-            self._labels = list(labels)[: self.n_channels] or self._labels
         n = 0
-        for i, col in enumerate(cols[: self.n_channels]):
+        slots = None
+        if labels:
+            idx = {lab: k for k, lab in enumerate(self._labels)}
+            got = [idx.get(lab) for lab in labels[: self.n_channels]]
+            if all(g is not None for g in got):
+                slots = got
+        for j, col in enumerate(cols[: self.n_channels]):
             if col is None:
                 continue
-            self._buf[i].extend(float(v) for v in col)
+            slot = slots[j] if slots is not None and j < len(slots) else j
+            self._buf[slot].extend(float(v) for v in col)
             n = max(n, len(col))
         self._since_hop += n
-        while self._since_hop >= self.hop_n and len(self._buf[0]) >= self.window_n:
+        # schedule on the FULLEST buffer, not slot 0: with correct label mapping a
+        # right-bud-only stream fills slots 2 and 3, and keying on slot 0 would
+        # mean a single right bud never produced a window at all
+        while self._since_hop >= self.hop_n and max(len(b) for b in self._buf) >= self.window_n:
             self._since_hop -= self.hop_n
             self._emit_window()
-
-    # ---------------- per-channel screening ----------------
     def _screen(self, i, raw):
         """Decide whether ONE channel's window is usable. Returns (ok, reason, filt).
 

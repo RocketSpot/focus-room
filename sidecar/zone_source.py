@@ -46,6 +46,9 @@ IMPEDANCE_OK_STATES = {"low_z", "pair_ok"}
 # during an outage — below the orchestrator's 0.5 reseat threshold so the guest
 # sees the reseat coaching instead of a silently frozen line.
 RECONNECT_BACKOFF_SEC = (1.0, 3.0, 8.0, 15.0, 30.0)
+# after any ladder finishes (either way), leave the link alone this long; a
+# recovering CoreBluetooth stack treats an instant re-probe as a fresh assault
+RECONNECT_COOLDOWN_SEC = float(os.environ.get("FOCUSROOM_RECONNECT_COOLDOWN_SEC", "8.0"))
 OUTAGE_SIGNAL_QUALITY = 0.15
 
 # Nordic UART Service — the common BLE serial profile; preferred if a bud exposes it.
@@ -246,8 +249,30 @@ class ZoneSource:
 
     async def _match_side(self, address, pairs, side):
         """Drop-in for the SDK's catalogue matcher: probe the live GATT and return
-        this bud's own EEG triplet as the 'auto' pair match (or None to fail)."""
+        this bud's own EEG triplet as the 'auto' pair match (or None to fail).
+
+        REUSES the last successful probe when one exists for this address. The
+        probe opens a SECOND BleakClient against the bud purely to re-read its
+        GATT table, and on CoreBluetooth connections are per-process: the
+        probe's own disconnect in its finally-block can tear down the link the
+        SDK is holding, so validating a reconnect could CAUSE the next
+        disconnect. A bud's GATT does not change between connects; ask once.
+        """
+        cache = getattr(self, "_probe_cache", None)
+        if cache is None:
+            cache = self._probe_cache = {}
+        cached = cache.get(address)
+        if cached:
+            self.log(f"{side}: using the cached GATT triplet, no re-probe")
+            if side == "left":
+                self._left_uuids = cached
+            else:
+                self._right_uuids = cached
+            self._arm_keepalive_sibling(side, cached)
+            return ("auto", cached)
         trip = await self._probe_uuids(address, side)
+        if trip:
+            cache[address] = trip
         if not trip:
             return None
         if side == "left":
@@ -588,6 +613,11 @@ class ZoneSource:
                              f"({counts[side]:.0f} received) — keeping it")
                     continue
                 self._eeg_failed[side].add(current["service"])
+                # a service that went silent invalidates the probe cache for BOTH buds:
+                # the next validation must re-read the real GATT, not replay a triplet
+                # that just proved dead
+                if getattr(self, "_probe_cache", None):
+                    self._probe_cache.clear()
             self.log("LIVENESS: no metrics 6s into streaming — ROTATING EEG pick; "
                      f"failed L={sorted(self._eeg_failed['left'])} "
                      f"R={sorted(self._eeg_failed['right'])}")
@@ -623,6 +653,21 @@ class ZoneSource:
 
     async def stop_session(self):
         self._session_active = False
+        # THE GUEST BOUNDARY. The analyser's artifact references are amplitude
+        # medians of accepted windows, and they were kept for the LIFETIME OF THE
+        # PROCESS: guest 2 was screened against guest 1's ears, and on the first
+        # hardware day that took the accept rate from ~11% in session 1 to one
+        # window in ~140 in session 2. Within a guest the references must persist
+        # (fit check -> reading is the same ears), so the full reset lives HERE,
+        # at the end of a session, which is the only place a guest ends.
+        self._analyzer.reset(keep_references=False)
+        # and an in-flight reconnect ladder must die with the session it served:
+        # session 1's recovery was still allowed to thrash session 2's link
+        self._reconnecting = False
+        task = getattr(self, "_reconnect_task", None)
+        if task is not None and not task.done():
+            task.cancel()
+            self._reconnect_task = None
         if self._eeg_stream is not None:
             self._eeg_stream.close("stop_session")   # flush + close any validation capture
         self._eeg_stream = None   # ignore any raw callbacks that arrive after stop
@@ -718,6 +763,21 @@ class ZoneSource:
         self._metrics_since_stream += 1        # liveness: measured windows are flowing
         osc, ap, q = r["osc"], r["aperiodic"], r["quality"]
         share = r["share"]
+        # FRAME FIRST. The orchestrator anchors its stream timeline on the first
+        # frame and discards any band row that arrives before the anchor. Sending
+        # the band row first therefore guaranteed the first accepted window of
+        # every reading lost its bands, and on the first hardware day session 2
+        # produced exactly one accepted window, so 'first' was 'only': the whole
+        # session recorded bands: 0, frames: 1. Order is the fix.
+        frame = self.engine.feed(r["engagement"], now_ms)
+        if frame is not None:
+            events = frame.pop("events", [])
+            self.tx.send(OUT.FRAME, **frame)
+            for ev in events:
+                if ev == "plateau":
+                    self.tx.send(OUT.PLATEAU, tRel=frame["tRel"])
+                elif ev == "dip":
+                    self.tx.send(OUT.DIP, tRel=frame["tRel"])
         self.tx.send(
             OUT.BRAINWAVES,
             # legacy field names carry the CORRECT half-open share, summing to 1.0,
@@ -733,15 +793,7 @@ class ZoneSource:
                 "mode": ap["mode"], "ok": ap["ok"]},
             quality=q,
         )
-        frame = self.engine.feed(r["engagement"], now_ms)
-        if frame is not None:
-            events = frame.pop("events", [])
-            self.tx.send(OUT.FRAME, **frame)
-            for ev in events:
-                if ev == "plateau":
-                    self.tx.send(OUT.PLATEAU, tRel=frame["tRel"])
-                elif ev == "dip":
-                    self.tx.send(OUT.DIP, tRel=frame["tRel"])
+
 
         # session counters, so the orchestrator can judge data quality on facts
         now = time.monotonic()
@@ -828,8 +880,18 @@ class ZoneSource:
         if getattr(self.sdk, "_inside_sample_rate_recovery", False):
             self.log(f"{status}: SDK sample-rate recovery in flight — leaving it to the SDK")
             return
+        # COOLDOWN. There was no minimum interval anywhere in this path, so the
+        # ladder could restart the instant its own finally-block cleared the
+        # flag, and a disconnect callback delivered late (call_soon_threadsafe
+        # from a Bleak worker) could start the app's ladder on top of the SDK's
+        # own recovery, both cycling stop/start streaming on one link. That is
+        # the churn the operator watched scroll past. One ladder per cooldown.
+        now = time.monotonic()
+        if now - getattr(self, "_last_ladder_end", 0.0) < RECONNECT_COOLDOWN_SEC:
+            self.log(f"{status}: inside the reconnect cooldown, letting the link settle")
+            return
         self._reconnecting = True
-        asyncio.create_task(self._attempt_reconnect(status))
+        self._reconnect_task = asyncio.create_task(self._attempt_reconnect(status))
 
     async def _attempt_reconnect(self, status):
         """Mid-reading bud-loss recovery. Reconnect ONLY the lost link, flush
@@ -874,6 +936,10 @@ class ZoneSource:
                     except Exception as e:
                         self.log(f"post-reconnect stop_streaming error: {e}")
                     self._flush_stale_buffers("reconnect")
+                    # the analyser's own 6 s ring must flush too: stitching pre-outage samples
+                    # onto post-outage samples makes a step edge that blinds it for a further
+                    # window beyond the outage itself. References stay: same guest, same ears.
+                    self._analyzer.reset(keep_references=True)
                     self._metrics_since_stream = 0
                     # re-check: a STOP_SESSION may have landed during the awaits
                     # above — leave the stream down rather than orphan it.
@@ -899,6 +965,7 @@ class ZoneSource:
                               f"attempts" + (f" (last error: {last_err})" if last_err else "")))
         finally:
             self._reconnecting = False
+            self._last_ladder_end = time.monotonic()
 
     async def _reconnect_lost_sides(self):
         """Reconnect whichever link(s) are down, leaving the healthy bud alone.

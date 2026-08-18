@@ -43,3 +43,5 @@ data/validation/
 app/version.json
 build/pyruntime-cache/
 build/pyruntime/
+data/room.log
+data/room.log.1

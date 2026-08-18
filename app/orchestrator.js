@@ -779,6 +779,9 @@ class Orchestrator extends EventEmitter {
       // "measured"); 'insufficient-usable-data' ⇒ real signal never reached reveal
       // eligibility; 'ok' ⇒ reveal-eligible. staffOverride is the explicit flag.
       dataQualityStatus: this.sessionDataQualityStatus || (r.dataQualityStatus || null),
+      // the analyser's accounting rides the record, so the next bad day is a
+      // histogram read instead of a forensic reconstruction
+      analysis: this._analysisCounters || null,
       staffOverride: !!this._staffOverride,
       eegDerivedClaimsAllowed: r.eegDerivedClaimsAllowed !== false,
       interruptT: r.interruptT != null ? r.interruptT : null,
@@ -848,6 +851,15 @@ class Orchestrator extends EventEmitter {
     this._lastFrameAt = this.now();
     if (!this._eegDown) return;
     this._eegDown = false;
+    // a deferred interruption fires shortly after the stream returns: two
+    // seconds, enough for one fresh analysis window, instead of up to six
+    if (this._interruptionDeferred && this.beat === 'reading' && !this.interruptionFired) {
+      this._interruptionDeferred = false;
+      this._clearReadingFallback();
+      this._readingFallback = setTimeout(() => {
+        if (this.beat === 'reading' && !this.interruptionFired) this._fireInterruption();
+      }, 2000);
+    }
     // a reading held at the safe point starts itself once the stream is back
     if (this._pendingReadingStart && this.beat === 'picker') {
       this._pendingReadingStart = false;
@@ -1068,6 +1080,17 @@ class Orchestrator extends EventEmitter {
         this._coachOps();
         break;
       }
+      case SIDECAR_OUT.ANALYSIS:
+        // The analyser's own accounting: accepted, dropped, and WHY. Emitted
+        // once a second for every session that ever ran, and until now dropped
+        // on the floor with no consumer, which is why diagnosing the first
+        // hardware day took code archaeology instead of reading a histogram.
+        this._analysisCounters = {
+          windowsAccepted: msg.windowsAccepted, windowsDropped: msg.windowsDropped,
+          acceptedFraction: msg.acceptedFraction, dropReasons: msg.dropReasons || {},
+          exponentMedian: msg.exponentMedian,
+        };
+        break;
       case SIDECAR_OUT.BRAINWAVES:
         // Record ONLY once the frame clock has anchored the timeline. Brainwaves
         // can beat the first frame in, and _streamT's wall-clock fallback stamped
@@ -1105,8 +1128,26 @@ class Orchestrator extends EventEmitter {
       // auto-reconnect, so this is reported, recorded and rendered calmly, it
       // never drives a beat change.
       case SIDECAR_OUT.CONNECTION: {
+        // THE CONTRACT, learned the hard way on the first hardware day. Three
+        // different emitters share this message type: the connect() result
+        // (carries a boolean `connected`), the 1 Hz stats heartbeat (carries
+        // leftConnected/rightConnected and NO `connected` field), and the SDK's
+        // raw status strings (carry neither). The old `msg.connected !== false`
+        // read the last two as CONNECTED, always. So one failed connect flipped
+        // the state false, the next heartbeat flipped it back, and the record
+        // gained a disconnect-reconnect pair 248 to 583 ms apart, which is one
+        // stats tick, for a drop that never happened. Meanwhile a genuine
+        // left_disconnected status read as connected. Only explicit evidence
+        // moves the state now; vocabulary-only messages never do.
         const was = this._budsConnected;
-        this._budsConnected = msg.connected !== false;
+        if (typeof msg.connected === 'boolean') {
+          this._budsConnected = msg.connected;
+        } else if (typeof msg.leftConnected === 'boolean' || typeof msg.rightConnected === 'boolean') {
+          // the heartbeat: connected means at least one bud is genuinely up
+          this._budsConnected = (msg.leftConnected === true) || (msg.rightConnected === true);
+        } else {
+          break;   // status-string vocabulary: log fodder for the console, not state
+        }
         if (was !== this._budsConnected) {
           if (!this._budsConnected) {
             this.signalIssue = true;
@@ -1184,6 +1225,10 @@ class Orchestrator extends EventEmitter {
     // the room's one interruption with zero signal to measure it against.
     if (this._eegDown || this._lastFrameAt == null) {
       this.log('interruption due, but there is no live EEG signal, deferring until the signal returns');
+      // remembered, so recovery can fire it PROMPTLY instead of waiting for the
+      // next 6-second poll: on the first hardware day the first frame missed a
+      // poll deadline by 691 ms and cost a full extra rung of lateness
+      this._interruptionDeferred = true;
       this._clearReadingFallback();
       this._readingFallback = setTimeout(() => {
         if (this.beat === 'reading' && !this.interruptionFired) this._fireInterruption();

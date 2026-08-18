@@ -42,7 +42,7 @@ const SURFACE_FORWARD = new Set([
   SIDECAR_OUT.BRAINWAVES,  // guest signal surface renders these as NUMBER-FREE relative presence
   SIDECAR_OUT.CONNECTION,
   SIDECAR_OUT.BATTERY,
-  SIDECAR_OUT.IMPEDANCE, SIDECAR_OUT.LEADOFF,
+  SIDECAR_OUT.IMPEDANCE, SIDECAR_OUT.LEADOFF, SIDECAR_OUT.ANALYSIS,
   // NOTE: EEG_CONFIG / EEG_RAW / EEG_QUALITY are intentionally NOT here, they are
   // routed to the TV role only (item 11), handled explicitly in wireSidecar.
 ]);
@@ -68,8 +68,36 @@ function createRoom(hooks = {}) {
 
   // Mirror the diagnostic feed to the host's sink (if any) and to every
   // connected operator console over the WS bus, under the 'ops' role.
+  // The room's diagnostic feed also lands on DISK now. On the first hardware
+  // day every BLE line, reconnect message and analyser counter lived only in
+  // the operator console's in-memory pane, so when the runs went wrong there
+  // was nothing to read back and the diagnosis took code archaeology against
+  // two JSON records. A flat, size-capped log fixes that class of problem
+  // permanently. It carries NO raw EEG (raw types never reach pushDiag) and
+  // no guest text; it is connection status, engine state and counters.
+  const ROOM_LOG = path.join(config.dataDir, 'room.log');
+  const ROOM_LOG_MAX = 4 * 1024 * 1024;
+  let roomLogSize = null;
+  function diskDiag(channel, payload) {
+    try {
+      if (roomLogSize === null) {
+        try { roomLogSize = fs.existsSync(ROOM_LOG) ? fs.statSync(ROOM_LOG).size : 0; }
+        catch (_) { roomLogSize = 0; }
+      }
+      const line = new Date().toISOString() + ' ' + channel + ' ' + JSON.stringify(payload) + '\n';
+      if (roomLogSize > ROOM_LOG_MAX) {
+        // one rotation deep: yesterday's truth is worth keeping, last week's is not
+        try { fs.renameSync(ROOM_LOG, ROOM_LOG + '.1'); } catch (_) {}
+        roomLogSize = 0;
+      }
+      roomLogSize += Buffer.byteLength(line);
+      fs.appendFile(ROOM_LOG, line, () => {});
+    } catch (_) { /* the log must never be able to hurt the room */ }
+  }
   function pushDiag(channel, payload) {
     try { if (hooks.onDiag) hooks.onDiag(channel, payload); } catch (_) {}
+    // the frame channel is ~1/s of noise with no diagnostic value on disk
+    if (channel !== 'eeg:frame') diskDiag(channel, payload);
     // Only serialize + fan out when an operator console is actually connected,
     // the feed carries every EEG frame (~1/s), and nobody should pay for it when
     // no one is watching.
