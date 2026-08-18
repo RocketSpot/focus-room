@@ -88,5 +88,34 @@ function mk() {
     /session held/i.test(tv) && !/quality|weak|poor/i.test(tv.match(/#linklost[\s\S]{0,600}/)[0]));
 }
 
+
+
+// ---- the progress trigger (appended here rather than a new file: same era) ----
+{
+  const states2 = [];
+  const supervisor2 = { send: () => true };
+  const server2 = { broadcast: (t, p) => { if (t === 'session/state') states2.push(p); } };
+  const o = new Orchestrator({ supervisor: supervisor2, server: server2, log: () => {} });
+  o._eegSimulation = true;
+  o.beat = 'picker';
+  o._onIntake({ reading: { id: 'octopus', title: 'x' }, t: Date.now() });
+  // stream is alive
+  o._lastFrameAt = o.now();
+  o.timeline.lastFrame = { tRel: 30 };
+  o._readingStartedAtMs = o.now() - 25000;         // 25s into the reading
+  o.onClientMessage({ type: 'guest/event', kind: 'reading_scroll', payload: { p: 0.45 }, t: Date.now() }, 'ipad');
+  check('scrolling past 40% of the piece fires the notification', o.interruptionFired === true);
+
+  const o2 = new Orchestrator({ supervisor: supervisor2, server: server2, log: () => {} });
+  o2._eegSimulation = true;
+  o2.beat = 'picker';
+  o2._onIntake({ reading: { id: 'octopus', title: 'x' }, t: Date.now() });
+  o2._lastFrameAt = o2.now();
+  o2.timeline.lastFrame = { tRel: 5 };
+  o2._readingStartedAtMs = o2.now() - 6000;        // only 6s in: the settle is sacred
+  o2.onClientMessage({ type: 'guest/event', kind: 'reading_scroll', payload: { p: 0.9 }, t: Date.now() }, 'ipad');
+  check('a fast scroller cannot fire it during the settle-in', o2.interruptionFired === false);
+}
+
 console.log(failures === 0 ? '\nall link-lost checks passed' : `\n${failures} FAILURE(S)`);
 process.exit(failures ? 1 : 0);

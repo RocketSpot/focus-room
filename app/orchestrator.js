@@ -42,6 +42,19 @@ const BASELINE_MS = parseInt(process.env.FOCUSROOM_BASELINE_MS || '15000', 10);
 // the fallback ever fired. 75s lands inside every piece while still giving the
 // real EEG plateau the first chance to trigger it.
 const PLATEAU_FALLBACK_MS = parseInt(process.env.FOCUSROOM_PLATEAU_FALLBACK_MS || '75000', 10);
+// The plateau path assumes minutes of reading. On a SHORT piece the plateau
+// often never forms and the 75s fallback can land near, or after, the end,
+// which is exactly what happened on the first real run: one notification,
+// far too late for the reading it interrupted. So the guest's own progress
+// through the page is a third trigger: past this fraction of the piece,
+// the notification fires (stream permitting), because the whole point is to
+// interrupt a person who is DEEP IN THE MIDDLE of reading, and the middle
+// is defined by the page, not by a wall clock. Tunable, like the rest, for
+// the thresholds Ryan will supply later.
+const INTERRUPT_AT_PROGRESS = parseFloat(process.env.FOCUSROOM_INTERRUPT_AT_PROGRESS || '0.4');
+// never fire in the opening moments regardless of how fast someone scrolls:
+// the settle-in stretch is a measurement too, and it needs room to exist
+const INTERRUPT_MIN_READING_MS = parseInt(process.env.FOCUSROOM_INTERRUPT_MIN_READING_MS || '20000', 10);
 
 // The reveal's post-scan processing pause: the room reads the session before it
 // shows the reveal. Real work is instant; this frames it. Tests set it to 0.
@@ -490,6 +503,13 @@ class Orchestrator extends EventEmitter {
           const p = Math.max(0, Math.min(1, (msg.payload && msg.payload.p) || 0));
           const last = this.scrollTrack[this.scrollTrack.length - 1];
           this.scrollTrack.push({ t: this._streamT(), p: last ? Math.max(last.p, p) : p });
+          // the progress trigger: the guest is deep enough into the piece
+          const prog = this.scrollTrack[this.scrollTrack.length - 1].p;
+          if (!this.interruptionFired && prog >= INTERRUPT_AT_PROGRESS
+            && this._readingStartedAtMs && (this.now() - this._readingStartedAtMs) >= INTERRUPT_MIN_READING_MS) {
+            this.log(`interruption: guest is ${Math.round(prog * 100)}% through the piece, firing now`);
+            this._fireInterruption();   // keeps its own guards: reading beat, stream up, once only
+          }
         } else if (kind === GUEST_EVENT.NOTIFICATION_SHOWN) {
           // the iPad reports the actual rendered-frame time of the notification card
           //, a real (if not sample-accurate) onset. Fills the VISUAL marker only;
@@ -547,6 +567,9 @@ class Orchestrator extends EventEmitter {
   }
 
   _beginReading() {
+    // wall-clock anchor for the progress trigger, so a fast scroller still
+    // cannot pull the notification into the settle-in stretch
+    this._readingStartedAtMs = this.now();
     this.interruptionFired = false;
     this.timeline = { streamEpoch: null, lastFrame: null };
     // Reset the stream clock's high-water mark and restart offset: the signal
