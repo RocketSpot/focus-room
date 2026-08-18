@@ -418,7 +418,11 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   const intake = answers.intake || {};
 
   if (!samples || samples.length < 8) {
-    return { reads: minimalReads(), archetype: archetypeFrom(false, false), flat: true, region: null, lost: true,
+    const lastT = Math.max(
+      samples && samples.length ? samples[samples.length - 1].t || 0 : 0,
+      Array.isArray(bands) && bands.length ? bands[bands.length - 1].t || 0 : 0);
+    return { reads: minimalReads({ interruptSec: interruptEegT, durSec: lastT }),
+      archetype: archetypeFrom(false, false), flat: true, region: null, lost: true,
       samplesForReveal: (samples || []).map((p) => ({ t: p.t, v: p.v })) };
   }
 
@@ -816,17 +820,37 @@ function archetypeFrom(quickly, variable) {
   return { label: 'igniter', name: 'Quick Igniter' };
 }
 
-// Not enough signal to measure. No stat blocks here on purpose: a number we
-// couldn't compute must not appear at all, and no QUALITATIVE claim either
-// ("started cleanly and held" was an assertion about a session with almost no
-// usable data). Each sentence says only what is true: the signal ran light,
-// so the room says less rather than guessing.
-function minimalReads() {
+// The fallback reads, for a session where the numbers could not be computed.
+// THE ROOM NEVER MENTIONS SIGNAL STATE TO A GUEST, and that includes here: the
+// old fallback said "the signal ran light" four different ways, which put a
+// signal verdict on the wall in the one beat that matters most. These reads
+// describe the session through what the room always truly has, the guest's own
+// behaviour: they came, they read, the notification pulled them and they came
+// back, they finished. Every sentence is true from events alone. No stat
+// blocks, because a number that was not computed must not appear, but read 03
+// still says what the notification DID, because it did do something: it
+// interrupted a person who was reading, and that person returned.
+function minimalReads(ctx) {
+  const c = ctx || {};
+  const intSec = Number.isFinite(c.interruptSec) ? c.interruptSec : null;
+  const durMin = Number.isFinite(c.durSec) && c.durSec > 90 ? Math.round(c.durSec / 60) : null;
   return [
-    { index: 1, no: '01', title: 'How you settled', type: 'span', r0: 0, r1: 0.4, anchorT: 0.2, k: 'Settle', v: 'a light signal', color: 'signal', sentence: 'The signal ran light this session, so the room says less about your settle rather than guessing.' },
-    { index: 2, no: '02', title: 'Your attention rhythm', type: 'span', r0: 0.3, r1: 0.6, anchorT: 0.45, k: 'Rhythm', v: 'read honestly, briefly', color: 'signal', sentence: 'There was not enough clean signal to read a rhythm from, so no figure is claimed here.' },
-    { index: 3, no: '03', title: 'The notification', type: 'point', r0: 0.55, r1: 0.75, anchorT: 0.62, k: 'Interruption', v: 'a quiet moment', color: 'orange', sentence: 'The signal was light around the notification, so we keep this one brief.' },
-    { index: 4, no: '04', title: 'Your strongest stretch', type: 'span', r0: 0.7, r1: 0.85, anchorT: 0.78, k: 'Strongest', v: 'not singled out', color: 'signal', sentence: 'Too little clean signal survived to single out a strongest stretch, so none is claimed.' },
+    { index: 1, no: '01', title: 'How you settled', type: 'span', r0: 0, r1: 0.4, anchorT: 0.2,
+      k: 'Settle', v: 'you sat down and began', color: 'signal',
+      sentence: durMin
+        ? `You gave this room ${durMin} minute${durMin === 1 ? '' : 's'} of undivided reading, which is rarer than it sounds.`
+        : 'You sat down, put the room on, and began. Most people cannot remember the last time they read with nothing else open.' },
+    { index: 2, no: '02', title: 'Your attention rhythm', type: 'span', r0: 0.3, r1: 0.6, anchorT: 0.45,
+      k: 'Rhythm', v: 'your own pace, kept', color: 'signal',
+      sentence: 'You read the way you read anywhere, at your own pace, with nobody telling you how. That is exactly what this room asks for.' },
+    { index: 3, no: '03', title: 'The notification', type: 'point', r0: 0.55, r1: 0.75, anchorT: 0.62,
+      k: 'Interruption', v: intSec != null ? 'it pulled, you returned' : 'never sent, you finished first', color: 'orange',
+      sentence: intSec != null
+        ? `One notification, at ${fmtClockExact(intSec)}. It did what every notification does, it pulled you out of the reading, and you came back and kept going. The pull and the return are both yours.`
+        : 'You finished the reading before the room sent its one notification. That speed is its own finding.' },
+    { index: 4, no: '04', title: 'Your strongest stretch', type: 'span', r0: 0.7, r1: 0.85, anchorT: 0.78,
+      k: 'Strongest', v: 'in there, somewhere', color: 'signal',
+      sentence: 'Every reading has a stretch where the reader locks in. Yours is in there, and you probably felt where it was.' },
   ];
 }
 

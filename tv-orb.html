@@ -61,10 +61,22 @@
   #controls.hide { opacity: 0; pointer-events: none; }
   #controls button { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg);
     background: transparent; border: 1px solid var(--hair-strong); border-radius: var(--r-pill); padding: 7px 13px; cursor: pointer; }
+  /* the one condition the room names: the earbuds fully lost their link.
+     A quiet card, not a takeover; the iPad carries the full instruction. */
+  #linklost { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%);
+    display: none; align-items: center; gap: 14px; padding: 14px 26px;
+    font-family: var(--font-mono); font-size: 15px; letter-spacing: 0.18em;
+    text-transform: uppercase; color: #E0A657; border: 1px solid rgba(224,166,87,0.5);
+    border-radius: 8px; background: rgba(6,6,5,0.82); z-index: 60; }
+  #linklost.on { display: flex; }
+  #linklost .pip { width: 9px; height: 9px; border-radius: 50%; background: #E0A657;
+    animation: breathe 1.8s var(--ease-in-out) infinite; }
 </style>
 </head>
 <body>
   <div id="wrap">
+      <div id="linklost"><span class="pip"></span><span>Earbuds disconnected · session held</span></div>
+
     <!-- Each state is a CHANNEL, faded by its state weight. One looping <video> is
          created in JS inside each. gold is the base; the others bloom over it. -->
     <div id="orbstack">
@@ -301,7 +313,7 @@
       ws.onmessage = function (ev) { var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
         if (m.type === 'eeg/frame') { var r = relEng(m.engagementRel); if (r != null) { engT = r; haveData = true; } }
         else if (m.type === 'interruption/fire') { redUntil = nowMs + 5000; redAt = nowMs; }   // notification: the red orb rises
-        else if (m.type === 'session/state' && (m.beat === 'idle' || m.beat === 'welcome')) { engHist = []; haveData = false; engT = 0.4; redUntil = 0; redAt = 0; }
+        else if (m.type === 'session/state' && (window.dispatchEvent(new CustomEvent('focusroom:state', { detail: m })) || true) && (m.beat === 'idle' || m.beat === 'welcome')) { engHist = []; haveData = false; engT = 0.4; redUntil = 0; redAt = 0; }
       };
       ws.onerror = function () { try { ws.close(); } catch (e) {} };
       // Reconnect forever, with capped jittered backoff. A fixed retry tick meant
@@ -339,6 +351,16 @@
     document.getElementById('btnHide').onclick = function () { document.getElementById('controls').classList.add('hide'); };
     document.addEventListener('keydown', function (e) { if (e.key === 'c') document.getElementById('controls').classList.toggle('hide'); });
   })();
-  </script>
+  
+    // the link-lost card rides canonical session state
+    (function () {
+      var el = document.getElementById('linklost');
+      var orig = window.__onState__;
+      window.addEventListener('focusroom:state', function (ev) {
+        var m = ev.detail || {};
+        if (el) el.classList.toggle('on', !!(m.link && m.link.lost));
+      });
+    }());
+</script>
 </body>
 </html>

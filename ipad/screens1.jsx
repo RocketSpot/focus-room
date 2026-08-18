@@ -220,8 +220,12 @@
     const panel = [
       // 01, what this is. The orb sits BETWEEN the title and the body copy, so
       // the first thing the guest meets is the object they'll watch on the wall.
-      e('div', { key: 'a', style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 } },
-        e(Orb, { size: 250 }),
+      // The orb's aura reaches half again beyond its box, so the layout gap has
+      // to clear the GLOW, not the element: at gap 4 the headline above and the
+      // paragraph below both sat inside the halo, visually touching it. The gap
+      // plus margins below are sized against the aura's true extent.
+      e('div', { key: 'a', style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 } },
+        e('div', { style: { marginTop: 18, marginBottom: 34 } }, e(Orb, { size: 230 })),
         e('div', { style: { maxWidth: 560, textAlign: 'center' } },
           e('p', body, 'You’ll read something genuinely interesting for a few minutes. While you do, a small sensor in the earbud listens to the rhythms your brain is already making.'))),
       // 02, the instrument

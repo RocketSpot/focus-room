@@ -119,5 +119,18 @@ ok('the notification never says it did nothing', () => {
   }
 });
 
+ok('the fallback reveal NEVER mentions signal state to a guest', () => {
+  // the deepest fallback there is: no samples AND no bands
+  const r = computeReads({ samples: null, answers, interruptEegT: 41, signalIssue: false,
+    bands: [], eegClaimsAllowed: true, dataQualityStatus: 'ok', baseline: null });
+  const rendered = r.reads.map((x) => [x.title, x.v, x.sentence,
+    x.stat && x.stat.value, x.stat && x.stat.label].join(' ')).join(' ');
+  assert.ok(!/signal|clean|light|quality|reseat|disconnect/i.test(rendered),
+    'a signal verdict reached the wall: ' + rendered);
+  const r3 = r.reads.find((x) => x.no === '03');
+  assert.ok(/pulled you out|finished first/.test(r3.sentence),
+    'read 03 must say what the notification DID: ' + r3.sentence);
+});
+
 console.log('\n' + (fails.length ? `${fails.length} FAILURE(S)` : `all ${pass} checks passed`));
 process.exit(fails.length ? 1 : 0);

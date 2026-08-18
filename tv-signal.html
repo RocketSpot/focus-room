@@ -40,7 +40,7 @@
 
   /* STAFF MODE indicator, shown whenever engineering access is unlocked. Distinct
      from the amber SIMULATED badge (this is teal) so the two never read as one. */
-  #staffBadge { position: absolute; top: 66px; right: 120px; display: none;
+  #staffBadge { position: absolute; top: 112px; right: 120px; display: none;
     font-family: var(--font-mono); font-size: 14px; letter-spacing: 0.22em; text-transform: uppercase;
     color: #5AC8C0; border: 1px solid rgba(90,200,192,0.55); border-radius: 6px; padding: 6px 12px;
     background: rgba(90,200,192,0.06); }
@@ -61,8 +61,8 @@
   #labR { left: 120px; top: 592px; display: none; }
   .earState { position: absolute; font-family: var(--font-mono); font-size: 13px; letter-spacing: var(--tr-mono-sm); text-transform: uppercase; color: var(--fg-faint);
     text-shadow: 0 0 10px #060605, 0 0 10px #060605, 0 0 6px #060605; }
-  #stL { left: 120px; top: 340px; }
-  #stR { left: 120px; top: 620px; }
+  #stL { left: 120px; top: 340px; display: none; }
+  #stR { left: 120px; top: 620px; display: none; }
   .caption { position: absolute; left: 120px; bottom: 60px; color: var(--fg-muted); font-size: 16px; letter-spacing: var(--tr-mono); font-family: var(--font-mono); text-transform: uppercase; }
   .caption .dim { color: var(--fg-faint); }
 
@@ -73,11 +73,23 @@
   #eng b { color: var(--fg-muted); font-weight: 400; }
   #eng .warn { color: #E0A657; }
   #eng .bad { color: var(--w-gamma); }
+  /* the one condition the room names: the earbuds fully lost their link.
+     A quiet card, not a takeover; the iPad carries the full instruction. */
+  #linklost { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%);
+    display: none; align-items: center; gap: 14px; padding: 14px 26px;
+    font-family: var(--font-mono); font-size: 15px; letter-spacing: 0.18em;
+    text-transform: uppercase; color: #E0A657; border: 1px solid rgba(224,166,87,0.5);
+    border-radius: 8px; background: rgba(6,6,5,0.82); z-index: 60; }
+  #linklost.on { display: flex; }
+  #linklost .pip { width: 9px; height: 9px; border-radius: 50%; background: #E0A657;
+    animation: breathe 1.8s var(--ease-in-out) infinite; }
 </style>
 </head>
 <body>
   <div id="stage">
     <div id="tv">
+      <div id="linklost"><span class="pip"></span><span>Earbuds disconnected · session held</span></div>
+
       <div class="glow a" id="glowA"></div>
       <div class="glow b" id="glowB"></div>
 
@@ -621,7 +633,7 @@
       ws.onmessage = function (ev) {
         var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
         if (m.type === 'eeg/config-v1' || m.type === 'eeg/raw-v1' || m.type === 'eeg/quality-v1') { handleEeg(m); return; }
-        if (m.type === 'session/state') { if (m.beat === 'idle' || m.beat === 'welcome') resetScope(); }
+        if (m.type === 'session/state' && (window.dispatchEvent(new CustomEvent('focusroom:state', { detail: m })) || true)) { if (m.beat === 'idle' || m.beat === 'welcome') resetScope(); }
       };
       ws.onerror = function () { try { ws.close(); } catch (e) {} };
       ws.onclose = function () { connectLive._n = (connectLive._n || 0) + 1; var b = Math.min(8000, 500 * Math.pow(2, Math.min(connectLive._n, 4))); setTimeout(connectLive, b + Math.random() * b * 0.4); };
@@ -766,6 +778,16 @@
       read: function () { return this.frames / Math.max(0.001, (performance.now() - this.t0) / 1000); } };
     (function fpsLoop() { window.__fps.frames++; requestAnimationFrame(fpsLoop); })();
   })();
-  </script>
+  
+    // the link-lost card rides canonical session state
+    (function () {
+      var el = document.getElementById('linklost');
+      var orig = window.__onState__;
+      window.addEventListener('focusroom:state', function (ev) {
+        var m = ev.detail || {};
+        if (el) el.classList.toggle('on', !!(m.link && m.link.lost));
+      });
+    }());
+</script>
 </body>
 </html>

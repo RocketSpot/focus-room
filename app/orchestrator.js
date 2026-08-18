@@ -316,6 +316,11 @@ class Orchestrator extends EventEmitter {
       eeg: this._eegDown ? 'holding' : (this._lastFrameAt ? 'live' : 'waiting'),
       buds: this._budsConnected,
       guest: this._guestReachable(),
+      // TRUE only on a real, total loss mid-session: the one condition the
+      // room is allowed to name to a guest, with a full cover asking for the
+      // operator. Signal QUALITY is still never mentioned anywhere.
+      lost: !!(this._eegDown && this._eegSimulation === false
+        && ['fit', 'intake', 'picker', 'reading', 'strongest'].includes(this.beat)),
     };
   }
 
@@ -411,7 +416,22 @@ class Orchestrator extends EventEmitter {
     if (this.beat === 'intake') this.setBeat('picker');
     // Only a reading pick advances out of the picker, a double-fired intake
     // submission (no reading payload) must not start the session early.
-    else if (this.beat === 'picker' && msg.reading) this._beginReading();
+    else if (this.beat === 'picker' && msg.reading) {
+      // SAFE-POINT PAUSE. If the buds are fully down, starting the reading
+      // now would guarantee a skewed session: a blank opening, a late
+      // notification, a settle that never got measured. So the room holds at
+      // the picker, the iPad shows its held-session cover, the operator gets
+      // the alert, and the moment the stream returns the reading begins on
+      // its own, because the guest already chose it. Only the start waits.
+      if (this._eegDown && this._eegSimulation === false) {
+        this._pendingReadingStart = true;
+        this.log('reading HELD: earbuds are down, will begin when the stream returns');
+        this._coachOps();
+        this._broadcastState();
+      } else {
+        this._beginReading();
+      }
+    }
   }
 
   _onGuestEvent(msg) {
@@ -805,6 +825,12 @@ class Orchestrator extends EventEmitter {
     this._lastFrameAt = this.now();
     if (!this._eegDown) return;
     this._eegDown = false;
+    // a reading held at the safe point starts itself once the stream is back
+    if (this._pendingReadingStart && this.beat === 'picker') {
+      this._pendingReadingStart = false;
+      this.log('stream returned, beginning the held reading');
+      this._beginReading();
+    }
     if (this._gapOpenT != null) {
       const gap = { from: this._gapOpenT, to: this._streamT() };
       // only record a gap the analysis should actually skip over

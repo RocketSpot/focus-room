@@ -94,6 +94,30 @@
      for them to do, and the session is not in danger. Deliberately in the muted
      grey of the reseat nudge rather than the interruption orange, which the room
      reserves for the one notification. */
+  /* The one condition the room names to a guest: the earbuds fully lost their
+     connection mid-session. Not a quality verdict, a hardware fact, and the
+     guest needs a human. Full cover, blocks the screen, disappears on its own
+     the moment the link is back. The session is held underneath, never reset. */
+  function LinkLostCover({ lost }) {
+    if (!lost) return null;
+    return e('div', {
+      style: {
+        position: 'fixed', inset: 0, zIndex: 200, display: 'flex',
+        flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 18, padding: '0 64px', textAlign: 'center',
+        background: 'rgba(6,6,5,0.94)', backdropFilter: 'blur(14px)',
+        animation: 'calmIn 420ms var(--ease-out)',
+      },
+    },
+      e('div', { style: { width: 11, height: 11, borderRadius: '50%', background: 'var(--w-gamma)',
+        boxShadow: '0 0 18px 2px rgba(224,166,87,0.5)', animation: 'pulse 1.8s var(--ease-in-out) infinite' } }),
+      e('h2', { className: 't-h2', style: { color: 'var(--fg-strong)', fontSize: 40, maxWidth: 560 } },
+        'The earbuds lost their connection.'),
+      e('p', { className: 't-body', style: { color: 'var(--fg-muted)', fontSize: 18, lineHeight: 1.55, maxWidth: 480 } },
+        'Wave the operator over. Your session is held exactly where it is, and it continues the moment the connection is back.'),
+      e(Mono, { style: { color: 'var(--fg-faint)', marginTop: 8 } }, 'SESSION HELD'));
+  }
+
   function LinkStrip({ reconnecting, findingSignal }) {
     if (!reconnecting && !findingSignal) return null;
     // never 'finding your signal', the room does not narrate the signal to a guest
@@ -135,6 +159,7 @@
     // reconnects well inside this, so the guest never sees a flicker of alarm
     // for something that already fixed itself.
     const [linkDown, setLinkDown] = useState(false);
+    const [linkLost, setLinkLost] = useState(false);
     const linkTimer = useRef(null);
     const aRef = useRef(answers); aRef.current = answers;
     const bRef = useRef(beat); bRef.current = beat;
@@ -157,6 +182,9 @@
         else if (m.type === S.STATE) {
           if (m.beat) setBeat(m.beat);
           setNotice(m.notice || null);
+          // the full-cover is driven by canonical state, so it appears and clears
+          // with the actual link, not with this tab's own connectivity
+          setLinkLost(!!(m.link && m.link.lost));
           // the streaming signal check has no impedance messages, the clean-read
           // verdict arrives on canonical state instead.
           if (typeof m.fitAllGood === 'boolean') setFitAllGood(m.fitAllGood);
@@ -262,6 +290,7 @@
     return e('div', { className: 'screenwrap' },
       // the link strip lives OUTSIDE the keyed screen, so a reconnect mid-beat
       // doesn't remount it and restart its animation
+      e(LinkLostCover, { lost: linkLost }),
       e(LinkStrip, { reconnecting: linkDown, findingSignal: notice === 'signal_lost' }),
       Comp ? e(Comp, {
         key: key,
