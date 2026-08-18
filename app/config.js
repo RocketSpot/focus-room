@@ -105,6 +105,17 @@ function resolveSidecar() {
     const srcMain = path.join(resourcesPath, 'sidecar-src', 'main.py');
     if (fs.existsSync(srcMain)) {
       const home = process.env.HOME || process.env.USERPROFILE || '';
+      // PORTABLE builds carry their own Python runtime as resources/pyruntime
+      // (a python-build-standalone interpreter with numpy/scipy/bleak already in
+      // site-packages), so a machine that has never seen Python still runs the
+      // full engine, real earbuds included, with zero setup. It outranks the
+      // app-managed venv because it is versioned WITH the app it shipped in.
+      const bundledPy = isWin
+        ? path.join(resourcesPath, 'pyruntime', 'python', 'python.exe')
+        : path.join(resourcesPath, 'pyruntime', 'python', 'bin', 'python3');
+      if (!process.env.FOCUSROOM_PYTHON && fs.existsSync(bundledPy)) {
+        return { command: bundledPy, baseArgs: [srcMain], cwd: path.dirname(srcMain), frozen: false };
+      }
       const appVenvPy = process.platform === 'darwin'
         ? path.join(home, 'Library', 'Application Support', 'zone-focus-room', 'venv', 'bin', 'python3')
         : isWin

@@ -324,6 +324,12 @@ app.whenReady().then(async () => {
   room.wireSidecar();
   room.wireSurfaces();
 
+  // Portable builds only: one quiet question, "is there a newer build?", and
+  // one dialog if yes. Dev runs are the newest version by definition and never
+  // ask. Fire-and-forget, so a slow network can never delay the room.
+  try { require('./update-check.js').checkForUpdate((m) => { try { room.pushDiag('app:update', { msg: m }); } catch (_) {} }); }
+  catch (_) { /* the check must never be able to break a launch */ }
+
   room.startServerWithRetry(); // never rejects; retries in the background if the port is busy
 
   await supervisor.start();

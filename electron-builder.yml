@@ -34,6 +34,12 @@ extraResources:
   # cross-compile, so a package built without a frozen sidecar for its OS
   # (the Windows-built mac test app) runs the sim engine on the machine's
   # own python3 — pure stdlib, no installs. resolveSidecar() falls back.
+  # PORTABLE builds: a per-target python-build-standalone runtime staged by
+  # tools/build-portables.sh. Absent in ordinary builds (the glob matches
+  # nothing), present in portables, where resolveSidecar() prefers it.
+  - from: build/pyruntime/stage
+    to: pyruntime
+    filter: ["**/*"]
   - from: sidecar
     to: sidecar-src
     # recursive: picks up a vendored zone_sdk/ when present (the source
@@ -46,6 +52,9 @@ asar: true
 win:
   target:
     - target: nsis
+      arch:
+        - x64
+    - target: zip
       arch:
         - x64
   artifactName: ${productName} Setup ${version}.${ext}
