@@ -163,6 +163,10 @@
           // self-heal: session/state carries the archetype, so a missed one-shot
           // session/archetype broadcast can't leave Close on the 'deep' default.
           if (m.archetype) setAnswers((a) => ({ ...a, archetype: m.archetype }));
+          // and the chosen reading, so an iPad reloaded mid-session recovers the
+          // guest's piece instead of honestly rendering "Your piece loads here".
+          // Never overwrites a piece the guest picked on THIS device.
+          if (m.reading) setAnswers((a) => (a.piece ? a : { ...a, piece: m.reading }));
         }
         else if (m.type === S.IMPEDANCE) setFitAllGood(!!m.allGood); // real-hardware fit path
         else if (m.type === S.INTERRUPT) {

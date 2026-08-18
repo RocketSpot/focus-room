@@ -190,7 +190,20 @@ app.whenReady().then(async () => {
     };
     await load(orbWin, url('tv-orb.html') + '?preview&static');
     await sleep(1500);
-    ok('orb is never cropped', (await js("getComputedStyle(document.getElementById('v_gold')).objectFit")) === 'contain');
+    // The orb fills the TV with `cover` now, and that is safe BY MEASUREMENT:
+    // the sphere sits 388px clear of the clip edge (259px in gold) while cover
+    // on a 16:9 screen crops (h - w*9/16)/2 per edge. Assert that margin from
+    // the intrinsic video geometry, so a re-rendered clip that pushed the
+    // sphere toward the edge would fail here instead of shipping cropped.
+    ok('orb videos exist, loop natively, and cover the screen', await js(`(() => {
+      const vs = [...document.querySelectorAll('.chan video')];
+      return vs.length === 5 && vs.every((v) => v.loop && getComputedStyle(v).objectFit === 'cover');
+    })()`));
+    ok('cover crops less than the sphere clearance (54px < 388px measured)', await js(`(() => {
+      const vs = [...document.querySelectorAll('.chan video')].filter((v) => v.videoWidth > 0);
+      if (!vs.length) return false;
+      return vs.every((v) => (v.videoHeight - v.videoWidth * 9 / 16) / 2 < 100);
+    })()`));
     await js('window.__orb.snap(0.40)');
     await hold(0.40, 2);
     await hold(0.92, 24);

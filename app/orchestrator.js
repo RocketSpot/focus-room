@@ -235,6 +235,12 @@ class Orchestrator extends EventEmitter {
       beat: this.beat,
       surface: TV_SURFACE[this.beat],
       archetype: this.answers.archetype,
+      // the chosen reading rides canonical state for the same reason archetype
+      // does: an iPad that reloads mid-session rejoins with fresh React state,
+      // and without this it lands on the Reading screen showing "Your piece
+      // loads here" instead of the guest's piece. Only the descriptor travels;
+      // the body text is looked up client-side by id, exactly as a live tap does.
+      reading: this.answers.reading || null,
       // the signal-check verdict rides canonical state: the streaming fit has
       // no impedance messages, so this flag is how the iPad + TV learn the
       // read is clean (dropping it left the iPad on "finding a clean read…").
