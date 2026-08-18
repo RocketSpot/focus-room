@@ -348,9 +348,15 @@ function createRoom(hooks = {}) {
   async function cleanup(extra) {
     if (cleaningUp) return;
     cleaningUp = true;
-    try { if (extra) await extra(); } catch (_) {}
-    try { await supervisor.stop(); } catch (_) {}
-    try { await server.stop(); } catch (_) {}
+    // Shutdown must never be able to hang the app: every step is best-effort
+    // and the whole sequence has a hard deadline. Anything a stuck step would
+    // have released gets released anyway when the process exits.
+    const work = (async () => {
+      try { if (extra) await extra(); } catch (_) {}
+      try { await supervisor.stop(); } catch (_) {}
+      try { await server.stop(); } catch (_) {}
+    })();
+    await Promise.race([work, new Promise((r) => setTimeout(r, 5000))]);
   }
 
   // ---------------- crash guard ----------------

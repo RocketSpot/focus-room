@@ -73,6 +73,13 @@ class SurfaceServer extends EventEmitter {
   start() {
     return new Promise((resolve, reject) => {
       this.http = http.createServer((req, res) => this._serve(req, res));
+      // every raw TCP connection, tracked so stop() can destroy them instead of
+      // waiting forever for keep-alive sockets that never hang up on their own
+      this._sockets = new Set();
+      this.http.on('connection', (sock) => {
+        this._sockets.add(sock);
+        sock.on('close', () => this._sockets.delete(sock));
+      });
       this.wss = new WebSocketServer({ server: this.http, path: '/ws' });
       this.wss.on('connection', (ws, req) => this._onWs(ws, req));
       // room-core retries start() in a loop when the port is squatted, a
@@ -375,7 +382,20 @@ class SurfaceServer extends EventEmitter {
     if (this._heartbeat) { clearInterval(this._heartbeat); this._heartbeat = null; }
     if (this.wss) for (const ws of this.clients) { try { ws.terminate(); } catch (_) {} }
     if (this.wss) this.wss.close();
-    if (this.http) await new Promise((r) => this.http.close(r));
+    // http.close() only resolves once every connection is gone, and the busiest
+    // connections belong to the app's OWN renderer windows, which are not closed
+    // until AFTER shutdown cleanup finishes. Left alone that is a deadlock, and
+    // it is why Cmd+Q hung forever: quit waited on cleanup, cleanup waited on
+    // the server, the server waited on windows, and the windows waited on quit.
+    // So destroy every live socket ourselves, and cap the close with a timeout
+    // in case the platform still finds a way to dawdle.
+    if (this._sockets) for (const sock of this._sockets) { try { sock.destroy(); } catch (_) {} }
+    if (this.http) {
+      await Promise.race([
+        new Promise((r) => this.http.close(r)),
+        new Promise((r) => setTimeout(r, 2000)),
+      ]);
+    }
   }
 }
 

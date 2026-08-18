@@ -336,6 +336,12 @@ app.whenReady().then(async () => {
 
   globalShortcut.register('CommandOrControl+Shift+D', openOpsConsole);
   globalShortcut.register('CommandOrControl+Shift+U', showLanUrlToast);
+  // The staff way OUT. The room is deliberately frameless and fullscreen with
+  // the menu bar hidden, and the packaged build is a kiosk, so there is no
+  // visible quit affordance anywhere, by design for guests. But on Windows the
+  // application menu is null, so even Cmd+Q's equivalent does not exist there.
+  // A room nobody can exit is not a kiosk. Staff quit: Ctrl/Cmd+Shift+Q.
+  globalShortcut.register('CommandOrControl+Shift+Q', () => app.quit());
 
   createTvWindow();
   createAudioWindow(); // hidden generative room-sound host (no-op if FOCUSROOM_NO_AUDIO=1)
@@ -364,7 +370,17 @@ const cleanup = () => room.cleanup(async () => {
 });
 let quitting = false;
 app.on('before-quit', (e) => {
-  if (!quitting) { quitting = true; e.preventDefault(); cleanup().then(() => app.quit()); }
+  if (!quitting) {
+    quitting = true;
+    e.preventDefault();
+    cleanup().then(() => app.quit());
+    // and if anything above still wedges, the app dies anyway. A room you
+    // cannot quit is a worse failure than a shutdown step that got skipped.
+    setTimeout(() => { try { app.exit(0); } catch (_) { process.exit(0); } }, 8000).unref();
+    return;
+  }
+  // a second quit while the first is in flight means NOW, not eventually
+  try { app.exit(0); } catch (_) { process.exit(0); }
 });
 app.on('will-quit', () => globalShortcut.unregisterAll());
 
