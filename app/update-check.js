@@ -61,6 +61,11 @@ function newer(remote, local) {
 async function checkForUpdate(log) {
   if (!app.isPackaged) return;                       // dev runs ARE current
   if (FEED.includes('VERSION_GIST_ID')) return;      // not wired: stay silent
+  // The raw gist URL sits behind a ~5 minute CDN cache (query keys do not
+  // bypass it; measured). That lag is the RIGHT failure mode: a stale copy can
+  // only ever be OLDER than the truth, and older reads as not-newer, which is
+  // silence. So the cache can delay a genuine "you are outdated" by a few
+  // minutes, and can never produce a false one.
   const remote = await fetchJson(FEED);
   if (!remote || !remote.version) return;            // offline or malformed: silent
   const local = localBuild();

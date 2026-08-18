@@ -55,19 +55,32 @@ fetch_runtime() {  # $1 = pbs triple
   tar -xzf "$tar" -C "$STAGE"                    # yields $STAGE/python
 }
 
-fetch_wheels() {  # $1 = pip platform, $2 = dest, then packages
-  local plat=$1 dir=$2; shift 2
+fetch_wheels() {  # $1 = comma-separated pip platforms, $2 = dest, then packages
+  # Several tags per target, because projects tag their mac wheels at different
+  # deployment floors: numpy at 10_9/11_0, scipy at 10_13 and, on arm, 12_0.
+  # pip accepts repeated --platform and picks whichever tag a project shipped.
+  local plats=$1 dir=$2; shift 2
   if [ -d "$dir" ] && [ -n "$(ls "$dir" 2>/dev/null)" ]; then return; fi
   mkdir -p "$dir"
-  "$ROOT/venv/bin/pip" download -q --only-binary=:all: --platform "$plat" \
+  local args=()
+  for t in ${(s:,:)plats}; do args+=(--platform "$t"); done
+  # --no-deps, always. pip evaluates dependency markers against the machine
+  # RUNNING it, so resolving bleak for a Windows target on a Mac demands mac
+  # packages that have no Windows wheels and the whole resolution collapses.
+  # Every dependency is therefore listed explicitly, and verified below.
+  "$ROOT/venv/bin/pip" download -q --no-deps --only-binary=:all: "${args[@]}" \
     --python-version "$PYVER" --implementation cp -d "$dir" "$@"
+  # every load-bearing package must actually be there, or fail NOW, loudly
+  for must in numpy scipy bleak; do
+    ls "$dir"/${must}-*.whl >/dev/null 2>&1 || { echo "MISSING WHEEL: $must in $dir"; exit 1; }
+  done
 }
 
 unpack_wheels() {  # $1 = wheel dir, $2 = site-packages
   local dir=$1 sp=$2
   mkdir -p "$sp"
-  for w in "$dir"/*.whl; do python3 -m zipfile -e "$w" "$sp/"; done
-  for d in "$sp"/*.data; do
+  for w in "$dir"/*.whl(N); do python3 -m zipfile -e "$w" "$sp/"; done
+  for d in "$sp"/*.data(N); do
     [ -d "$d" ] || continue
     for sub in purelib platlib; do [ -d "$d/$sub" ] && cp -R "$d/$sub/." "$sp/"; done
     rm -rf "$d"
@@ -116,7 +129,7 @@ mkdir -p "$OUTDIR"
 # ---- mac arm64 --------------------------------------------------------------
 echo "-- mac arm64 --"
 fetch_runtime "aarch64-apple-darwin"
-fetch_wheels "macosx_11_0_arm64" "$CACHE/wheels-mac-arm64" "${COMMON[@]}" "${MAC_EXTRA[@]}"
+fetch_wheels "macosx_11_0_arm64,macosx_12_0_arm64,macosx_13_0_arm64,macosx_14_0_arm64" "$CACHE/wheels-mac-arm64" "${COMMON[@]}" "${MAC_EXTRA[@]}"
 unpack_wheels "$CACHE/wheels-mac-arm64" "$STAGE/python/lib/python$PYVER/site-packages"
 npx electron-builder --mac zip --arm64 2>&1 | grep -E "building|packaging|signing" | sed 's/^/    /' || true
 mv "$ROOT"/dist/*-arm64-mac.zip "$OUTDIR/focus-room-portable-mac-apple-silicon-v$VERSION.zip" 2>/dev/null \
@@ -125,7 +138,7 @@ mv "$ROOT"/dist/*-arm64-mac.zip "$OUTDIR/focus-room-portable-mac-apple-silicon-v
 # ---- mac x64 (Intel) --------------------------------------------------------
 echo "-- mac x64 --"
 fetch_runtime "x86_64-apple-darwin"
-fetch_wheels "macosx_10_13_x86_64" "$CACHE/wheels-mac-x64" "${COMMON[@]}" "${MAC_EXTRA[@]}"
+fetch_wheels "macosx_10_9_x86_64,macosx_10_13_x86_64,macosx_12_0_x86_64,macosx_13_0_x86_64,macosx_14_0_x86_64" "$CACHE/wheels-mac-x64" "${COMMON[@]}" "${MAC_EXTRA[@]}"
 unpack_wheels "$CACHE/wheels-mac-x64" "$STAGE/python/lib/python$PYVER/site-packages"
 npx electron-builder --mac zip --x64 2>&1 | grep -E "building|packaging|signing" | sed 's/^/    /' || true
 mv "$ROOT"/dist/*-mac.zip "$OUTDIR/focus-room-portable-mac-intel-v$VERSION.zip"
@@ -136,11 +149,18 @@ fetch_runtime "x86_64-pc-windows-msvc"
 fetch_wheels "win_amd64" "$CACHE/wheels-win-x64" "${COMMON[@]}" "${WIN_EXTRA[@]}"
 unpack_wheels "$CACHE/wheels-win-x64" "$STAGE/python/Lib/site-packages"
 npx electron-builder --win zip --x64 2>&1 | grep -E "building|packaging" | sed 's/^/    /' || true
-mv "$ROOT"/dist/*-win.zip "$OUTDIR/focus-room-portable-windows-v$VERSION.zip"
+# electron-builder sometimes stops at the unpacked dir for cross-built windows
+# zips; the zip target is only an archive of that dir anyway, so make it
+# ourselves, deterministically, with the app folder named at the top level.
+if ! ls "$ROOT"/dist/*-win.zip >/dev/null 2>&1; then
+  (cd "$ROOT/dist" && rm -rf "Zone Focus Room" && cp -R win-unpacked "Zone Focus Room" \
+    && zip -qry "focus-room-win.zip" "Zone Focus Room" && rm -rf "Zone Focus Room")
+fi
+mv "$ROOT"/dist/*win*.zip "$OUTDIR/focus-room-portable-windows-v$VERSION.zip"
 
 # ---- READMEs into each zip --------------------------------------------------
 readme /tmp/README.txt
-for z in "$OUTDIR"/focus-room-portable-*-v$VERSION.zip; do
+for z in "$OUTDIR"/focus-room-portable-*-v$VERSION.zip(N); do
   (cd /tmp && zip -q "$z" README.txt)
 done
 
