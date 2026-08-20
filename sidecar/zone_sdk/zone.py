@@ -1352,7 +1352,7 @@ class zone:
                         r2,
                     )
 
-    def _on_impedance_sample(self, device_id: int, ch1_raw: float, ch2_raw: float):
+    def _on_impedance_sample(self, device_id: int, ch1_raw: float, ch2_raw: float, abs_idx: int = None):
         # Drop pre-arm samples — same gating as the desktop app's
         # subscribe callback (`if (!armed) return;` in
         # EegSessionImpedanceContext.tsx). Without this, samples that
@@ -1365,7 +1365,7 @@ class zone:
 
         t_mono = time.monotonic()
         with self._imp_q_lock:
-            self._imp_pending.append((device_id, ch1_raw, ch2_raw, t_mono))
+            self._imp_pending.append((device_id, ch1_raw, ch2_raw, t_mono, abs_idx))
 
     def _imp_flush_pending(self):
         """Drain impedance queue on the asyncio thread; ingest under _imp_lock."""
@@ -1376,7 +1376,7 @@ class zone:
         if not batch:
             return
         with self._imp_lock:
-            for device_id, ch1_raw, ch2_raw, t_mono in batch:
+            for device_id, ch1_raw, ch2_raw, t_mono, abs_idx in batch:
                 left_imp = self._left_imp
                 right_imp = self._right_imp
                 if left_imp is None and right_imp is None:
@@ -1393,14 +1393,14 @@ class zone:
                         if right_imp is not None:
                             right_imp.reset()
                         if device_id == 1 and left_imp is not None:
-                            left_imp.ingest(ch1_raw, ch2_raw, t_mono)
+                            left_imp.ingest(ch1_raw, ch2_raw, t_mono, abs_idx)
                         elif device_id == 2 and right_imp is not None:
-                            right_imp.ingest(ch1_raw, ch2_raw, t_mono)
+                            right_imp.ingest(ch1_raw, ch2_raw, t_mono, abs_idx)
                 else:
                     if device_id == 1 and left_imp is not None:
-                        left_imp.ingest(ch1_raw, ch2_raw, t_mono)
+                        left_imp.ingest(ch1_raw, ch2_raw, t_mono, abs_idx)
                     elif device_id == 2 and right_imp is not None:
-                        right_imp.ingest(ch1_raw, ch2_raw, t_mono)
+                        right_imp.ingest(ch1_raw, ch2_raw, t_mono, abs_idx)
 
     async def _impedance_emit_loop(self):
         # Emit impedance snapshots on a fixed cadence. BLE samples are queued

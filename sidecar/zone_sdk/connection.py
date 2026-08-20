@@ -168,6 +168,27 @@ class DualBLEConnection:
         # Legacy per-channel buffers (kept for single-device mode)
         self._channel_buffers = [deque(maxlen=buffer_size) for _ in range(4)]
 
+        # SEQUENCE-INTEGRITY ADMISSION (hardware team's accumulative-filter spec,
+        # 2026-08-19). Every decoded reading is admitted through the firmware's
+        # one-byte sample counter BEFORE anything downstream sees it:
+        #   delta == 0   -> duplicate, DROP. A re-buffered BLE packet replays part
+        #                   of the lead-off tone and steps its phase; enough of
+        #                   that and a 42 kOhm electrode measures ~103 Ohm, which
+        #                   then reads as "no contact". Duplicated packets stay
+        #                   perfectly well-formed, so the counter is the only
+        #                   thing that can catch them.
+        #   delta > 128  -> replay of samples already held, DROP. Half-modulus
+        #                   split: a replayed 10-sample packet lands near the top
+        #                   of the byte range, real loss near the bottom.
+        #   otherwise    -> ACCEPT; the absolute index advances by the REAL delta,
+        #                   so a hole costs coverage instead of shifting every
+        #                   later sample to the wrong moment in time.
+        # Anti-stall: after 64 consecutive refusals the side re-syncs to whatever
+        # is arriving, so a loss larger than 128 cannot reject data forever.
+        self._adm = {
+            1: {"last": None, "abs": 0, "refusals": 0, "dupes": 0, "replays": 0},
+            2: {"last": None, "abs": 0, "refusals": 0, "dupes": 0, "replays": 0},
+        }
         self._dev1_received = 0
         self._dev1_dropped = 0
         self._dev1_last_sample = None
@@ -548,6 +569,33 @@ class DualBLEConnection:
 
     def _process_packet(self, pkt: bytes, device_id: int):
         raw_num = pkt[1]
+
+        # admission first: a dropped packet must never be spliced shut, and a
+        # duplicated one must never be admitted twice (see _adm above)
+        adm = self._adm[1 if device_id == 1 else 2]
+        if adm["last"] is None:
+            adm["last"] = raw_num
+            adm["abs"] += 1
+        else:
+            delta = (raw_num - adm["last"] + 256) % 256
+            if delta == 0:
+                adm["dupes"] += 1
+                return
+            if delta > 128:
+                adm["refusals"] += 1
+                adm["replays"] += 1
+                if adm["refusals"] < 64:
+                    return
+                # anti-stall: re-sync to whatever is arriving
+                adm["last"] = raw_num
+                adm["abs"] += 1
+                adm["refusals"] = 0
+            else:
+                adm["last"] = raw_num
+                adm["abs"] += delta       # a gap advances by its true size
+                adm["refusals"] = 0
+        abs_idx = adm["abs"]
+
         # lead-off bits, when the firmware sends the longer packet. A set bit means
         # that pin is OFF the skin. Operator-facing only: it never gates the room,
         # and it is never shown to a guest.
@@ -601,7 +649,11 @@ class DualBLEConnection:
 
         if self._impedance_tap is not None:
             try:
-                self._impedance_tap(device_id, float(ch1_raw), float(ch2_raw))
+                # the ABSOLUTE index rides along: the impedance DFT is evaluated
+                # against each sample's true position in the stream, so a dropped
+                # packet costs coverage instead of rotating the tone's phase and
+                # collapsing the estimate toward a fake perfect contact
+                self._impedance_tap(device_id, float(ch1_raw), float(ch2_raw), abs_idx)
             except Exception:
                 logger.exception("impedance tap error")
 
@@ -698,6 +750,27 @@ class DualBLEConnection:
         """Zero out Dev1's rate counters and restart the global stats clock
         so post-reconnect rate measurements reflect only the new link.
         Dev2 counters are left alone."""
+        # SEQUENCE-INTEGRITY ADMISSION (hardware team's accumulative-filter spec,
+        # 2026-08-19). Every decoded reading is admitted through the firmware's
+        # one-byte sample counter BEFORE anything downstream sees it:
+        #   delta == 0   -> duplicate, DROP. A re-buffered BLE packet replays part
+        #                   of the lead-off tone and steps its phase; enough of
+        #                   that and a 42 kOhm electrode measures ~103 Ohm, which
+        #                   then reads as "no contact". Duplicated packets stay
+        #                   perfectly well-formed, so the counter is the only
+        #                   thing that can catch them.
+        #   delta > 128  -> replay of samples already held, DROP. Half-modulus
+        #                   split: a replayed 10-sample packet lands near the top
+        #                   of the byte range, real loss near the bottom.
+        #   otherwise    -> ACCEPT; the absolute index advances by the REAL delta,
+        #                   so a hole costs coverage instead of shifting every
+        #                   later sample to the wrong moment in time.
+        # Anti-stall: after 64 consecutive refusals the side re-syncs to whatever
+        # is arriving, so a loss larger than 128 cannot reject data forever.
+        self._adm = {
+            1: {"last": None, "abs": 0, "refusals": 0, "dupes": 0, "replays": 0},
+            2: {"last": None, "abs": 0, "refusals": 0, "dupes": 0, "replays": 0},
+        }
         self._dev1_received = 0
         self._dev1_dropped = 0
         self._dev1_last_sample = None

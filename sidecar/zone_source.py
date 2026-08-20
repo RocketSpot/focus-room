@@ -39,6 +39,13 @@ from eeg_stream import EegStream
 # background, in dB, which reads zero when there is no rhythm and reports delta
 # honestly when there is one. The SDK stays what it should have stayed: transport.
 # ===================================================================================
+# worn/not-worn verdict (hardware team spec, 2026-08-19). All provisional until
+# real worn-earbud readings for both contacts arrive from the hardware side.
+WORN_PASS_OHM = 2_300_000.0
+WORN_STABLE_SEC = 5.0     # the pass must hold this long, uninterrupted
+WORN_STALE_SEC = 3.5      # a reading older than this cannot satisfy the window
+POST_LEADOFF_DISCARD_SEC = 1.5   # EEG discarded after lead-off disarm (settling tone)
+
 SAFE_BATTERY_PCT = 25          # refuse to start below this so a session never dies mid-read
 IMPEDANCE_OK_STATES = {"low_z", "pair_ok"}
 
@@ -111,6 +118,9 @@ class ZoneSource:
         self._eeg_failed = {"left": set(), "right": set()}
         self._auto_pair = None           # the mutable 'auto' PairProfile (touch fill-in)
         self._last_impedance = None
+        self._worn_since = None
+        self._worn_last_ok = None
+        self._eeg_discard_until = 0.0
         self._last_battery_l = None
         self._last_battery_r = None
 
@@ -477,6 +487,13 @@ class ZoneSource:
         # ensure impedance is disarmed (it cannot run with streaming)
         if self.sdk.get_buds_status().get("impedance_armed"):
             await self.sdk.stop_impedance()
+            # POST-DISABLE SETTLING (spec B.3): the 31.25 Hz lead-off tone rides
+            # the same electrodes as the EEG and takes a moment to die after
+            # disarm. Everything the raw path would ingest in the next 1.5 s is
+            # discarded, or the analyser's first windows and the artifact
+            # references would be seeded from the injection tone, not the brain.
+            # Provisional, not hardware-validated, exactly as the spec labels it.
+            self._eeg_discard_until = time.monotonic() + POST_LEADOFF_DISCARD_SEC
         self.engine.reset()   # per-session: guest 2 never inherits guest 1's band/plateau
         self._flush_stale_buffers("session start")   # drop the fit check's lead-off tone
         self._session_active = True
@@ -727,6 +744,8 @@ class ZoneSource:
         stream = self._eeg_stream
         if stream is None:
             return
+        if self._eeg_discard_until and time.monotonic() < self._eeg_discard_until:
+            return   # lead-off settling: this is injected tone, not brain
         chans = raw.channels
         if not chans or not isinstance(chans[0], list):
             return
@@ -1032,7 +1051,42 @@ class ZoneSource:
                     bad += 1
                 else:
                     pending += 1        # idle / measuring — still settling
-        all_good = good >= 1 and bad == 0 and pending == 0
+        # VERDICT LAYER (spec B.3). The verdict's one job is worn vs not worn:
+        #   pass      = smoothed Z at or under 2.3 MOhm (provisional; unworn buds
+        #               on a desk read 3.0-3.7 MOhm, so this sits 1.3-1.6x below
+        #               an open circuit)
+        #   policy    = any_required: one good contact per bud is enough
+        #   stability = the pass must hold 5 s uninterrupted before allGood
+        #   staleness = a reading older than 3.5 s cannot satisfy the window
+        # The granular states above still stream to the operator display; this
+        # block only decides allGood.
+        now_mono = time.monotonic()
+        instant_ok = True
+        for side in ("left", "right"):
+            ear_d = channels[side]
+            if ear_d is None:
+                continue          # a side that is not measuring cannot fail the other
+            ear_pass = False
+            for c in (ear_d["ch1"], ear_d["ch2"]):
+                if c is None or c["kohm"] is None:
+                    continue
+                if c["state"] == "no_signal":
+                    continue      # a broken measurement chain is never a pass
+                if c["kohm"] * 1000.0 <= WORN_PASS_OHM:
+                    ear_pass = True
+            if not ear_pass:
+                instant_ok = False
+        if instant_ok and (channels["left"] is not None or channels["right"] is not None):
+            if self._worn_since is None:
+                self._worn_since = now_mono
+            self._worn_last_ok = now_mono
+        else:
+            self._worn_since = None
+        stale = self._worn_last_ok is not None and (now_mono - self._worn_last_ok) > WORN_STALE_SEC
+        if stale:
+            self._worn_since = None
+        all_good = (self._worn_since is not None
+                    and (now_mono - self._worn_since) >= WORN_STABLE_SEC)
         self._last_impedance = channels
         self._log_impedance(channels, all_good)
         self.tx.send(OUT.IMPEDANCE, channels=channels, allGood=all_good)
