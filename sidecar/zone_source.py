@@ -81,6 +81,39 @@ DFU_SERVICES = {
 }
 
 
+# ---- auto-connect gating, a pure function so it is testable without a bud ----
+AUTOCONNECT_ENABLED = os.environ.get("FOCUSROOM_AUTOCONNECT", "1") != "0"
+AUTOCONNECT_SCAN_SEC = float(os.environ.get("FOCUSROOM_AUTOCONNECT_SCAN_SEC", "4.0"))
+AUTOCONNECT_IDLE_SEC = float(os.environ.get("FOCUSROOM_AUTOCONNECT_IDLE_SEC", "7.0"))
+
+
+def auto_connect_should_try(state):
+    """Decide whether the auto-connect loop may attempt a scan right now.
+
+    The loop must be COMPLETELY deferential: the operator's own connect, the
+    reconnect ladder, the SDK's sample-rate recovery, an armed impedance check
+    and its cooldown all outrank it. It only ever acts when nothing else is
+    touching the link and no bud is up. Returns (go, reason).
+    """
+    if not state.get("enabled", True):
+        return (False, "disabled")
+    if state.get("left_up") or state.get("right_up"):
+        return (False, "connected")
+    if state.get("connect_in_flight"):
+        return (False, "manual connect in flight")
+    if state.get("reconnecting"):
+        return (False, "reconnect ladder owns the link")
+    if state.get("rotating"):
+        return (False, "service rotation owns the link")
+    if state.get("sdk_recovery"):
+        return (False, "SDK recovery owns the link")
+    if state.get("lead_armed"):
+        return (False, "impedance check running")
+    if state.get("in_cooldown"):
+        return (False, "reconnect cooldown")
+    return (True, "clear")
+
+
 class ZoneSource:
     name = "zone"
 
@@ -149,8 +182,84 @@ class ZoneSource:
         self._analyzer.on_window(self._on_window)
         self._last_analysis_report = 0.0
         self._eeg_stream = None       # per-session raw transport + quality (eeg_stream.py)
+        # AUTO-CONNECT. The room searches for earbuds by itself from the moment
+        # it opens: take the buds out of the case anywhere near the Mac and they
+        # connect with nobody touching the operator console. The loop is fully
+        # deferential (see auto_connect_should_try) and quiet: it never spams
+        # the console while the room sits empty, and it reports only the two
+        # moments an operator cares about, found-and-connecting and connected.
+        self._connect_in_flight = False
+        self._auto_last_note = 0.0
         self._left_up = False         # last-known link state, for single-bud raw labelling
         self._right_up = False
+        # created LAST: every attribute the loop's gate reads must already exist
+        if AUTOCONNECT_ENABLED:
+            self._auto_task = self._loop.create_task(self._auto_connect_loop())
+
+    async def _auto_connect_loop(self):
+        """Constant, quiet earbud search while nothing is connected.
+
+        Scans WITHOUT broadcasting (self.discover() would push a DISCOVERED
+        message and connect() would push a no_buds error on every empty pass,
+        which is an operator console scrolling with noise all day). Only when a
+        Zone bud actually advertises does it hand over to the ordinary connect
+        path, the same one the operator's button uses, with the same validated
+        SDK sequence, so auto and manual cannot behave differently.
+        """
+        await asyncio.sleep(2.0)      # let the sidecar finish its hello
+        self.log("auto-connect: watching for earbuds (open them near this Mac)")
+        while True:
+            try:
+                go, why = auto_connect_should_try({
+                    "enabled": AUTOCONNECT_ENABLED,
+                    "left_up": self._left_up,
+                    "right_up": self._right_up,
+                    "connect_in_flight": self._connect_in_flight,
+                    "reconnecting": self._reconnecting,
+                    "rotating": self._rotating,
+                    "sdk_recovery": getattr(self.sdk, "_inside_sample_rate_recovery", False),
+                    "lead_armed": getattr(self.sdk, "_lead_armed", False),
+                    "in_cooldown": (time.monotonic() - getattr(self, "_last_ladder_end", 0.0))
+                        < RECONNECT_COOLDOWN_SEC,
+                })
+                if not go:
+                    await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
+                    continue
+                devices = await self.Zone.discover(duration=AUTOCONNECT_SCAN_SEC)
+                found_any = False
+                for d in devices:
+                    name = (d.get("name") or "").lower()
+                    if "left" in name:
+                        self._left_addr = d["address"]; found_any = True
+                    elif "right" in name:
+                        self._right_addr = d["address"]; found_any = True
+                if not found_any:
+                    # a quiet heartbeat at most every 60s, so room.log shows the
+                    # search is alive without drowning the operator feed
+                    now = time.monotonic()
+                    if now - self._auto_last_note > 60.0:
+                        self._auto_last_note = now
+                        self.log("auto-connect: still watching for earbuds")
+                    await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
+                    continue
+                self.log("auto-connect: earbuds found, connecting on their own")
+                ok = await self.connect()
+                if ok:
+                    self.log("auto-connect: earbuds connected, no operator action needed")
+                elif ok is None:
+                    # someone else's connect is mid-flight; defer, touch nothing
+                    await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
+                else:
+                    # a failed attempt clears the remembered addresses so the next
+                    # pass re-discovers rather than hammering a stale MAC
+                    self._left_addr = None
+                    self._right_addr = None
+                    await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                self.log(f"auto-connect: pass failed ({e}), continuing to watch")
+                await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
 
     def _catalogue_path(self):
         """Which UUID catalogue ships to the SDK. Engineering delivered three
@@ -204,6 +313,18 @@ class ZoneSource:
         return out
 
     async def connect(self):
+        if self._connect_in_flight:
+            # None, not False: the caller must know this was a refusal to stack,
+            # not a failed attempt, so the auto loop keeps its hands off the state
+            self.log("connect already in flight, ignoring the duplicate request")
+            return None
+        self._connect_in_flight = True
+        try:
+            return await self._connect_inner()
+        finally:
+            self._connect_in_flight = False
+
+    async def _connect_inner(self):
         if not self._left_addr and not self._right_addr:
             await self.discover()
         if not self._left_addr and not self._right_addr:
