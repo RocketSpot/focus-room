@@ -33,7 +33,9 @@ fi
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
 # the tree must be clean and pushed: a release describes a commit, not a moment
-if [ -n "$(git status --porcelain | grep -v '^?? data/')" ]; then
+# data/ is the room's writable state (logs the Test app appends on every
+# launch, session records, demo frames): it can never be a reason not to ship
+if [ -n "$(git status --porcelain -- ':!data')" ]; then
   say "working tree has uncommitted changes, refusing to release"
   exit 1
 fi
