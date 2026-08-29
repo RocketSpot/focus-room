@@ -60,6 +60,9 @@ ok('beat trace walks welcome→fit→intake→picker→reading→strongest→sta
 const st = sent.map((s) => (s.payload && s.payload.reason) ? `${s.type}:${s.payload.reason}` : s.type);
 ok('fit streamed the signal check (connect + start_session:signal_check)',
   st.includes('connect') && st.includes('start_session:signal_check'), st.join(','));
+ok('the signal check OPENED with the impedance phase (start_fit before the stream)',
+  st.includes('start_fit') && st.indexOf('start_fit') < st.indexOf('start_session:signal_check'),
+  st.join(','));
 ok('reading opened its own stream (start_session:reading)', st.includes('start_session:reading'), st.join(','));
 ok('signal check + reading were both stopped (stop_session present)', st.includes('stop_session'), st.join(','));
 

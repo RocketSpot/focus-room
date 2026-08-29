@@ -117,6 +117,10 @@ const LINK_LOST_CEILING_MS = parseInt(process.env.FOCUSROOM_LINK_LOST_MS || Stri
 // analysis eligibility, so a marginal fit could lock the room and leave a guest
 // staring at "Adjusting the fit" forever.) Quality is still measured, it just goes
 // to the operator now, never to the guest, and never blocks anyone.
+// The impedance phase of the signal check: the worn verdict needs ~5s of
+// clean readings (2s tone settle + 3 estimates); the cap guarantees the
+// guest is NEVER gated on it - the stream starts regardless when it fires.
+const FIT_IMPEDANCE_CAP_MS = parseInt(process.env.FOCUSROOM_FIT_IMPEDANCE_CAP_MS || '10000', 10);
 const FIT_SETTLE_MS = parseInt(process.env.FOCUSROOM_FIT_SETTLE_MS
   || process.env.FOCUSROOM_FIT_HINT_MS || '1800', 10);
 
@@ -150,6 +154,8 @@ class Orchestrator extends EventEmitter {
     this._stopStallWatch();
     this._clearReadingFallback();
     this._clearFitHint();
+    this._fitImpPhase = false;
+    if (this._fitImpCap) { clearTimeout(this._fitImpCap); this._fitImpCap = null; }
     this.answers = { intake: {}, onMind: '', reading: null, archetype: 'deep', archetypeName: 'Deep Diver' };
     this.timeline = { streamEpoch: null, lastFrame: null }; // EEG timeline anchor (master ms)
     this.events = [];            // [{kind, masterT, eegT}]
@@ -193,6 +199,8 @@ class Orchestrator extends EventEmitter {
     // event into the fresh session's log.
     this._linkLostAt = null;
     this._budsConnected = null;  // last eeg/connection verdict (null = not reported yet)
+    this._fitImpPhase = false;   // signal check: impedance phase before the stream
+    this._fitImpCap = null;
     this._streamGaps = [];       // [{from, to}] stream-clock seconds with no signal
     this._gapOpenT = null;       // stream time a still-open gap started at
     // The stream clock must never run backwards. A sidecar restart re-anchors
@@ -468,9 +476,15 @@ class Orchestrator extends EventEmitter {
         if (kind === GUEST_EVENT.EARBUD_SEATED) {
           this.setBeat('fit');
           this.sup.send(SIDECAR_IN.CONNECT);
-          // the signal check STREAMS live so the guest SEES their α/β/γ waves (not an
+          // The signal check opens with the REAL impedance phase: the lead-off
+          // tone is armed and the worn verdict (operator-facing only) gets a
+          // few seconds to reach good before the live stream takes over - on
+          // the verdict, on the guest moving ahead, or on the cap, whichever
+          // comes first. The guest is never gated on it and never sees it;
+          // they are reading the seating copy while it runs. Then the check
+          // STREAMS live so the guest SEES their α/β/γ waves (not an
           // electrode/impedance readout). Not recorded, streamLog opens at reading.
-          this.sup.send(SIDECAR_IN.START_SESSION, { reason: 'signal_check' });
+          this._beginFitImpedance();
         }
         break;
       case 'fit':
@@ -479,6 +493,9 @@ class Orchestrator extends EventEmitter {
         // the window; no extra sidecar command is needed.
         if (kind === GUEST_EVENT.BASELINE_START) {
           if (this.baseline) break;   // double-tap must not restart the window
+          // the guest asked for the baseline: the stream must be live NOW.
+          // The impedance phase yields immediately - never gate the guest.
+          this._fitStreamStart('guest started the baseline');
           this.baseline = { startedAt: this.now(), endedAt: null, frames: [], bands: [] };
           this.log(`baseline: capturing ${BASELINE_MS / 1000}s, eyes open`);
           this._broadcastState();
@@ -487,7 +504,15 @@ class Orchestrator extends EventEmitter {
             this.baseline.endedAt = this.now();
             this.log(`baseline: captured ${this.baseline.frames.length} frames / ${this.baseline.bands.length} band samples`);
           }
-          this.sup.send(SIDECAR_IN.STOP_SESSION);   // end the signal-check stream
+          if (this._fitImpPhase) {
+            // confirmed before the stream ever started: disarm the tone, there
+            // is no signal-check stream to stop
+            this._fitImpPhase = false;
+            if (this._fitImpCap) { clearTimeout(this._fitImpCap); this._fitImpCap = null; }
+            this.sup.send(SIDECAR_IN.STOP_FIT);
+          } else {
+            this.sup.send(SIDECAR_IN.STOP_SESSION);   // end the signal-check stream
+          }
           this.setBeat('intake');
         }
         break;
@@ -952,8 +977,14 @@ class Orchestrator extends EventEmitter {
     const beat = this.beat;
     this.log(`watchdog: no guest activity in '${beat}' for ${Math.round(budgetMs / 1000)}s, abandoning the session`);
     this._record('session_abandoned', this.now(), { beat, budgetMs }); // diag trail
-    // fit now STREAMS (the signal check), so stopping it is STOP_SESSION like the reading
-    if (beat === 'fit' || beat === 'reading' || beat === 'strongest') this.sup.send(SIDECAR_IN.STOP_SESSION);
+    // fit now STREAMS (the signal check), so stopping it is STOP_SESSION like the
+    // reading - unless the abandon lands inside the impedance phase, where the
+    // tone is armed and no stream ever started
+    if (beat === 'fit' && this._fitImpPhase) {
+      this._fitImpPhase = false;
+      if (this._fitImpCap) { clearTimeout(this._fitImpCap); this._fitImpCap = null; }
+      this.sup.send(SIDECAR_IN.STOP_FIT);
+    } else if (beat === 'fit' || beat === 'reading' || beat === 'strongest') this.sup.send(SIDECAR_IN.STOP_SESSION);
     this._clearSession(); // answers, reveal, revealStep, timers, signal flags
     this.setBeat('idle'); // TV back to the constellation; the next hello starts fresh
   }
@@ -964,6 +995,32 @@ class Orchestrator extends EventEmitter {
   // beat leaves fit. (The iPad copy consuming it lands separately.)
   // Entering the signal check arms a SETTLE, not a gate: after a short beat the room
   // is ready regardless of what the signal is doing. Nothing here inspects quality.
+  // The impedance phase of the existing signal check. Between EARBUD_SEATED
+  // and the live stream, the lead-off tone runs and the WornGate verdict
+  // (fit/impedance allGood) gets its chance. Three exits, first one wins:
+  // the verdict lands, the guest moves ahead, or the cap fires. All three
+  // hand over to the same stream start, so the flow the guest experiences
+  // is exactly what it always was - the room just now KNOWS the buds are
+  // genuinely worn before the waves appear.
+  _beginFitImpedance() {
+    this._fitImpPhase = true;
+    this.sup.send(SIDECAR_IN.START_FIT);
+    this._fitImpCap = setTimeout(() => {
+      this._fitImpCap = null;
+      this._fitStreamStart('cap reached, never gated');
+    }, FIT_IMPEDANCE_CAP_MS);
+  }
+
+  _fitStreamStart(why) {
+    if (!this._fitImpPhase) return;
+    this._fitImpPhase = false;
+    if (this._fitImpCap) { clearTimeout(this._fitImpCap); this._fitImpCap = null; }
+    // START_SESSION disarms a still-armed impedance check itself (with the
+    // post-tone discard), so the handover is one message
+    this.sup.send(SIDECAR_IN.START_SESSION, { reason: 'signal_check' });
+    this.log(`signal check: impedance phase done (${why}), streaming`);
+  }
+
   _armFitHint() {
     this._clearFitHint();
     this._fitAllGood = false;
@@ -984,6 +1041,7 @@ class Orchestrator extends EventEmitter {
     if (this.beat !== 'fit' || !msg.allGood) return;
     this._fitAllGood = true;
     this._clearFitHint();
+    this._fitStreamStart('worn verdict good');
     // (the old fit_slow notice was a vestige: nothing ever set it, so the
     // faster worn verdict has no timing assumption to break here)
   }
@@ -996,9 +1054,14 @@ class Orchestrator extends EventEmitter {
   onSidecarReady() {
     switch (this.beat) {
       case 'fit':
-        this.log('sidecar restarted during signal check, re-issuing CONNECT + START_SESSION');
         this.sup.send(SIDECAR_IN.CONNECT); // real-mode connects take seconds; the sidecar handles ordering
-        this.sup.send(SIDECAR_IN.START_SESSION, { reason: 'signal_check' });
+        if (this._fitImpPhase) {
+          this.log('sidecar restarted during the impedance phase, re-arming the fit check');
+          this.sup.send(SIDECAR_IN.START_FIT);
+        } else {
+          this.log('sidecar restarted during signal check, re-issuing CONNECT + START_SESSION');
+          this.sup.send(SIDECAR_IN.START_SESSION, { reason: 'signal_check' });
+        }
         break;
       case 'reading':
         this.log('sidecar restarted during reading, re-issuing START_SESSION; the timeline has a gap');
@@ -1426,8 +1489,9 @@ class Orchestrator extends EventEmitter {
     // [delay-from-previous-step (ms), action]
     const steps = [
       [300,  hello],                                                   // idle → welcome
-      [2000, () => ev(GUEST_EVENT.EARBUD_SEATED)],                     // → fit (signal-check waves stream)
-      [6500, () => ev('fit_confirmed')],                              // → intake
+      [2000, () => ev(GUEST_EVENT.EARBUD_SEATED)],                     // → fit (impedance phase, then waves)
+      [2600, () => ev(GUEST_EVENT.BASELINE_START)],                    // real guests tap this; it also ends the impedance phase
+      [4400, () => ev('fit_confirmed')],                              // → intake
       [2600, () => intake({ answers: { 0: 'A blip, I barely notice', 1: 'It drifts', 2: 'A few minutes' }, onMind: 'a deadline on Friday' })], // → picker
       [2600, () => intake({ reading: { id: 'octopus', title: 'How an Octopus Thinks', meta: '3 min read' } })], // → reading (orb + START_SESSION)
       [24000, () => ev(GUEST_EVENT.READING_FINISHED)],                  // → strongest (interruption auto-fires mid-reading)

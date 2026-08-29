@@ -47,8 +47,8 @@ const intake = (fields) => orch.onClientMessage({ type: 'guest/intake', ...field
 
   guestEvent('earbud_seated');
   check('earbud_seated advances to fit', orch.beat === 'fit');
-  check('entering fit sends CONNECT + START_SESSION (signal check streams the waves)',
-    sentTypes().includes('connect') && sentTypes().includes('start_session'), sentTypes().join(','));
+  check('entering fit sends CONNECT + START_FIT (the impedance phase opens the signal check)',
+    sentTypes().includes('connect') && sentTypes().includes('start_fit'), sentTypes().join(','));
 
   // messages keep arriving → the watchdog must NOT fire (each one re-arms it)
   for (let i = 0; i < 8; i++) { await sleep(50); guestEvent('reading_started'); } // no-op kind in fit; pure activity
@@ -58,7 +58,8 @@ const intake = (fields) => orch.onClientMessage({ type: 'guest/intake', ...field
   orch.answers.onMind = 'the board deck'; // stand-in session state that must be wiped
   await sleep(400);
   check('watchdog fires after silence → beat back to idle', orch.beat === 'idle');
-  check('expiry sent STOP_SESSION for the fit beat (streaming signal check)', sentTypes().includes('stop_session'), sentTypes().join(','));
+  check('expiry during the impedance phase disarms the tone (stop_fit; no stream had started)',
+    sentTypes().includes('stop_fit') && !sentTypes().includes('stop_session'), sentTypes().join(','));
   check('a session_abandoned diag event was emitted',
     abandoned.length === 1 && abandoned[0].payload && abandoned[0].payload.beat === 'fit');
   check('session state was cleared',
@@ -82,8 +83,8 @@ const intake = (fields) => orch.onClientMessage({ type: 'guest/intake', ...field
   guestEvent('earbud_seated'); // welcome → fit
   sent.length = 0;
   orch.onSidecarReady();
-  check('onSidecarReady at fit re-sends CONNECT then START_SESSION',
-    sentTypes()[0] === 'connect' && sentTypes()[1] === 'start_session', sentTypes().join(','));
+  check('onSidecarReady during the impedance phase re-sends CONNECT then START_FIT',
+    sentTypes().includes('connect') && sentTypes().includes('start_fit'), sentTypes().join(','));
   check('a fit restart does not set signalIssue', orch.signalIssue === false);
 
   // ---- A3: the signal check SETTLES, it does not gate -------------------------
