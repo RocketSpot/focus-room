@@ -341,6 +341,9 @@ class EarImpedanceProcessor:
 
 WORN_ENTER_CONSEC     = 3
 WORN_ENTER_MIN_GAP_S  = 0.4          # a cached snapshot must not count twice
+WORN_ENTER_MAX_GAP_S  = 2.5          # estimates further apart than this are not
+                                     # CONSECUTIVE: a streak cannot be stitched
+                                     # across a stall or a long silence
 WORN_STAY_OHM         = 2_500_000.0  # the doc's own desk-bud onset boundary
 WORN_UNWORN_OHM       = 3_000_000.0  # unmistakably off the head
 WORN_GREY_DEMOTE_S    = 4.0
@@ -396,7 +399,10 @@ class WornGate:
         if self.state != "good":
             # ---- ENTER: strict ----
             if best is not None and best <= self.enter_ohm:
-                if now_mono - self._last_counted >= WORN_ENTER_MIN_GAP_S:
+                gap = now_mono - self._last_counted
+                if gap > WORN_ENTER_MAX_GAP_S:
+                    self._enter_count = 0     # too old to be part of one streak
+                if gap >= WORN_ENTER_MIN_GAP_S:
                     self._enter_count += 1
                     self._last_counted = now_mono
                 if self._enter_count >= WORN_ENTER_CONSEC:

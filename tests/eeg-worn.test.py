@@ -140,6 +140,13 @@ c = g.update([(1800.0, "high_z")], 0.2)
 ok("a cached snapshot re-served within 0.4 s cannot double-count the streak",
    (a, b, c) == ("checking",) * 3, (a, b, c))
 
+g = WornGate()
+g.update([(1800.0, "high_z")], 0.0)
+g.update([(1800.0, "high_z")], 0.5)
+st = g.update([(1800.0, "high_z")], 600.0)    # a stalled callback, 10 min later
+ok("a streak cannot be stitched across a long stall (counts age out at 2.5 s)",
+   st == "checking", st)
+
 ns = ticks(0.0, 240, 0.0, state="no_signal")
 ok("no_signal (incl. the implausibly-low missing-lead mode) never advances the streak",
    "good" not in run(ns))
