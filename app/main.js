@@ -130,7 +130,7 @@ const room = createRoom({
   // a TV window that loaded before the bind is showing a URL nothing
   // served, (re)navigate it to the correct surface now.
   onServerUp: () => {
-    if (tvWindow && !tvWindow.isDestroyed()) tvWindow.loadURL(tvUrlFor(tvSurface));
+    tvWindow.loadURL(initialTvUrl());
     if (audioWindow && !audioWindow.isDestroyed()) audioWindow.loadURL(audioUrl());
   },
 });
@@ -180,6 +180,20 @@ function windowConfigArg() {
   const cfg = { staff: { uiEnabled: !!config.isDev, pin: process.env.FOCUSROOM_STAFF_TOKEN || '' } };
   return '--focusroom-cfg=' + Buffer.from(JSON.stringify(cfg)).toString('base64');
 }
+// THE FIRST SCREEN. The room opens on the operator quick-start sheet, full
+// screen in the TV window itself; dismissing it (Enter, Esc, OK, or its X)
+// hands the window to the constellation via location.replace. Pending is
+// cleared the moment the window shows any real surface, whether by the
+// operator's dismissal or by a live beat arriving underneath, so the sheet
+// can never sit on top of a running session and can never be resurrected
+// by the server's bind-time reload.
+let quickstartPending = process.env.FOCUSROOM_NO_QUICKSTART !== '1';
+function initialTvUrl() {
+  return quickstartPending
+    ? `http://127.0.0.1:${config.net.LAN_PORT}/quickstart.html`
+    : tvUrlFor(tvSurface);
+}
+
 function navigateTv(surface) {
   if (!surface || surface === tvSurface) return;
   tvSurface = surface;
@@ -187,27 +201,6 @@ function navigateTv(surface) {
 }
 
 // ---------------- windows ----------------
-// The operator quick start: one small always-on-top sheet at launch listing
-// every keyboard command, dismissed with Enter, Esc, OK or its X. It exists
-// because the room is deliberately chrome-free (frameless, fullscreen, menu
-// bar hidden), so nothing on screen hints that Cmd+Shift+D even exists, and
-// an operator's first minute should not require the manual. Guests never see
-// it: it appears once, at launch, before anyone is in the room.
-let quickstartWindow = null;
-function createQuickstartWindow() {
-  if (process.env.FOCUSROOM_NO_QUICKSTART === '1') return;   // captures + tests
-  if (quickstartWindow && !quickstartWindow.isDestroyed()) { quickstartWindow.focus(); return; }
-  quickstartWindow = new BrowserWindow({
-    width: 620, height: 700, show: false,
-    frame: false, transparent: true, resizable: false,
-    alwaysOnTop: true, center: true, skipTaskbar: false,
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
-  });
-  quickstartWindow.loadURL(`http://127.0.0.1:${config.net.LAN_PORT}/quickstart.html`);
-  quickstartWindow.once('ready-to-show', () => { try { quickstartWindow.show(); } catch (_) {} });
-  quickstartWindow.on('closed', () => { quickstartWindow = null; });
-}
-
 function createTvWindow() {
   const displays = screen.getAllDisplays();
   const external = displays.find((d) => d.bounds.x !== 0 || d.bounds.y !== 0);
@@ -249,7 +242,11 @@ function createTvWindow() {
   tvSurface = orchestrator.beat === 'reading' || orchestrator.beat === 'strongest' ? 'orb'
     : orchestrator.beat === 'fit' ? 'signal'
     : orchestrator.beat === 'standby' ? 'reveal' : 'constellation';
-  tvWindow.loadURL(tvUrlFor(tvSurface));
+  tvWindow.loadURL(initialTvUrl());
+  if (quickstartPending) tvSurface = null;   // any live beat reclaims the window
+  tvWindow.webContents.on('did-navigate', (_e, url) => {
+    if (/\/tv-[a-z-]+\.html/.test(String(url))) quickstartPending = false;
+  });
   tvWindow.once('ready-to-show', () => tvWindow.show());
   // F11 toggles fullscreen on the TV (the window has no menu to offer it);
   // macOS also has the native green button + Ctrl+Cmd+F from the View menu.
@@ -365,8 +362,6 @@ app.whenReady().then(async () => {
   globalShortcut.register('CommandOrControl+Shift+Q', () => app.quit());
 
   createTvWindow();
-  // after the TV, so the sheet floats above it and takes first focus
-  setTimeout(createQuickstartWindow, 1200);
   createAudioWindow(); // hidden generative room-sound host (no-op if FOCUSROOM_NO_AUDIO=1)
 
   app.on('activate', () => {

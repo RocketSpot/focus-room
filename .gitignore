@@ -45,3 +45,7 @@ build/pyruntime-cache/
 build/pyruntime/
 data/room.log
 data/room.log.1
+data/.release-lock
+data/.release-pending
+data/.release-timer.pid
+data/release.log

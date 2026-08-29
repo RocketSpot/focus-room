@@ -53,9 +53,16 @@ ok('the sheet ships with packaged builds', () => {
   assert.ok(/quickstart\.html/.test(stage), 'not in the webroot manifest');
 });
 
-ok('main.js opens it at launch and captures can suppress it', () => {
-  assert.ok(/createQuickstartWindow/.test(main));
-  assert.ok(/FOCUSROOM_NO_QUICKSTART/.test(main));
+ok('the sheet is the TV window\'s FIRST LOAD, not a floating panel', () => {
+  assert.ok(/quickstart\.html/.test(main), 'main.js never loads the sheet');
+  assert.ok(!/createQuickstartWindow/.test(main), 'the popup implementation should be gone');
+  assert.ok(/FOCUSROOM_NO_QUICKSTART/.test(main), 'captures must be able to suppress it');
+  assert.ok(/tvSurface = null/.test(main), 'a live beat must be able to reclaim the window');
+});
+
+ok('dismissal hands the window to the room, never closes it', () => {
+  assert.ok(/location\.replace\('tv-constellation\.html'\)/.test(sheet),
+    'done() must navigate to the constellation when served');
 });
 
 ok('no signal vocabulary and no em dashes on an operator-facing sheet', () => {
