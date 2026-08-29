@@ -977,6 +977,7 @@ class Orchestrator extends EventEmitter {
     const beat = this.beat;
     this.log(`watchdog: no guest activity in '${beat}' for ${Math.round(budgetMs / 1000)}s, abandoning the session`);
     this._record('session_abandoned', this.now(), { beat, budgetMs }); // diag trail
+    this._saveSession(); // partial record: bands, contact trail, events up to the abandon
     // fit now STREAMS (the signal check), so stopping it is STOP_SESSION like the
     // reading - unless the abandon lands inside the impedance phase, where the
     // tone is armed and no stream ever started
@@ -1175,7 +1176,8 @@ class Orchestrator extends EventEmitter {
       case SIDECAR_OUT.IMPEDANCE:
         // save the whole contact-density history (fit/signal-check phase) into the record
         if (this.impedanceLog && this.impedanceLog.length < 20000) {
-          this.impedanceLog.push({ t: msg.t || this.now(), channels: msg.channels || null, allGood: !!msg.allGood });
+          this.impedanceLog.push({ t: msg.t || this.now(), channels: msg.channels || null,
+            allGood: !!msg.allGood, worn: msg.worn || null });
         }
         this._onImpedance(msg); // fit escalation tracks the allGood snapshots
         break;
