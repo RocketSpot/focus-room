@@ -34,7 +34,8 @@ WORN_PASS_OHM            = 2_300_000.0
 # reached the firmware there is no 24 nA tone, and what the DFT measures at
 # 31.25 Hz is background noise: readings come out roughly 1000x too low.
 # Algebra of that failure: Z' = (Z_true + 2200)/1000 - 2200, so a WORN bud
-# maps below zero (caught by no_signal) but a DESK bud (3.0-3.7 MOhm) maps to
+# maps below zero (below ~2.2 MOhm true; the 2.2-2.3 sliver maps to a positive
+# 0-102 Ohm, caught by this floor) but a DESK bud (3.0-3.7 MOhm) maps to
 # ~800-1500 Ohm - which without this floor would read as a superb contact.
 # A dry in-ear electrode is hundreds of kOhm at best; anything under this
 # floor is electrically implausible and must never be trusted, let alone
@@ -50,19 +51,20 @@ QC_GOOD_MAX = 800
 
 # ADS1299 / transport sends ±8388608 when a channel is inactive or data missing.
 _ADC_INVALID_ABS = 8_387_000
-# Goertzel omega = 2π f_inj Δt ; Δt must match actual mean sample spacing on each
-# ear.  Under Windows dual-BLE one link often runs ~35–55 Hz while the other is
-# ~250 Hz — using 1/250 for both makes the slow side report bogus kΩ (often
-# falsely low “good contact”).  Clamp inferred spacing to a plausible range.
-_DT_MIN = 1.0 / 420.0
-_DT_MAX = 1.0 / 15.0
-# Lead-off tone is 31.25 Hz — need Fs > 2× that (Nyquist). Below this,
-# Goertzel amplitude is not trustworthy even with correct Δt (strict mode).
-IMPEDANCE_MIN_FS_HZ = 70.0
-_IMPEDANCE_FS_TRUST_NYQ = 2.0 * LOFF_INJECTION_HZ  # 62.5 Hz
-_APPROXIMATE_FS_HINT = (
-    "approximate: BLE below ideal Nyquist for 31.25 Hz (common ~50 Hz Windows link)"
-)
+# NOTE: the old wall-clock-dt "strict/approximate Fs" machinery is gone. The
+# position-aware DFT judges the window by TRUE stream positions, so a lossy or
+# throttled link costs coverage (a null verdict) instead of a phase-rotated
+# amplitude, and true firmware decimation collapses the amplitude into
+# no_signal. Both directions fail safe without inferring Fs from wall time.
+# TONE SETTLE (arm-side twin of POST_LEADOFF_DISCARD_SEC): the 31.25 Hz tone
+# does not step to full amplitude the instant the lead command lands. Samples
+# from the first moments of an epoch carry a PARTIAL tone, whose depressed
+# amplitude maps to a lower Z - which reads as a BETTER contact - and an EMA
+# seeded from them drags through the pass band. Reproduced in review: a 3.3
+# MOhm desk bud with a 1.5 s tone ramp read "good" for ~4 s on every arm.
+# So the estimator discards everything in the first TONE_SETTLE_SEC of its
+# epoch, and the streak starts from full-tone truth.
+TONE_SETTLE_SEC = 2.0
 
 
 def _adc_value_invalid(x: float) -> bool:
@@ -78,9 +80,13 @@ def _adc_pair_invalid(ch1: float, ch2: float) -> bool:
 @dataclass(frozen=True)
 class ChannelSnapshot:
     kohm:  Optional[float]
-    state: str   # "idle" | "measuring" | "low_z" | "pair_ok" | "high_z" | "open"
+    state: str   # "idle" | "measuring" | "no_signal" | "low_z" | "pair_ok" | "high_z" | "open"
     phase: str   # "idle" | "measuring" | "good" | "bad"
     hint:  Optional[str]
+    kohm_raw: Optional[float] = None   # THIS window's un-smoothed estimate; the
+                                       # enter streak requires raw AND smoothed
+                                       # to agree, so EMA lag can never finish
+                                       # a streak the electrode did not earn
 
 
 @dataclass(frozen=True)
@@ -110,15 +116,22 @@ class ChannelImpedanceEstimator:
       - armed 0 Ohm is no_signal, never a pass; worn() is the 2.3 MOhm verdict
     """
 
-    def __init__(self):
+    def __init__(self, settle_sec: float = TONE_SETTLE_SEC):
+        # settle_sec: how much of the epoch's head to discard (tone ramp-up).
+        # Production always uses the default; unit tests that probe the DFT
+        # and coverage math (not arm-time behaviour) may pass 0.
+        self._settle_sec = settle_sec
         # samples ride with their TRUE position in the stream (the transport's
         # admission index), so the tone is measured where it actually happened
         self._buf: deque = deque(maxlen=IMPEDANCE_WINDOW_SAMPLES)   # (uV, abs_idx)
         self._tbuf: deque = deque(maxlen=IMPEDANCE_WINDOW_SAMPLES)
         self._last_compute_ms: float = 0.0
         self._smoothed_kohm: Optional[float] = None
+        self._last_raw_kohm: Optional[float] = None
         self._last_snapshot: ChannelSnapshot = _IDLE_SNAPSHOT
         self._fallback_idx = 0     # only for callers that supply no index
+        self._epoch_t0: Optional[float] = None   # first push of this epoch
+        self._last_top_idx: Optional[int] = None # newest position at last compute
 
     def push_sample(self, raw_adc: float, t_mono: float, abs_idx: Optional[int] = None) -> None:
         """Append one EEG sample (raw ADC count), its timestamp, and its TRUE
@@ -127,6 +140,10 @@ class ChannelImpedanceEstimator:
         if abs_idx is None:
             self._fallback_idx += 1
             abs_idx = self._fallback_idx
+        if self._epoch_t0 is None:
+            self._epoch_t0 = t_mono
+        if t_mono - self._epoch_t0 < self._settle_sec:
+            return          # partial tone; see TONE_SETTLE_SEC above
         self._buf.append((raw_adc * LSB_UV_PER_COUNT, int(abs_idx)))
         self._tbuf.append(t_mono)
 
@@ -150,16 +167,28 @@ class ChannelImpedanceEstimator:
                 and self._smoothed_kohm is not None:
             return self._last_snapshot
 
+        # FROZEN BUFFER GUARD. Without new samples since the last compute this
+        # would recompute the identical window and hand the verdict "fresh"
+        # trusted evidence every 500 ms off a dead link - which made the
+        # gate's staleness demote unreachable. No new samples, no evidence.
+        top = self._buf[-1][1]
+        if self._last_top_idx is not None and top == self._last_top_idx:
+            self._last_snapshot = _MEASURING_SNAPSHOT
+            return _MEASURING_SNAPSHOT
+        self._last_top_idx = top
+
         amp_uv   = self._binned_amplitude_uv()
         kohm_raw = self._amplitude_to_kohm(amp_uv)
         self._apply_ema(kohm_raw)
+        self._last_raw_kohm = kohm_raw
         self._last_compute_ms = now_ms
 
         k     = self._smoothed_kohm
         state = self._map_state(k)
         phase = self._map_phase(k)
         hint  = self._hint_for_state(state)
-        snap = ChannelSnapshot(kohm=k, state=state, phase=phase, hint=hint)
+        snap = ChannelSnapshot(kohm=k, state=state, phase=phase, hint=hint,
+                               kohm_raw=kohm_raw)
         self._last_snapshot = snap
         return snap
 
@@ -168,23 +197,12 @@ class ChannelImpedanceEstimator:
         self._tbuf.clear()
         self._last_compute_ms = 0.0
         self._smoothed_kohm   = None
+        self._last_raw_kohm   = None
         self._last_snapshot   = _IDLE_SNAPSHOT
+        self._epoch_t0        = None
+        self._last_top_idx    = None
 
     # ----- internals -----
-
-    def _mean_sample_dt(self) -> Optional[float]:
-        N = len(self._buf)
-        times = list(self._tbuf)
-        if N < 2 or len(times) != N or times[-1] <= times[0]:
-            return None
-        avg_dt = (times[-1] - times[0]) / (N - 1)
-        return max(_DT_MIN, min(_DT_MAX, avg_dt))
-
-    def _effective_fs_hz(self) -> Optional[float]:
-        dt = self._mean_sample_dt()
-        if dt is None or dt <= 0.0:
-            return None
-        return 1.0 / dt
 
     def _present_in_window(self) -> Optional[int]:
         """How many samples are PRESENT in the last 256 positions of elapsed
@@ -241,6 +259,13 @@ class ChannelImpedanceEstimator:
     def _apply_ema(self, new_kohm: float) -> None:
         if self._smoothed_kohm is None:
             self._smoothed_kohm = new_kohm
+        elif new_kohm * 1000.0 < MIN_PLAUSIBLE_OHM:
+            # A raw window in no_signal territory is an electrical event (tone
+            # gone, chain broken), never wobble. Blending it would walk the
+            # smoothed value DOWN THROUGH the pass band over ~10 ticks - the
+            # reviewed decay attack read a desk bud "good" for 6.5 s. Adopt
+            # the collapse whole, so the very next snapshot is no_signal.
+            self._smoothed_kohm = new_kohm
         else:
             self._smoothed_kohm = (1.0 - EMA_ALPHA) * self._smoothed_kohm \
                                   + EMA_ALPHA * new_kohm
@@ -262,6 +287,10 @@ class ChannelImpedanceEstimator:
         return "open"
 
     def _map_phase(self, kohm: float) -> str:
+        # phase is the QC-pass line some consumers read verbatim; it must not
+        # call an untrusted (no_signal / implausibly-low) reading "good"
+        if kohm <= 0.0 or kohm * 1000.0 < MIN_PLAUSIBLE_OHM:
+            return "bad"
         return "good" if kohm <= QC_GOOD_MAX else "bad"
 
     def worn(self) -> Optional[bool]:
@@ -286,10 +315,10 @@ class ChannelImpedanceEstimator:
 class EarImpedanceProcessor:
     """Process impedance for one ear (CH1 + CH2)."""
 
-    def __init__(self, side: str = "?"):
+    def __init__(self, side: str = "?", settle_sec: float = TONE_SETTLE_SEC):
         self._side = side
-        self.ch1 = ChannelImpedanceEstimator()
-        self.ch2 = ChannelImpedanceEstimator()
+        self.ch1 = ChannelImpedanceEstimator(settle_sec=settle_sec)
+        self.ch2 = ChannelImpedanceEstimator(settle_sec=settle_sec)
 
     def ingest(self, ch1_raw: float, ch2_raw: float, t_mono: float, abs_idx: Optional[int] = None) -> None:
         if _adc_pair_invalid(ch1_raw, ch2_raw):
@@ -369,27 +398,39 @@ class WornGate:
         self._enter_count = 0
         self._last_counted = float("-inf")   # the FIRST estimate always counts
         self._last_trusted = None     # monotonic time of the last trusted estimate
-        self._bad_since = None        # start of a sustained failing stretch
-        self._bad_kind = None         # "grey" | "unworn"
+        self._bad_since = None        # start of a continuous stretch ABOVE stay
+        self._unworn_since = None     # start of a continuous stretch AT/ABOVE unworn
 
     @staticmethod
     def _best_trusted_ohm(channels):
-        """channels: iterable of (kohm, state). Returns the lowest trusted
-        impedance in ohms, or None when no channel can be trusted. no_signal
-        (which includes the implausibly-low missing-lead mode), idle and
-        measuring are not evidence."""
+        """channels: iterable of (kohm, state) or (kohm, state, kohm_raw).
+        Returns (best_ohm, enter_ok): the lowest trusted smoothed impedance in
+        ohms (None when no channel can be trusted), and whether any channel
+        qualifies for the ENTER streak - which demands the RAW window estimate
+        agree with the smoothed one, so EMA lag (a desk bud riding a recently
+        worn or tone-ramp-depressed average through the pass band) can never
+        finish a streak the electrode did not earn. no_signal (which includes
+        the implausibly-low missing-lead mode), idle and measuring are not
+        evidence."""
         best = None
-        for kohm, state in channels:
+        enter_ok = False
+        for c in channels:
+            kohm, state = c[0], c[1]
+            raw = c[2] if len(c) > 2 else kohm
             if kohm is None or state in ("no_signal", "idle", "measuring"):
                 continue
             ohm = kohm * 1000.0
             if best is None or ohm < best:
                 best = ohm
-        return best
+            raw_ohm = None if raw is None else raw * 1000.0
+            if ohm <= WORN_PASS_OHM and raw_ohm is not None \
+                    and MIN_PLAUSIBLE_OHM <= raw_ohm <= WORN_PASS_OHM:
+                enter_ok = True
+        return best, enter_ok
 
     def update(self, channels, now_mono: float) -> str:
-        best = self._best_trusted_ohm(channels)
-        has_no_signal = any(st == "no_signal" for _k, st in channels)
+        best, enter_ok = self._best_trusted_ohm(channels)
+        has_no_signal = any(c[1] == "no_signal" for c in channels)
 
         if best is not None:
             self._last_trusted = now_mono
@@ -398,7 +439,7 @@ class WornGate:
 
         if self.state != "good":
             # ---- ENTER: strict ----
-            if best is not None and best <= self.enter_ohm:
+            if enter_ok and best is not None and best <= self.enter_ohm:
                 gap = now_mono - self._last_counted
                 if gap > WORN_ENTER_MAX_GAP_S:
                     self._enter_count = 0     # too old to be part of one streak
@@ -408,7 +449,7 @@ class WornGate:
                 if self._enter_count >= WORN_ENTER_CONSEC:
                     self.state = "good"
                     self._bad_since = None
-                    self._bad_kind = None
+                    self._unworn_since = None
             elif best is not None or has_no_signal:
                 # a failing or untrusted estimate breaks the streak; silence
                 # (measuring) merely does not advance it
@@ -429,15 +470,25 @@ class WornGate:
             return self.state           # silence inside the staleness window
         if best <= self.stay_ohm:
             self._bad_since = None
-            self._bad_kind = None
+            self._unworn_since = None
             return self.state
-        kind = "unworn" if best >= self.unworn_ohm else "grey"
-        if self._bad_since is None or self._bad_kind != kind:
+        # Two demote clocks, ACCUMULATED not exclusive: _bad_since runs from
+        # the first reading above stay and keeps running across the 3.0 MOhm
+        # boundary (readings wobbling grey<->unworn used to restart the timer
+        # on every crossing - a removed bud straddling 3.0 stayed good for two
+        # minutes in review, forever in principle); _unworn_since additionally
+        # runs while readings sit at/above unworn, for the fast demote.
+        if self._bad_since is None:
             self._bad_since = now_mono
-            self._bad_kind = kind
-            return self.state
-        limit = WORN_UNWORN_DEMOTE_S if kind == "unworn" else WORN_GREY_DEMOTE_S
-        if now_mono - self._bad_since >= limit:
+        if best >= self.unworn_ohm:
+            if self._unworn_since is None:
+                self._unworn_since = now_mono
+        else:
+            self._unworn_since = None
+        if now_mono - self._bad_since >= WORN_GREY_DEMOTE_S:
+            self._demote()
+        elif self._unworn_since is not None \
+                and now_mono - self._unworn_since >= WORN_UNWORN_DEMOTE_S:
             self._demote()
         return self.state
 
@@ -445,4 +496,4 @@ class WornGate:
         self.state = "bad"
         self._enter_count = 0
         self._bad_since = None
-        self._bad_kind = None
+        self._unworn_since = None

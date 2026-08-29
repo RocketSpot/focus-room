@@ -1291,11 +1291,16 @@ class zone:
         with self._imp_lock:
             self._left_imp = EarImpedanceProcessor(side="L")
             self._right_imp = EarImpedanceProcessor(side="R")
-            # Strict two-bud alignment: until each ear has delivered ≥1 sample,
-            # samples are dropped; then both processors reset and ingestion starts.
+            # Alignment waits for each CONNECTED ear to deliver ≥1 sample, then
+            # both processors reset and ingestion starts. A side that is not
+            # connected at arm time is not waited for — a single-bud fit check
+            # used to arm, inject the tone, and then emit nothing forever
+            # because the absent sibling could never report in.
             self._imp_aligned = False
             self._imp_left_seen = False
             self._imp_right_seen = False
+            self._imp_need_left = bool(self._conn._dev1_connected)
+            self._imp_need_right = bool(self._conn._dev2_connected)
 
         # Install the tap up-front. _on_impedance_sample is gated on
         # self._lead_armed so pre-arm samples are dropped — same model as
@@ -1386,7 +1391,8 @@ class zone:
                         self._imp_left_seen = True
                     elif device_id == 2:
                         self._imp_right_seen = True
-                    if self._imp_left_seen and self._imp_right_seen:
+                    if (self._imp_left_seen or not getattr(self, "_imp_need_left", True)) \
+                            and (self._imp_right_seen or not getattr(self, "_imp_need_right", True)):
                         self._imp_aligned = True
                         if left_imp is not None:
                             left_imp.reset()
@@ -1405,8 +1411,8 @@ class zone:
     async def _impedance_emit_loop(self):
         # Emit impedance snapshots on a fixed cadence. BLE samples are queued
         # from worker threads and drained here so ingest never blocks notify.
-        # When inferred Fs is below IMPEDANCE_MIN_FS_HZ (strict mode), impedance.py
-        # returns measuring + hint.
+        # (No wall-clock-Fs strict mode any more: the position-aware DFT makes
+        # a throttled or lossy link cost coverage, which is a null verdict.)
         try:
             while self._lead_armed:
                 self._imp_flush_pending()

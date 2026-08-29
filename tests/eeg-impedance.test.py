@@ -34,7 +34,7 @@ def tone_counts(z_ohm, i):
 
 
 def measure(indices, z_ohm=42_000.0, dc=250_000.0):
-    est = ChannelImpedanceEstimator()
+    est = ChannelImpedanceEstimator(settle_sec=0.0)
     for i in indices:
         est.push_sample(tone_counts(z_ohm, i) + dc, i * 0.004, abs_idx=i)
     return est.compute_if_ready(True, 1e9)
@@ -64,7 +64,7 @@ ok("a huge DC offset does not leak into the estimate (window mean removed)",
 
 print("\nA.2 parity: with nothing missing, the positioned DFT equals the Goertzel")
 uv = [tone_counts(42_000.0, i) * LSB_UV_PER_COUNT for i in range(256)]
-est = ChannelImpedanceEstimator()
+est = ChannelImpedanceEstimator(settle_sec=0.0)
 for i in range(256):
     est.push_sample(tone_counts(42_000.0, i), i * 0.004, abs_idx=i)
 a_dft = est._binned_amplitude_uv()
@@ -85,7 +85,7 @@ ok(f"the spliced Goertzel really does collapse ({a_spliced:.1f} vs true {a_ref:.
    "which is the bug this replaces", a_spliced < a_ref * 0.8, (a_spliced, a_ref))
 
 print("\nB.1 coverage gate")
-est = ChannelImpedanceEstimator()
+est = ChannelImpedanceEstimator(settle_sec=0.0)
 for i in range(0, 500, 5):   # only every 5th position present: 20% coverage
     est.push_sample(tone_counts(42_000.0, i), i * 0.004, abs_idx=i)
 snap = est.compute_if_ready(True, 1e9)
@@ -142,7 +142,7 @@ ok("a gap advances the index by its true size (loss is survivable)",
 
 print("\nB.2 seeded EMA")
 ok("alpha is the shipping 0.3", abs(EMA_ALPHA - 0.30) < 1e-9, EMA_ALPHA)
-est = ChannelImpedanceEstimator()
+est = ChannelImpedanceEstimator(settle_sec=0.0)
 est._apply_ema(100.0)
 ok("the first estimate is adopted DIRECTLY, never blended with zero",
    est._smoothed_kohm == 100.0, est._smoothed_kohm)
@@ -150,7 +150,7 @@ est._apply_ema(200.0)
 ok("thereafter 0.7 old + 0.3 new", abs(est._smoothed_kohm - 130.0) < 1e-9, est._smoothed_kohm)
 
 print("\nA.3 + B.3 verdicts")
-est = ChannelImpedanceEstimator()
+est = ChannelImpedanceEstimator(settle_sec=0.0)
 for i in range(256):
     est.push_sample(250_000.0, i * 0.004, abs_idx=i)   # DC only: no tone at all
 snap = est.compute_if_ready(True, 1e9)
@@ -160,7 +160,7 @@ ok("worn() refuses to call no_signal evidence either way", est.worn() is None, e
 ok("the worn threshold is the spec's 2.3 MOhm", WORN_PASS_OHM == 2_300_000.0)
 snap42 = measure(range(256))
 ok("a 42 kOhm contact is worn", abs(snap42.kohm - 42) < 2)
-est2 = ChannelImpedanceEstimator()
+est2 = ChannelImpedanceEstimator(settle_sec=0.0)
 for i in range(256):
     est2.push_sample(tone_counts(3_200_000.0, i) + 1000, i * 0.004, abs_idx=i)
 est2.compute_if_ready(True, 1e9)
@@ -188,7 +188,7 @@ p = Probe()
 p._process_packet(pkt(10), 1)
 p._process_packet(pkt((10 + 129) % 256, 1000), 1)   # delta 129 reads as -127: replay
 ok("delta of 129 reads as a replay, refused", len(p.seen) == 1, len(p.seen))
-proc = EarImpedanceProcessor(side="L")
+proc = EarImpedanceProcessor(side="L", settle_sec=0.0)
 proc.ingest(1000.0, 2000.0, 0.0, abs_idx=7)
 ok("both channels of a packet advance together on ONE stream position",
    proc.ch1._buf[-1][1] == 7 and proc.ch2._buf[-1][1] == 7)
@@ -197,7 +197,7 @@ print("\nA.4 plausibility floor (the missing-lead failure mode)")
 # lead command missing => amplitude ~1000x low. A worn bud maps below zero
 # (no_signal by the clamp); a DESK bud maps to ~800-1500 Ohm, which without
 # the floor would read as a superb contact and PASS. It must never.
-est3 = ChannelImpedanceEstimator()
+est3 = ChannelImpedanceEstimator(settle_sec=0.0)
 for i in range(256):
     est3.push_sample(tone_counts(3_300_000.0, i) / 1000.0 + 1000, i * 0.004, abs_idx=i)
 snap3 = est3.compute_if_ready(True, 1e9)
@@ -206,7 +206,7 @@ ok("a desk bud with the lead command missing reads no_signal, never a pass",
 ok("...and worn() refuses to treat it as evidence", est3.worn() is None)
 ok("...with the hint naming the missing tone",
    snap3.hint is not None and "lead-off tone missing" in snap3.hint, snap3.hint)
-est4 = ChannelImpedanceEstimator()
+est4 = ChannelImpedanceEstimator(settle_sec=0.0)
 for i in range(256):
     est4.push_sample(tone_counts(1_500_000.0, i) / 1000.0 + 1000, i * 0.004, abs_idx=i)
 snap4 = est4.compute_if_ready(True, 1e9)
@@ -215,6 +215,36 @@ ok("a worn bud with the lead command missing is caught too",
 ok("a genuine 42 kOhm contact still sits ABOVE the floor (floor is 10 kOhm)",
    MIN_PLAUSIBLE_OHM == 10_000.0 and snap42.state != "no_signal",
    (MIN_PLAUSIBLE_OHM, snap42.state))
+
+print("\nfit-path epoch hygiene (source-pinned)")
+ok("start_fit cycles a still-armed check so estimators really rebuild",
+   "cycling for a fresh estimator epoch" in zs
+   and "stop_impedance" in zs.split("async def start_fit")[1].split("async def _battery_gate")[0])
+ok("a reconnect during an armed fit re-arms the lead tone (fresh epoch)",
+   "re-arming the lead tone" in zs)
+zc = open(os.path.join(_HERE, "..", "sidecar", "zone_sdk", "connection.py")).read()
+ok("reset_dev1_stats leaves device 2's admission epoch alone",
+   'self._adm[1] = {"last": None' in zc.split("def reset_dev1_stats")[1].split("def reset_dev2_stats")[0])
+zn = open(os.path.join(_HERE, "..", "sidecar", "zone_sdk", "zone.py")).read()
+ok("single-bud fit: alignment only waits for CONNECTED sides",
+   "_imp_need_left" in zn and "_imp_need_right" in zn)
+est5 = ChannelImpedanceEstimator(settle_sec=0.0)
+for i in range(256):
+    est5.push_sample(tone_counts(42_000.0, i) + 1000, i * 0.004, abs_idx=i)
+s5 = est5.compute_if_ready(True, 1e9)
+ok("snapshots carry the raw window estimate alongside the smoothed",
+   s5.kohm_raw is not None and abs(s5.kohm_raw - 42.0) < 2.0, s5.kohm_raw)
+est6 = ChannelImpedanceEstimator(settle_sec=0.0)
+for i in range(256):
+    est6.push_sample(1000.0, i * 0.004, abs_idx=i)      # no tone
+s6 = est6.compute_if_ready(True, 1e9)
+ok("phase never reads good on a no_signal channel", s6.phase == "bad", (s6.state, s6.phase))
+est7 = ChannelImpedanceEstimator()                       # REAL settle
+for i in range(1024):
+    est7.push_sample(tone_counts(42_000.0, i) + 1000, i * 0.004, abs_idx=i)
+ok("the settle discard really eats the epoch's first 2 s (production default)",
+   len(est7._buf) > 0 and min(t for t in est7._tbuf) >= 2.0,
+   (len(est7._buf), min(est7._tbuf) if est7._tbuf else None))
 
 print("\n" + ("all %d checks passed" % _pass if _fail == 0 else "%d FAILURE(S)" % _fail))
 sys.exit(0 if _fail == 0 else 1)

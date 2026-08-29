@@ -185,10 +185,12 @@ class DualBLEConnection:
         #                   later sample to the wrong moment in time.
         # Anti-stall: after 64 consecutive refusals the side re-syncs to whatever
         # is arriving, so a loss larger than 128 cannot reject data forever.
-        self._adm = {
-            1: {"last": None, "abs": 0, "refusals": 0, "dupes": 0, "replays": 0},
-            2: {"last": None, "abs": 0, "refusals": 0, "dupes": 0, "replays": 0},
-        }
+        # ONLY device 1's admission epoch resets - rebuilding the whole dict
+        # also zeroed device 2's absolute index, and an estimator ring still
+        # holding samples at the old large positions would then splice two
+        # position epochs into one window (arbitrary relative tone phase, so
+        # the amplitude can partially cancel into the pass band).
+        self._adm[1] = {"last": None, "abs": 0, "refusals": 0, "dupes": 0, "replays": 0}
         self._dev1_received = 0
         self._dev1_dropped = 0
         self._dev1_last_sample = None
@@ -767,10 +769,12 @@ class DualBLEConnection:
         #                   later sample to the wrong moment in time.
         # Anti-stall: after 64 consecutive refusals the side re-syncs to whatever
         # is arriving, so a loss larger than 128 cannot reject data forever.
-        self._adm = {
-            1: {"last": None, "abs": 0, "refusals": 0, "dupes": 0, "replays": 0},
-            2: {"last": None, "abs": 0, "refusals": 0, "dupes": 0, "replays": 0},
-        }
+        # ONLY device 1's admission epoch resets - rebuilding the whole dict
+        # also zeroed device 2's absolute index, and an estimator ring still
+        # holding samples at the old large positions would then splice two
+        # position epochs into one window (arbitrary relative tone phase, so
+        # the amplitude can partially cancel into the pass band).
+        self._adm[1] = {"last": None, "abs": 0, "refusals": 0, "dupes": 0, "replays": 0}
         self._dev1_received = 0
         self._dev1_dropped = 0
         self._dev1_last_sample = None

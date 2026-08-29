@@ -161,7 +161,6 @@ class Orchestrator extends EventEmitter {
     this._reseatActive = false;
     this._fitAllGood = false;
     this._fitGood = 0;           // consecutive clean-signal frames during the signal check
-    this._fitSlow = false;
     // Phase 2A: EEG-quality gate state (from eeg/quality-v1)
     this._eegQualitySeen = false;
     this._eegQualityStatus = null;
@@ -225,7 +224,7 @@ class Orchestrator extends EventEmitter {
     this.beat = beat;
     this._armWatchdog(); // every beat change starts a fresh inactivity budget
     if (beat === 'fit') this._armFitHint();
-    else if (prev === 'fit') { this._clearFitHint(); this._fitSlow = false; } // the notice dies with the beat
+    else if (prev === 'fit') { this._clearFitHint(); } // the hint dies with the beat
     // The stall detector only runs where a live stream is expected. Entering a
     // streaming beat clears any stale liveness from the previous one, so the
     // first frame of the new stream starts the clock rather than an old frame
@@ -968,7 +967,6 @@ class Orchestrator extends EventEmitter {
   _armFitHint() {
     this._clearFitHint();
     this._fitAllGood = false;
-    this._fitSlow = false;
     this._fitHint = setTimeout(() => {
       this._fitHint = null;
       if (this.beat !== 'fit' || this._fitAllGood) return;
@@ -986,11 +984,8 @@ class Orchestrator extends EventEmitter {
     if (this.beat !== 'fit' || !msg.allGood) return;
     this._fitAllGood = true;
     this._clearFitHint();
-    if (this._fitSlow) {
-      this._fitSlow = false;
-      this._broadcastState();
-      this.log('fit: allGood arrived, fit_slow cleared');
-    }
+    // (the old fit_slow notice was a vestige: nothing ever set it, so the
+    // faster worn verdict has no timing assumption to break here)
   }
 
   // ---------------- sidecar restart ----------------

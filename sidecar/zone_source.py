@@ -676,6 +676,14 @@ class ZoneSource:
     # ---------------- pre-session fit check ----------------
     async def start_fit(self):
         await self._battery_gate()
+        # FORCE a fresh epoch. sdk.start_impedance() is idempotent: if a fit
+        # check is already armed it returns without rebuilding the estimators,
+        # and guest 2's desk bud would ride guest 1's low EMA straight into
+        # "good" (~2 s, reproduced in review). Disarm first so the arm below
+        # really rebuilds everything.
+        if self.sdk.get_buds_status().get("impedance_armed"):
+            self.log("fit re-armed while armed: cycling for a fresh estimator epoch")
+            await self.sdk.stop_impedance()
         # fresh verdict epoch: the SDK rebuilds its estimators on arm, and the
         # worn gates must match — guest 2 never inherits guest 1's verdict.
         for g in self._worn_gate.values():
@@ -1226,6 +1234,21 @@ class ZoneSource:
                         if not ok_stream:
                             continue
                         asyncio.create_task(self._stream_liveness_check())
+                if getattr(self.sdk, "_lead_armed", False):
+                    # A reconnect never re-sends the 'lead' command, so the
+                    # rejoined bud streams with the tone OFF into estimators
+                    # still seeded from before the drop - whose EMA would decay
+                    # down through the pass band (reviewed: desk bud "good" for
+                    # 6.5 s). Cycle the fit check: fresh command, fresh
+                    # estimators, fresh gates.
+                    self.log("reconnect during an armed fit check: re-arming the lead tone")
+                    try:
+                        await self.sdk.stop_impedance()
+                        for g in self._worn_gate.values():
+                            g.reset()
+                        await self.sdk.start_impedance()
+                    except Exception as e:
+                        self.log(f"fit re-arm after reconnect failed: {e}")
                 self.engine.set_signal_quality(0.9)   # restored; live stats re-take it ~1/s
                 now = self.sdk.get_buds_status()
                 self.tx.send(OUT.CONNECTION,
@@ -1279,7 +1302,8 @@ class ZoneSource:
         def ch(c):
             if c is None:
                 return None
-            return {"kohm": c.kohm, "state": c.state, "phase": c.phase, "hint": c.hint}
+            return {"kohm": c.kohm, "kohmRaw": getattr(c, "kohm_raw", None),
+                    "state": c.state, "phase": c.phase, "hint": c.hint}
 
         def ear(e):
             if e is None:
@@ -1287,25 +1311,9 @@ class ZoneSource:
             return {"ch1": ch(e.ch1), "ch2": ch(e.ch2)}
 
         channels = {"left": ear(snap.left), "right": ear(snap.right)}
-        # "Good contact" = the SDK's own QC-pass line: phase == "good" (≤ ~800 kΩ).
-        # We gate on PHASE, not on the tighter low_z/pair_ok state buckets (≤150 kΩ):
-        # dry in-ear electrodes commonly sit in high_z (150–500 kΩ) while still
-        # reading a clean signal, so requiring ≤150 kΩ would never pass a real guest.
-        # A channel still filling its window reads phase "idle"/"measuring" → we wait.
-        good = bad = pending = 0
-        for ear_d in (channels["left"], channels["right"]):
-            if ear_d is None:
-                continue
-            for c in (ear_d["ch1"], ear_d["ch2"]):
-                if c is None:
-                    continue
-                ph = c["phase"]
-                if ph == "good":
-                    good += 1
-                elif ph == "bad":
-                    bad += 1
-                else:
-                    pending += 1        # idle / measuring — still settling
+        # (the per-channel phase/state buckets stream to the operator display
+        # verbatim; allGood comes from the WornGate verdicts below, which take
+        # the best trusted channel per side and handle no_signal correctly)
         # VERDICT LAYER (spec B.3, asymmetric). The verdict's one job is worn
         # vs not worn, decided per side by a WornGate (zone_sdk/impedance.py):
         #   enter   = 3 consecutive trusted estimates at or under 2.3 MOhm
@@ -1325,13 +1333,15 @@ class ZoneSource:
             if ear_d is None:
                 verdict[side] = None    # not measuring; cannot fail the other side
                 continue
-            chans = [(c["kohm"], c["state"])
+            chans = [(c["kohm"], c["state"], c["kohmRaw"])
                      for c in (ear_d["ch1"], ear_d["ch2"]) if c is not None]
             verdict[side] = self._worn_gate[side].update(chans, now_mono)
         measured = [v for v in verdict.values() if v is not None]
         all_good = bool(measured) and all(v == "good" for v in measured)
         self.tx.send(OUT.IMPEDANCE, channels=channels, allGood=all_good,
                      worn=verdict)
+        self._last_impedance = channels
+        self._log_impedance(channels, all_good)
 
     def _log_impedance(self, channels, all_good):
         """A compact, human-readable impedance line for the diagnostic — logged on

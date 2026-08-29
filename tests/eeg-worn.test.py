@@ -160,7 +160,8 @@ ok("null verdicts (under-coverage on a lossy link) never advance the streak",
 print("\nfull chain: estimator -> gate, synthetic tone at the exact bin")
 # =====================================================================
 
-def chain(z_ohm, n_windows=8, loss=None, dup=False, lead_divisor=1.0, noise=0.0):
+def chain(z_ohm, n_windows=10, loss=None, dup=False, lead_divisor=1.0, noise=0.0,
+          ramp_sec=0.0, tone_dies_at=None):
     """Feed n_windows*256 tone samples through estimator+gate as the real path
     does: push, compute each 500 ms, update the gate on each fresh snapshot.
     loss: keep only positions where (i % 10) >= loss_digits (simulating drops).
@@ -175,7 +176,13 @@ def chain(z_ohm, n_windows=8, loss=None, dup=False, lead_divisor=1.0, noise=0.0)
     for i in range(n_windows * 256):
         drop = loss is not None and (i % 10) < loss
         if not drop:
+            t = i * 0.004
             x = tone_counts(z_ohm, i) / lead_divisor + 1000
+            if ramp_sec and t < ramp_sec:
+                # the arm-time transient: tone still ramping to full amplitude
+                x = (tone_counts(z_ohm, i) * (t / ramp_sec)) / lead_divisor + 1000
+            if tone_dies_at is not None and t >= tone_dies_at:
+                x = 1000.0                      # injection stopped; DC only
             if noise:
                 x += rng.gauss(0.0, noise)
             est.push_sample(x, i * 0.004, abs_idx=i)
@@ -189,12 +196,12 @@ def chain(z_ohm, n_windows=8, loss=None, dup=False, lead_divisor=1.0, noise=0.0)
 
 
 trace, _ = chain(1_500_000.0)
-ok("worn 1.5 MOhm: good within a few seconds through the full chain",
-   "good" in trace[:8] and trace[-1] == "good", trace[:8])
+ok("worn 1.5 MOhm: good within ~5 s through the full chain (2 s tone settle + 3 estimates)",
+   "good" in trace[:11] and trace[-1] == "good", trace[:11])
 
 trace, _ = chain(1_500_000.0, noise=300.0)
 ok("worn survives realistic ADC noise on top of the tone",
-   trace[-1] == "good", trace[:8])
+   trace[-1] == "good", trace[:11])
 
 trace, _ = chain(3_300_000.0)
 ok("desk 3.3 MOhm: never good through the full chain", "good" not in trace, set(trace))
@@ -219,7 +226,105 @@ ok("worn + missing lead command: no fake pass either (clamp/no_signal)",
 
 trace, _ = chain(1_500_000.0, loss=3)       # 30% loss: coverage still >= 50%
 ok("worn + moderate loss (30%): the position-aware DFT still reaches good",
-   trace[-1] == "good", trace[:8])
+   trace[-1] == "good", trace[:11])
+
+
+# =====================================================================
+print("\nreviewed attacks, pinned so none can return")
+# =====================================================================
+# Each of these reproduced against the pre-review code (adversarial review,
+# three lenses, live counterexamples). The invariant they all attacked: a bud
+# not on a person must never reach good, even briefly.
+
+trace, _ = chain(3_300_000.0, ramp_sec=1.5)
+ok("ATTACK 1, tone-onset transient: desk bud with a 1.5 s tone ramp never good "
+   "(the 2 s settle discard eats the ramp)", "good" not in trace, set(trace))
+
+trace, _ = chain(3_300_000.0, ramp_sec=1.9)
+ok("...even with the ramp filling the whole settle window", "good" not in trace, set(trace))
+
+trace, est = chain(3_300_000.0, tone_dies_at=6.0)
+ok("ATTACK 2, tone loss: desk bud whose tone dies never good (EMA adopts the "
+   "collapse instead of decaying through the pass band)", "good" not in trace, set(trace))
+
+def rearm_chain():
+    # ATTACK 3, guest handover: guest 1 worn at 100 kOhm, then start_fit
+    # re-arms. The fix cycles stop/start so the estimator is REBUILT; this
+    # models it faithfully: fresh estimator, fresh gate, desk bud.
+    est = ChannelImpedanceEstimator()
+    g = WornGate()
+    for i in range(1024):
+        est.push_sample(tone_counts(100_000.0, i) + 1000, i * 0.004, abs_idx=i)
+    est.compute_if_ready(True, 4000.0)
+    est = ChannelImpedanceEstimator()        # the cycle rebuilds; EMA gone
+    g.reset()
+    trace = []
+    now_ms = 4000.0
+    for i in range(2048):
+        est.push_sample(tone_counts(3_300_000.0, i) + 1000, 16.0 + i * 0.004, abs_idx=5000 + i)
+        if i % 125 == 0:
+            now_ms += 500.0
+            snap = est.compute_if_ready(True, now_ms)
+            trace.append(g.update([(snap.kohm, snap.state, snap.kohm_raw)], now_ms / 1000.0))
+    return trace
+
+ok("ATTACK 3, re-armed fit: guest 2's desk bud never rides guest 1's EMA into good",
+   "good" not in rearm_chain())
+
+g = WornGate()
+for t in (0.0, 0.5, 1.0):
+    g.update([(1600.0, "high_z")], t)
+assert g.state == "good"
+osc = []
+t = 1.5
+for _ in range(240):                        # 2 minutes straddling 3.0 MOhm
+    for k in (2700.0, 3200.0, 3200.0):
+        osc.append(g.update([(k, "open")], t)); t += 0.5
+ok("ATTACK 4, kind-flip oscillation: a removed bud straddling 3.0 MOhm demotes "
+   "within 4 s, not never", osc[8] == "bad" and "good" not in osc[9:], osc[:10])
+
+est = ChannelImpedanceEstimator(settle_sec=0.0)
+g = WornGate()
+now_ms = 0.0
+for i in range(1024):                       # live link: pushes and computes interleave
+    est.push_sample(tone_counts(1_500_000.0, i) + 1000, i * 0.004, abs_idx=i)
+    if i % 125 == 0:
+        now_ms += 500.0
+        snap = est.compute_if_ready(True, now_ms)
+        g.update([(snap.kohm, snap.state, snap.kohm_raw)], now_ms / 1000.0)
+assert g.state == "good", g.state
+frozen = []
+for _ in range(20):                          # link dead: NO new samples, 10 s
+    now_ms += 500.0
+    snap = est.compute_if_ready(True, now_ms)
+    frozen.append((snap.state, g.update([(snap.kohm, snap.state, snap.kohm_raw)], now_ms / 1000.0)))
+ok("ATTACK 5, frozen buffer: a dead link stops producing evidence (measuring, "
+   "not trusted; tick 0 may still drain pre-death samples)",
+   all(st == "measuring" for st, _v in frozen[1:]), frozen[:3])
+ok("...so staleness finally demotes within 3.5 s", frozen[-1][1] == "bad"
+   and any(v == "bad" for _s, v in frozen[:9]), frozen[:9])
+
+def lag_chain():
+    # ATTACK 6, EMA lag: worn just long enough for 2 counts, then the desk.
+    # Raw desk windows read 3.3 MOhm, so the raw-agreement rule blocks the
+    # 3rd count that the smoothed lag (1.77, 2.22 MOhm) used to supply.
+    est = ChannelImpedanceEstimator(settle_sec=0.0)
+    g = WornGate()
+    trace = []
+    now_ms = 0.0
+    for i in range(2560):
+        z = 1_500_000.0 if i * 0.004 < 1.3 else 3_300_000.0
+        est.push_sample(tone_counts(z, i) + 1000, i * 0.004, abs_idx=i)
+        if i % 125 == 0:
+            now_ms += 500.0
+            snap = est.compute_if_ready(True, now_ms)
+            trace.append(g.update([(snap.kohm, snap.state, snap.kohm_raw)], now_ms / 1000.0))
+    return trace
+
+trace = lag_chain()
+ok("ATTACK 6, EMA lag: desk-only windows can never finish a worn-built streak "
+   "(raw and smoothed must both agree)",
+   all(v != "good" for v in trace[4:]), trace)
 
 
 # =====================================================================
