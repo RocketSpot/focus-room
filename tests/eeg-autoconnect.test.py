@@ -23,6 +23,11 @@ import types
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "sidecar"))
 
 import zone_source  # noqa: E402
+# Pre-import the REAL impedance submodule: ZoneSource.__init__ lazily does
+# `from zone_sdk.impedance import WornGate`, and the scenarios below swap
+# sys.modules["zone_sdk"] for a fake that is not a package. With the real
+# submodule already cached in sys.modules the lazy import resolves anyway.
+import zone_sdk.impedance  # noqa: E402,F401
 from zone_source import auto_connect_should_try  # noqa: E402
 
 SRC = (pathlib.Path(__file__).resolve().parent.parent / "sidecar" / "zone_source.py").read_text()
