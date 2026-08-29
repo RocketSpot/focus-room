@@ -178,6 +178,20 @@ ok("the verdict never gates the guest: start_session does not consult it",
 ok("post-disarm EEG discard present (1.5 s, provisional)",
    "POST_LEADOFF_DISCARD_SEC = 1.5" in zs and "_eeg_discard_until" in zs)
 
+print("\nA.0 the REAL constructor (the Probe subclass below bypasses __init__)")
+# The review's reset_dev1_stats fix was applied with an unbounded replace and
+# clobbered the identical initializer block inside __init__ - the sidecar then
+# crash-looped on real hardware while all 34 checks here stayed green, because
+# Probe defines its own __init__. The real constructor gets its own checks.
+real = C.DualBLEConnection()
+ok("DualBLEConnection() constructs with both admission epochs",
+   real._adm[1]["abs"] == 0 and real._adm[2]["abs"] == 0)
+real._adm[2]["abs"] = 777
+real.reset_dev1_stats()
+ok("reset_dev1_stats resets device 1 and leaves device 2's epoch alone",
+   real._adm[1]["abs"] == 0 and real._adm[2]["abs"] == 777,
+   (real._adm[1]["abs"], real._adm[2]["abs"]))
+
 print("\nA.1 wrap boundary + channel lockstep")
 p = Probe()
 p._process_packet(pkt(10), 1)
