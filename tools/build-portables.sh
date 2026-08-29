@@ -125,6 +125,9 @@ TXT
 }
 
 mkdir -p "$OUTDIR"
+# superseded zips leave: each release replaces the set wholesale, and letting
+# old versions accumulate here made every later glob ambiguous
+rm -f "$OUTDIR"/focus-room-portable-*.zip
 
 # ---- mac arm64 --------------------------------------------------------------
 echo "-- mac arm64 --"
