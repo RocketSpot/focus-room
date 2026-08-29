@@ -85,6 +85,9 @@ DFU_SERVICES = {
 AUTOCONNECT_ENABLED = os.environ.get("FOCUSROOM_AUTOCONNECT", "1") != "0"
 AUTOCONNECT_SCAN_SEC = float(os.environ.get("FOCUSROOM_AUTOCONNECT_SCAN_SEC", "4.0"))
 AUTOCONNECT_IDLE_SEC = float(os.environ.get("FOCUSROOM_AUTOCONNECT_IDLE_SEC", "7.0"))
+AUTOCONNECT_MAX_BACKOFF_SEC = 120.0   # failure ceiling: Bluetooth off must not flood the log
+AUTOCONNECT_SETTLE_SEC = 2.0          # let the sidecar finish its hello before the first scan
+AUTOCONNECT_HEARTBEAT_SEC = 600.0     # one still-watching line per 10 min, not per minute
 
 
 def auto_connect_should_try(state):
@@ -111,6 +114,8 @@ def auto_connect_should_try(state):
         return (False, "impedance check running")
     if state.get("in_cooldown"):
         return (False, "reconnect cooldown")
+    if state.get("standdown"):
+        return (False, "operator disconnected the buds, standing down until re-armed")
     return (True, "clear")
 
 
@@ -190,76 +195,144 @@ class ZoneSource:
         # moments an operator cares about, found-and-connecting and connected.
         self._connect_in_flight = False
         self._auto_last_note = 0.0
+        self._auto_fail_streak = 0
+        self._auto_last_err = ""
+        # operator pressed Disconnect: the watcher stands down until the operator
+        # re-arms it with a Find or Connect press (or the app restarts). Without
+        # this the loop would reconnect deliberately parked buds within seconds.
+        self._auto_standdown = False
         self._left_up = False         # last-known link state, for single-bud raw labelling
         self._right_up = False
         # created LAST: every attribute the loop's gate reads must already exist
         if AUTOCONNECT_ENABLED:
             self._auto_task = self._loop.create_task(self._auto_connect_loop())
 
-    async def _auto_connect_loop(self):
-        """Constant, quiet earbud search while nothing is connected.
+    def _auto_gate(self):
+        """One gate evaluation against LIVE state. get_buds_status() is the
+        truth used everywhere else in this file; _left_up/_right_up are a
+        stats-time cache that freezes whenever samples stop flowing, and using
+        them here once locked the watcher out for the whole day after the
+        first session (stale True) while letting it scan over live links
+        before one (stale False)."""
+        st = self.sdk.get_buds_status()
+        return auto_connect_should_try({
+            "enabled": AUTOCONNECT_ENABLED,
+            "left_up": bool(st.get("left_connected")),
+            "right_up": bool(st.get("right_connected")),
+            "connect_in_flight": self._connect_in_flight,
+            "reconnecting": self._reconnecting,
+            "rotating": self._rotating,
+            "sdk_recovery": getattr(self.sdk, "_inside_sample_rate_recovery", False),
+            "lead_armed": getattr(self.sdk, "_lead_armed", False),
+            "in_cooldown": (time.monotonic() - getattr(self, "_last_ladder_end", 0.0))
+                < RECONNECT_COOLDOWN_SEC,
+            "standdown": self._auto_standdown,
+        })
 
-        Scans WITHOUT broadcasting (self.discover() would push a DISCOVERED
-        message and connect() would push a no_buds error on every empty pass,
-        which is an operator console scrolling with noise all day). Only when a
-        Zone bud actually advertises does it hand over to the ordinary connect
-        path, the same one the operator's button uses, with the same validated
-        SDK sequence, so auto and manual cannot behave differently.
+    async def _auto_scan(self):
+        """One quiet scan. Returns True if a Zone bud was seen (and the side
+        addresses refreshed). Never broadcasts: self.discover() would push a
+        DISCOVERED message on every empty pass and connect() a no_buds error,
+        an operator console scrolling with noise all day."""
+        devices = await self.Zone.discover(duration=AUTOCONNECT_SCAN_SEC)
+        found = False
+        for d in devices:
+            name = (d.get("name") or "").lower()
+            if "left" in name:
+                self._left_addr = d["address"]; found = True
+            elif "right" in name:
+                self._right_addr = d["address"]; found = True
+        return found
+
+    async def _auto_connect_loop(self):
+        """Constant, quiet earbud search while nothing owns the link.
+
+        The loop is the LOWEST-RANKED actor: the gate defers to every other
+        owner, is re-checked after every scan (a 4 s scan is long enough for
+        an operator connect to begin AND finish inside it), and the handover
+        goes to the ordinary validated connect path pre-session or to the
+        reconnect ladder mid-session (which alone knows how to cycle the
+        stream so a rejoined bud actually receives CMD_START). Failures back
+        off exponentially to two minutes so a Bluetooth-off morning is a few
+        log lines, not thousands. Known limit, accepted: if only one bud is
+        opened and connects, the sibling must be joined by the operator's
+        Connect button — the grace scans below make that rare.
         """
-        await asyncio.sleep(2.0)      # let the sidecar finish its hello
+        await asyncio.sleep(AUTOCONNECT_SETTLE_SEC)
         self.log("auto-connect: watching for earbuds (open them near this Mac)")
         while True:
             try:
-                go, why = auto_connect_should_try({
-                    "enabled": AUTOCONNECT_ENABLED,
-                    "left_up": self._left_up,
-                    "right_up": self._right_up,
-                    "connect_in_flight": self._connect_in_flight,
-                    "reconnecting": self._reconnecting,
-                    "rotating": self._rotating,
-                    "sdk_recovery": getattr(self.sdk, "_inside_sample_rate_recovery", False),
-                    "lead_armed": getattr(self.sdk, "_lead_armed", False),
-                    "in_cooldown": (time.monotonic() - getattr(self, "_last_ladder_end", 0.0))
-                        < RECONNECT_COOLDOWN_SEC,
-                })
+                go, why = self._auto_gate()
                 if not go:
                     await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
                     continue
-                devices = await self.Zone.discover(duration=AUTOCONNECT_SCAN_SEC)
-                found_any = False
-                for d in devices:
-                    name = (d.get("name") or "").lower()
-                    if "left" in name:
-                        self._left_addr = d["address"]; found_any = True
-                    elif "right" in name:
-                        self._right_addr = d["address"]; found_any = True
-                if not found_any:
-                    # a quiet heartbeat at most every 60s, so room.log shows the
-                    # search is alive without drowning the operator feed
+                found = await self._auto_scan()
+                if not found:
+                    self._auto_fail_streak = 0    # empty air is not failure
                     now = time.monotonic()
-                    if now - self._auto_last_note > 60.0:
+                    if now - self._auto_last_note > AUTOCONNECT_HEARTBEAT_SEC:
                         self._auto_last_note = now
                         self.log("auto-connect: still watching for earbuds")
                     await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
                     continue
+                # GRACE: buds leave the case one at a time. If only one side is
+                # advertising, give the sibling up to two more short scans
+                # before committing to a half pair.
+                for _ in range(2):
+                    if self._left_addr and self._right_addr:
+                        break
+                    go, why = self._auto_gate()
+                    if not go:
+                        break
+                    await self._auto_scan()
+                # RE-CHECK: the gate verdict is stale by the full scan length —
+                # a manual connect, an arming fit check, or a ladder can have
+                # started (or finished) inside it. Never hand over on old truth.
+                go, why = self._auto_gate()
+                if not go:
+                    self.log(f"auto-connect: found buds but standing back ({why})")
+                    await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
+                    continue
+                if self._session_active:
+                    # Mid-session the ladder owns recovery: it reconnects only
+                    # the lost side and cycles stop/start streaming so frames
+                    # actually flow again. A plain connect() here would restore
+                    # the link and leave the reading frozen behind it.
+                    self.log("auto-connect: buds advertising mid-session, "
+                             "handing to the reconnect ladder")
+                    self._maybe_reconnect("auto_scan_found")
+                    await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
+                    continue
                 self.log("auto-connect: earbuds found, connecting on their own")
-                ok = await self.connect()
+                ok = await self.connect(auto=True)
                 if ok:
+                    self._auto_fail_streak = 0
                     self.log("auto-connect: earbuds connected, no operator action needed")
                 elif ok is None:
                     # someone else's connect is mid-flight; defer, touch nothing
                     await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
                 else:
-                    # a failed attempt clears the remembered addresses so the next
-                    # pass re-discovers rather than hammering a stale MAC
-                    self._left_addr = None
-                    self._right_addr = None
-                    await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
+                    # do NOT clear the side addresses (the next scan refreshes
+                    # them, and a live ladder's need_left/need_right depend on
+                    # them); back off instead so an unconnectable bud is a line
+                    # every couple of minutes, not a churn every cycle.
+                    self._auto_fail_streak += 1
+                    await asyncio.sleep(self._auto_backoff())
             except asyncio.CancelledError:
                 return
             except Exception as e:
-                self.log(f"auto-connect: pass failed ({e}), continuing to watch")
-                await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
+                self._auto_fail_streak += 1
+                msg = f"auto-connect: pass failed ({e})"
+                now = time.monotonic()
+                if msg != self._auto_last_err or now - self._auto_last_note > AUTOCONNECT_HEARTBEAT_SEC:
+                    self._auto_last_err = msg
+                    self._auto_last_note = now
+                    self.log(msg + ", continuing to watch")
+                await asyncio.sleep(self._auto_backoff())
+
+    def _auto_backoff(self):
+        return min(AUTOCONNECT_IDLE_SEC * (2 ** min(self._auto_fail_streak, 6)),
+                   AUTOCONNECT_MAX_BACKOFF_SEC)
 
     def _catalogue_path(self):
         """Which UUID catalogue ships to the SDK. Engineering delivered three
@@ -298,6 +371,7 @@ class ZoneSource:
 
     # ---------------- discovery / connect ----------------
     async def discover(self):
+        self._auto_standdown = False   # a Find press re-arms the auto watcher
         devices = await self.Zone.discover(duration=5)
         out = []
         for d in devices:
@@ -312,14 +386,42 @@ class ZoneSource:
         self.tx.send(OUT.DISCOVERED, devices=out)
         return out
 
-    async def connect(self):
+    async def connect(self, auto=False):
+        if not auto:
+            # an operator pressing Connect re-arms a stood-down watcher
+            self._auto_standdown = False
         if self._connect_in_flight:
             # None, not False: the caller must know this was a refusal to stack,
             # not a failed attempt, so the auto loop keeps its hands off the state
             self.log("connect already in flight, ignoring the duplicate request")
             return None
+        if self._reconnecting or self._rotating:
+            # the ladder/rotation runs per-device connects on the same
+            # connection object; a full-pair connect_selected on top of it is
+            # exactly the duplicate-notifying-client hazard the ladder guards
+            # against for the SDK's recovery. Refuse, never interleave.
+            self.log("connect refused: a reconnect/rotation owns the link right now")
+            return None
+        st = self.sdk.get_buds_status()
+        l_up, r_up = bool(st.get("left_connected")), bool(st.get("right_connected"))
+        if l_up and r_up:
+            self.log("connect: both buds already connected, nothing to do")
+            self.tx.send(OUT.CONNECTION, leftConnected=True, rightConnected=True, connected=True)
+            return True
+        if (l_up or r_up) and self._session_active:
+            self.log("connect refused: one bud is live mid-session, the ladder owns recovery")
+            return None
         self._connect_in_flight = True
         try:
+            if l_up or r_up:
+                # pre-session half pair: rebuilding the pair through the
+                # validated path needs both links free (same reason the
+                # rotation disconnects first).
+                self.log("connect: freeing a half-connected pair before the validated connect")
+                try:
+                    await self.sdk.disconnect()
+                except Exception as e:
+                    self.log(f"pre-connect disconnect error: {e}")
             return await self._connect_inner()
         finally:
             self._connect_in_flight = False
@@ -344,9 +446,11 @@ class ZoneSource:
             left_address=self._left_addr, right_address=self._right_addr,
             profile="zone_eeg", skip_validation=False)
         status = self.sdk.get_buds_status()
+        self._left_up = bool(status.get("left_connected"))
+        self._right_up = bool(status.get("right_connected"))
         self.tx.send(OUT.CONNECTION,
-                     leftConnected=bool(status.get("left_connected")),
-                     rightConnected=bool(status.get("right_connected")),
+                     leftConnected=self._left_up,
+                     rightConnected=self._right_up,
                      connected=ok)
         return ok
 
@@ -835,11 +939,18 @@ class ZoneSource:
         self.tx.send(OUT.LOG, level="info", msg="test_signal injected through real pipeline")
 
     async def disconnect(self):
+        # A deliberate Disconnect must STICK: without the standdown latch the
+        # watcher would re-find the still-advertising buds and undo the
+        # operator's action within seconds. Find or Connect re-arms it.
+        self._auto_standdown = True
+        self.log("operator disconnect: auto-connect standing down until Find/Connect")
         await self.stop_session()
         try:
             await self.sdk.disconnect()
         except Exception as e:
             self.log(f"disconnect error: {e}")
+        self._left_up = False
+        self._right_up = False
 
     # ---------------- SDK callbacks ----------------
     def _on_metrics(self, m):
@@ -1007,6 +1118,13 @@ class ZoneSource:
 
     def _on_connection(self, status: str):
         self.tx.send(OUT.CONNECTION, status=status)
+        # keep the stats-time cache honest when samples are NOT flowing: these
+        # flags froze at their last streaming value otherwise (a left_up stuck
+        # True after a session once disabled the auto watcher for the day).
+        if status == "left_disconnected":
+            self._left_up = False
+        elif status == "right_disconnected":
+            self._right_up = False
         if status in ("left_disconnected", "right_disconnected"):
             # This callback can fire on a Bleak worker-loop thread. Bounce the
             # reconnect onto the sidecar's MAIN loop so connect_selected/streaming
@@ -1016,6 +1134,12 @@ class ZoneSource:
     def _maybe_reconnect(self, status):
         # runs on the main loop (scheduled via call_soon_threadsafe)
         if self._reconnecting or self._rotating:
+            return
+        if self._connect_in_flight:
+            # a connect_selected is mid-sequence; a bud dropping DURING it is
+            # that sequence's own business. Starting the ladder here would
+            # interleave two connect flows on one connection object.
+            self.log(f"{status}: a connect is in flight, leaving recovery to it")
             return
         if getattr(self.sdk, "_inside_sample_rate_recovery", False):
             self.log(f"{status}: SDK sample-rate recovery in flight — leaving it to the SDK")

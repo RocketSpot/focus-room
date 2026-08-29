@@ -1150,9 +1150,16 @@ class Orchestrator extends EventEmitter {
         }
         if (was !== this._budsConnected) {
           if (!this._budsConnected) {
-            this.signalIssue = true;
-            this.log('earbud link dropped, the SDK is reconnecting; the session holds');
-            this._record('buds_disconnected', this.now());
+            if (was === true) {
+              this.signalIssue = true;
+              this.log('earbud link dropped, the SDK is reconnecting; the session holds');
+              this._record('buds_disconnected', this.now());
+            } else {
+              // null → false is the FIRST report (e.g. an auto-connect attempt
+              // that failed before anything was ever up). Nothing dropped, so
+              // no drop story and no sticky signalIssue on a clean session.
+              this.log('earbuds not connected yet');
+            }
           } else if (was === false) {
             // false → true is a genuine restore; null → true is just the FIRST
             // report, which used to pollute every session's event log with a

@@ -27,6 +27,25 @@ const mk = () => {
   return { o, recs };
 };
 
+// ---- H4b: a failed FIRST connect attempt is not a drop ------------------------
+// The auto-connect watcher tries on its own before anything was ever up. A
+// null -> false transition must not write the drop story (sticky signalIssue,
+// buds_disconnected) into a guest's session that had a perfectly clean reading.
+{
+  const { o, recs } = mk();
+  o._budsConnected = null;
+  o.onSidecar({ type: 'eeg/connection', connected: false, leftConnected: false, rightConnected: false });
+  check('first-ever connected:false still records the state', o._budsConnected === false);
+  check('...but sets no sticky signalIssue', o.signalIssue !== true, String(o.signalIssue));
+  check('...and fabricates no buds_disconnected event', !recs.includes('buds_disconnected'),
+    recs.join(','));
+  // a REAL drop (true -> false) keeps the full story
+  o.onSidecar({ type: 'eeg/connection', leftConnected: true, rightConnected: true, dropRateL: 0 });
+  o.onSidecar({ type: 'eeg/connection', connected: false, leftConnected: false, rightConnected: false });
+  check('a genuine drop still sets signalIssue', o.signalIssue === true);
+  check('a genuine drop still records buds_disconnected', recs.includes('buds_disconnected'));
+}
+
 // ---- H4: the CONNECTION contract ---------------------------------------------
 {
   const { o, recs } = mk();
