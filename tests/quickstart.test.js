@@ -19,7 +19,9 @@ const sheet = fs.readFileSync(path.join(ROOT, 'quickstart.html'), 'utf8');
 const main = fs.readFileSync(path.join(ROOT, 'app', 'main.js'), 'utf8');
 
 ok('every registered global shortcut appears on the sheet', () => {
-  const regs = [...main.matchAll(/globalShortcut\.register\('([^']+)'/g)].map((m) => m[1]);
+  // shortcuts register either directly or through opKey(), which tees the
+  // press into the diagnostic trail before acting
+  const regs = [...main.matchAll(/(?:globalShortcut\.register|opKey)\('([^']+)'/g)].map((m) => m[1]);
   assert.ok(regs.length >= 3, 'expected at least 3 registrations, got ' + regs.length);
   for (const acc of regs) {
     // CommandOrControl+Shift+D must appear as its keycaps: cmd, shift, letter
@@ -67,6 +69,20 @@ ok('dismissal hands the window to the room, never closes it', () => {
 
 ok('no signal vocabulary and no em dashes on an operator-facing sheet', () => {
   assert.ok(!/—/.test(sheet), 'em dash found');
+});
+
+
+// The sheet must survive the boot-time state broadcast. An iPad or ops page
+// left open from last time reconnects the instant the server binds and pushes
+// 'constellation'; that must NOT evict the quickstart (a live surface may).
+ok('the idle attractor cannot evict the quickstart sheet', () => {
+  assert.ok(/quickstartPending && surface === 'constellation'/.test(main),
+    'navigateTv must hold the sheet against a constellation push');
+  assert.ok(main.indexOf("surface === 'constellation'") < main.indexOf('tvSurface = surface'),
+    'the guard must sit before the navigation');
+});
+ok('dismissal syncs the surface tracker (no redundant reload after the sheet)', () => {
+  assert.ok(/if \(!tvSurface\) tvSurface = m\[1\]/.test(main), 'tracker sync missing');
 });
 
 console.log('\n' + (fails.length ? `${fails.length} FAILURE(S)` : `all ${pass} checks passed`));

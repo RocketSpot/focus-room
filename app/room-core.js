@@ -84,7 +84,9 @@ function createRoom(hooks = {}) {
         try { roomLogSize = fs.existsSync(ROOM_LOG) ? fs.statSync(ROOM_LOG).size : 0; }
         catch (_) { roomLogSize = 0; }
       }
-      const line = new Date().toISOString() + ' ' + channel + ' ' + JSON.stringify(payload) + '\n';
+      let body = JSON.stringify(payload);
+      if (body && body.length > 16384) body = JSON.stringify({ truncated: true, head: body.slice(0, 16000) });
+      const line = new Date().toISOString() + ' ' + channel + ' ' + body + '\n';
       if (roomLogSize > ROOM_LOG_MAX) {
         // one rotation deep: yesterday's truth is worth keeping, last week's is not
         try { fs.renameSync(ROOM_LOG, ROOM_LOG + '.1'); } catch (_) {}
@@ -187,6 +189,7 @@ function createRoom(hooks = {}) {
   function wireSurfaces() {
     // A surface attached (iPad starts a session / TV resyncs).
     server.on('client-hello', (info) => {
+      pushDiag('client:join', info);
       pushDiag('surface:client', { hello: info });
       // a hello from a role that had gone quiet is a RECONNECT, not a new guest,
       // tell the orchestrator so it can stop holding the session open
@@ -246,6 +249,9 @@ function createRoom(hooks = {}) {
       }
     });
     server.on('client-message', ({ role, msg }) => {
+      // EVERY inbound action - every iPad tap, every operator command - lands
+      // in the trail with its role and timestamp before it is acted on
+      pushDiag('client:msg', { role, msg });
       // The desktop signal bridge is plumbing, not a guest: its traffic belongs
       // to the RemoteSupervisor (which listens on the server itself), never to
       // the orchestrator.
@@ -303,7 +309,32 @@ function createRoom(hooks = {}) {
     // A surface dropped off the network. This is the ONLY way the orchestrator
     // learns the guest became unreachable, which is what stops the abandonment
     // watchdog from reading a Wi-Fi blip as someone walking out mid-session.
+    // ---- total outbound tee ----------------------------------------------
+    // Everything the room SENDS is everything a surface SHOWS. Every broadcast
+    // and targeted send lands in the trail, so a screenshot of any screen can
+    // be lined up against the exact payload that drew it. ops/feed is skipped
+    // (it carries the trail itself: logging it loops), sidecar-originated
+    // eeg/* and fit/* types are skipped (already teed once as sidecar:message),
+    // and raw EEG never reaches pushDiag by design.
+    const _shouldTeeOut = (type) => type !== 'ops/feed'
+      && !String(type).startsWith('eeg/') && !String(type).startsWith('fit/');
+    const _bc = server.broadcast.bind(server);
+    server.broadcast = (type, payload, role) => {
+      if (_shouldTeeOut(type)) pushDiag('room:out', { type, to: role || 'all', payload });
+      return _bc(type, payload, role);
+    };
+    if (server.sendTo) {
+      const _st = server.sendTo.bind(server);
+      server.sendTo = (id, type, payload) => {
+        if (_shouldTeeOut(type)) pushDiag('room:out', { type, to: id, payload });
+        return _st(id, type, payload);
+      };
+    }
+    // renderer JS errors from any surface (sendBeacon endpoint in server.js)
+    server.on('client-error', (report) => pushDiag('client:error', report));
+
     server.on('client-left', (info) => {
+      pushDiag('client:leave', info);
       pushDiag('surface:client', { left: info });
       orchestrator.onClientLeft(info.role);
     });

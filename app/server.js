@@ -121,6 +121,20 @@ class SurfaceServer extends EventEmitter {
 
       if (pathname === '/' ) pathname = '/index.html';
       if (pathname === '/__info') return this._info(res);
+      // renderer error reports (sendBeacon from every surface): a JS error on
+      // any page lands in the room's diagnostic trail instead of dying in a
+      // console nobody is watching. Body capped; content is data, never code.
+      if (pathname === '/client-error' && req.method === 'POST') {
+        let body = '';
+        req.on('data', (c) => { if (body.length < 8192) body += c; });
+        req.on('end', () => {
+          try { this.emit('client-error', JSON.parse(body)); } catch (_) {
+            this.emit('client-error', { raw: String(body).slice(0, 2000) });
+          }
+          res.writeHead(204); res.end();
+        });
+        return;
+      }
 
       // PRIVACY: in dev (and on a web host) webRoot is the repo root, which
       // contains the writable data dir, session records with the guest's

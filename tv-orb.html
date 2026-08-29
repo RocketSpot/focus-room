@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+/* every surface reports its own JS errors into the room's diagnostic trail */
+(function(){var er=function(p){try{p.page=location.pathname;navigator.sendBeacon('/client-error',JSON.stringify(p))}catch(e){}};
+window.addEventListener('error',function(e){er({kind:'error',msg:String(e.message||e),src:String(e.filename||''),line:e.lineno||0})});
+window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledrejection',msg:String((e.reason&&e.reason.message)||e.reason)})});
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Focus Room, TV · Orb</title>

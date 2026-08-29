@@ -187,6 +187,15 @@ function windowConfigArg() {
 // operator's dismissal or by a live beat arriving underneath, so the sheet
 // can never sit on top of a running session and can never be resurrected
 // by the server's bind-time reload.
+// main-process failures land in the trail too. uncaughtExceptionMonitor is
+// OBSERVATION ONLY: it never swallows the exception or changes crash behaviour.
+process.on('uncaughtExceptionMonitor', (e) => {
+  try { room.pushDiag('main:uncaught', { msg: String((e && e.message) || e), stack: String((e && e.stack) || '').slice(0, 2000) }); } catch (_) {}
+});
+process.on('unhandledRejection', (e) => {
+  try { room.pushDiag('main:unhandled', { msg: String((e && e.message) || e) }); } catch (_) {}
+});
+
 let quickstartPending = process.env.FOCUSROOM_NO_QUICKSTART !== '1';
 function initialTvUrl() {
   return quickstartPending
@@ -196,6 +205,15 @@ function initialTvUrl() {
 
 function navigateTv(surface) {
   if (!surface || surface === tvSurface) return;
+  if (quickstartPending && surface === 'constellation') {
+    // The idle attractor must not evict the quickstart sheet. An iPad or ops
+    // page left open from last time reconnects the moment the server binds,
+    // broadcasts state, and pushes 'constellation' - which used to close the
+    // sheet before the operator could read a single line of it. The sheet
+    // yields only to a LIVE surface (a real guest starting a session), and
+    // its own dismissal lands on the constellation anyway.
+    return;
+  }
   tvSurface = surface;
   if (tvWindow && !tvWindow.isDestroyed()) tvWindow.loadURL(tvUrlFor(surface));
 }
@@ -245,7 +263,13 @@ function createTvWindow() {
   tvWindow.loadURL(initialTvUrl());
   if (quickstartPending) tvSurface = null;   // any live beat reclaims the window
   tvWindow.webContents.on('did-navigate', (_e, url) => {
-    if (/\/tv-[a-z-]+\.html/.test(String(url))) quickstartPending = false;
+    const m = /\/tv-([a-z-]+)\.html/.exec(String(url));
+    if (m) {
+      quickstartPending = false;
+      // sync the tracker to what is actually on screen, so the next broadcast
+      // does not force a redundant reload of the same surface
+      if (!tvSurface) tvSurface = m[1];
+    }
   });
   tvWindow.once('ready-to-show', () => tvWindow.show());
   // F11 toggles fullscreen on the TV (the window has no menu to offer it);
@@ -352,14 +376,18 @@ app.whenReady().then(async () => {
 
   await supervisor.start();
 
-  globalShortcut.register('CommandOrControl+Shift+D', openOpsConsole);
-  globalShortcut.register('CommandOrControl+Shift+U', showLanUrlToast);
+  const opKey = (combo, what, fn) => globalShortcut.register(combo, () => {
+    try { room.pushDiag('operator:key', { combo, what }); } catch (_) {}
+    fn();
+  });
+  opKey('CommandOrControl+Shift+D', 'open operator console', openOpsConsole);
+  opKey('CommandOrControl+Shift+U', 'show iPad address', showLanUrlToast);
   // The staff way OUT. The room is deliberately frameless and fullscreen with
   // the menu bar hidden, and the packaged build is a kiosk, so there is no
   // visible quit affordance anywhere, by design for guests. But on Windows the
   // application menu is null, so even Cmd+Q's equivalent does not exist there.
   // A room nobody can exit is not a kiosk. Staff quit: Ctrl/Cmd+Shift+Q.
-  globalShortcut.register('CommandOrControl+Shift+Q', () => app.quit());
+  opKey('CommandOrControl+Shift+Q', 'staff quit', () => app.quit());
 
   createTvWindow();
   createAudioWindow(); // hidden generative room-sound host (no-op if FOCUSROOM_NO_AUDIO=1)
