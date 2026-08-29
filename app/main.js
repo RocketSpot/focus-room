@@ -187,6 +187,27 @@ function navigateTv(surface) {
 }
 
 // ---------------- windows ----------------
+// The operator quick start: one small always-on-top sheet at launch listing
+// every keyboard command, dismissed with Enter, Esc, OK or its X. It exists
+// because the room is deliberately chrome-free (frameless, fullscreen, menu
+// bar hidden), so nothing on screen hints that Cmd+Shift+D even exists, and
+// an operator's first minute should not require the manual. Guests never see
+// it: it appears once, at launch, before anyone is in the room.
+let quickstartWindow = null;
+function createQuickstartWindow() {
+  if (process.env.FOCUSROOM_NO_QUICKSTART === '1') return;   // captures + tests
+  if (quickstartWindow && !quickstartWindow.isDestroyed()) { quickstartWindow.focus(); return; }
+  quickstartWindow = new BrowserWindow({
+    width: 620, height: 700, show: false,
+    frame: false, transparent: true, resizable: false,
+    alwaysOnTop: true, center: true, skipTaskbar: false,
+    webPreferences: { contextIsolation: true, nodeIntegration: false },
+  });
+  quickstartWindow.loadURL(`http://127.0.0.1:${config.net.LAN_PORT}/quickstart.html`);
+  quickstartWindow.once('ready-to-show', () => { try { quickstartWindow.show(); } catch (_) {} });
+  quickstartWindow.on('closed', () => { quickstartWindow = null; });
+}
+
 function createTvWindow() {
   const displays = screen.getAllDisplays();
   const external = displays.find((d) => d.bounds.x !== 0 || d.bounds.y !== 0);
@@ -344,6 +365,8 @@ app.whenReady().then(async () => {
   globalShortcut.register('CommandOrControl+Shift+Q', () => app.quit());
 
   createTvWindow();
+  // after the TV, so the sheet floats above it and takes first focus
+  setTimeout(createQuickstartWindow, 1200);
   createAudioWindow(); // hidden generative room-sound host (no-op if FOCUSROOM_NO_AUDIO=1)
 
   app.on('activate', () => {

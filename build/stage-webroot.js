@@ -26,6 +26,7 @@ const ENTRIES = [
   'room-audio.html',
   'ipad-flow.html',
   'ops.html',
+  'quickstart.html',   // the operator command sheet shown at launch
   'card.html',
   'profile.html',
   'email.html',
