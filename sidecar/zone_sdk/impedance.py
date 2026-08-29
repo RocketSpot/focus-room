@@ -30,6 +30,17 @@ MIN_COVERAGE             = 0.50
 # the verdict's one job is telling "worn" apart from "not worn". Provisional,
 # from the shipping code; an unworn bud on a desk reads 3.0-3.7 MOhm.
 WORN_PASS_OHM            = 2_300_000.0
+# PLAUSIBILITY FLOOR (missing-lead guard). If the lead-off command never
+# reached the firmware there is no 24 nA tone, and what the DFT measures at
+# 31.25 Hz is background noise: readings come out roughly 1000x too low.
+# Algebra of that failure: Z' = (Z_true + 2200)/1000 - 2200, so a WORN bud
+# maps below zero (caught by no_signal) but a DESK bud (3.0-3.7 MOhm) maps to
+# ~800-1500 Ohm - which without this floor would read as a superb contact.
+# A dry in-ear electrode is hundreds of kOhm at best; anything under this
+# floor is electrically implausible and must never be trusted, let alone
+# pass. Every true impedance below ~12 MOhm maps under the floor in the
+# missing-lead mode, so the guard covers the whole realistic range.
+MIN_PLAUSIBLE_OHM        = 10_000.0
 
 # kohm thresholds
 LOW_Z_MAX   = 50
@@ -238,7 +249,9 @@ class ChannelImpedanceEstimator:
         # An armed channel reading EXACTLY 0 Ohm is not a superhuman contact, it
         # is the clamp eating a negative: no injection, wrong command order, or
         # a collapsed estimate. The spec is explicit that this is never a pass.
-        if kohm <= 0.0:
+        # The same goes for a reading under the plausibility floor: that is the
+        # missing-lead signature (readings ~1000x low), not a great electrode.
+        if kohm <= 0.0 or kohm * 1000.0 < MIN_PLAUSIBLE_OHM:
             return "no_signal"
         if kohm <= LOW_Z_MAX:
             return "low_z"
@@ -256,11 +269,13 @@ class ChannelImpedanceEstimator:
         if self._smoothed_kohm is None:
             return None
         z_ohm = self._smoothed_kohm * 1000.0
-        if z_ohm <= 0.0:
-            return None          # no_signal is not evidence either way
+        if z_ohm < MIN_PLAUSIBLE_OHM:
+            return None          # no_signal / implausibly low: not evidence either way
         return z_ohm <= WORN_PASS_OHM
 
     def _hint_for_state(self, state: str) -> Optional[str]:
+        if state == "no_signal":
+            return "reading implausibly low - lead-off tone missing or chain broken; untrusted"
         if state == "high_z":
             return "try re-seating the earbud"
         if state == "open":
@@ -291,3 +306,137 @@ class EarImpedanceProcessor:
     def reset(self) -> None:
         self.ch1.reset()
         self.ch2.reset()
+
+
+# =====================================================================
+# WornGate - the asymmetric worn/not-worn verdict for one side.
+# ---------------------------------------------------------------------
+# The pass threshold has NO headroom to give: worn passes at 2.3 MOhm and
+# an unworn bud on a desk reads 3.0-3.7, so past roughly 2.5 a desk bud
+# starts to pass and moving the number is off the table. The gate is made
+# forgiving by OTHER means, the same enter-vs-stay asymmetry the phone
+# app's commit machine uses for zone labels:
+#
+#   ENTER (strict):  ENTER_CONSEC consecutive trusted estimates at or
+#                    under 2.3 MOhm. Any untrusted or failing estimate
+#                    resets the count. First verdict lands in ~2.5 s of
+#                    clean readings (3 x the 500 ms refresh) instead of
+#                    the old flat 5 s wall-clock wait.
+#   STAY (tolerant): once genuinely seated, a chew, a jaw shift or a
+#                    glance that bounces the estimate does not demote:
+#                      <= 2.5 MOhm         keeps good indefinitely
+#                      2.5 - 3.0 MOhm      demotes after 4 s sustained
+#                      >= 3.0 MOhm         demotes after 1.5 s sustained
+#                                          (a removed bud reads open fast)
+#                      no_signal / stale   demotes immediately (electrical
+#                                          evidence, not wobble)
+#
+# THE INVARIANT THAT OVERRIDES EVERYTHING: a bud not on a person must
+# never reach good, even briefly. A desk bud reads 3.0-3.7 MOhm, which
+# can never satisfy the enter rule; noise, drops and duplicates starve
+# the coverage gate into null verdicts, which never advance the enter
+# count; the missing-lead mode reads implausibly low, which is untrusted
+# by the floor above. The tolerant band exists only AFTER a real enter.
+# =====================================================================
+
+WORN_ENTER_CONSEC     = 3
+WORN_ENTER_MIN_GAP_S  = 0.4          # a cached snapshot must not count twice
+WORN_STAY_OHM         = 2_500_000.0  # the doc's own desk-bud onset boundary
+WORN_UNWORN_OHM       = 3_000_000.0  # unmistakably off the head
+WORN_GREY_DEMOTE_S    = 4.0
+WORN_UNWORN_DEMOTE_S  = 1.5
+WORN_GATE_STALE_S     = 3.5          # no trusted reading this long = know nothing
+
+
+class WornGate:
+    """State machine over one side's channel snapshots. States:
+    "checking" (no verdict yet), "good", "bad". any_required semantics:
+    the best (lowest) trusted channel speaks for the side."""
+
+    def __init__(self, enter_ohm: float = WORN_PASS_OHM,
+                 stay_ohm: float = WORN_STAY_OHM,
+                 unworn_ohm: float = WORN_UNWORN_OHM):
+        self.enter_ohm = enter_ohm
+        self.stay_ohm = stay_ohm
+        self.unworn_ohm = unworn_ohm
+        self.reset()
+
+    def reset(self) -> None:
+        self.state = "checking"
+        self._enter_count = 0
+        self._last_counted = float("-inf")   # the FIRST estimate always counts
+        self._last_trusted = None     # monotonic time of the last trusted estimate
+        self._bad_since = None        # start of a sustained failing stretch
+        self._bad_kind = None         # "grey" | "unworn"
+
+    @staticmethod
+    def _best_trusted_ohm(channels):
+        """channels: iterable of (kohm, state). Returns the lowest trusted
+        impedance in ohms, or None when no channel can be trusted. no_signal
+        (which includes the implausibly-low missing-lead mode), idle and
+        measuring are not evidence."""
+        best = None
+        for kohm, state in channels:
+            if kohm is None or state in ("no_signal", "idle", "measuring"):
+                continue
+            ohm = kohm * 1000.0
+            if best is None or ohm < best:
+                best = ohm
+        return best
+
+    def update(self, channels, now_mono: float) -> str:
+        best = self._best_trusted_ohm(channels)
+        has_no_signal = any(st == "no_signal" for _k, st in channels)
+
+        if best is not None:
+            self._last_trusted = now_mono
+        stale = (self._last_trusted is not None
+                 and (now_mono - self._last_trusted) > WORN_GATE_STALE_S)
+
+        if self.state != "good":
+            # ---- ENTER: strict ----
+            if best is not None and best <= self.enter_ohm:
+                if now_mono - self._last_counted >= WORN_ENTER_MIN_GAP_S:
+                    self._enter_count += 1
+                    self._last_counted = now_mono
+                if self._enter_count >= WORN_ENTER_CONSEC:
+                    self.state = "good"
+                    self._bad_since = None
+                    self._bad_kind = None
+            elif best is not None or has_no_signal:
+                # a failing or untrusted estimate breaks the streak; silence
+                # (measuring) merely does not advance it
+                self._enter_count = 0
+            if self.state != "good" and self._last_trusted is not None                     and best is None and stale:
+                self._enter_count = 0
+            return self.state
+
+        # ---- STAY: tolerant, with the hard edges kept hard ----
+        if has_no_signal and best is None:
+            # electrical evidence of a broken chain, not wobble
+            self._demote()
+            return self.state
+        if stale:
+            self._demote()
+            return self.state
+        if best is None:
+            return self.state           # silence inside the staleness window
+        if best <= self.stay_ohm:
+            self._bad_since = None
+            self._bad_kind = None
+            return self.state
+        kind = "unworn" if best >= self.unworn_ohm else "grey"
+        if self._bad_since is None or self._bad_kind != kind:
+            self._bad_since = now_mono
+            self._bad_kind = kind
+            return self.state
+        limit = WORN_UNWORN_DEMOTE_S if kind == "unworn" else WORN_GREY_DEMOTE_S
+        if now_mono - self._bad_since >= limit:
+            self._demote()
+        return self.state
+
+    def _demote(self) -> None:
+        self.state = "bad"
+        self._enter_count = 0
+        self._bad_since = None
+        self._bad_kind = None

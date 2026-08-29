@@ -41,9 +41,9 @@ from eeg_stream import EegStream
 # ===================================================================================
 # worn/not-worn verdict (hardware team spec, 2026-08-19). All provisional until
 # real worn-earbud readings for both contacts arrive from the hardware side.
-WORN_PASS_OHM = 2_300_000.0
-WORN_STABLE_SEC = 5.0     # the pass must hold this long, uninterrupted
-WORN_STALE_SEC = 3.5      # a reading older than this cannot satisfy the window
+WORN_PASS_OHM = float(os.environ.get("FOCUSROOM_WORN_PASS_OHM", "2300000"))
+WORN_STAY_OHM = float(os.environ.get("FOCUSROOM_WORN_STAY_OHM", "2500000"))
+WORN_UNWORN_OHM = float(os.environ.get("FOCUSROOM_WORN_UNWORN_OHM", "3000000"))
 POST_LEADOFF_DISCARD_SEC = 1.5   # EEG discarded after lead-off disarm (settling tone)
 
 SAFE_BATTERY_PCT = 25          # refuse to start below this so a session never dies mid-read
@@ -156,8 +156,14 @@ class ZoneSource:
         self._eeg_failed = {"left": set(), "right": set()}
         self._auto_pair = None           # the mutable 'auto' PairProfile (touch fill-in)
         self._last_impedance = None
-        self._worn_since = None
-        self._worn_last_ok = None
+        from zone_sdk.impedance import WornGate
+        # asymmetric worn verdict per side: strict to first reach good,
+        # tolerant to remain good, and a desk bud can never enter. Reset on
+        # every arm (start_fit) so each fit check is a fresh epoch.
+        self._worn_gate = {side: WornGate(enter_ohm=WORN_PASS_OHM,
+                                          stay_ohm=WORN_STAY_OHM,
+                                          unworn_ohm=WORN_UNWORN_OHM)
+                           for side in ("left", "right")}
         self._eeg_discard_until = 0.0
         self._last_battery_l = None
         self._last_battery_r = None
@@ -670,6 +676,10 @@ class ZoneSource:
     # ---------------- pre-session fit check ----------------
     async def start_fit(self):
         await self._battery_gate()
+        # fresh verdict epoch: the SDK rebuilds its estimators on arm, and the
+        # worn gates must match — guest 2 never inherits guest 1's verdict.
+        for g in self._worn_gate.values():
+            g.reset()
         # impedance and streaming are mutually exclusive — fit check is pre-session
         await self.sdk.start_impedance()
         self.log("impedance fit check armed")
@@ -1296,45 +1306,32 @@ class ZoneSource:
                     bad += 1
                 else:
                     pending += 1        # idle / measuring — still settling
-        # VERDICT LAYER (spec B.3). The verdict's one job is worn vs not worn:
-        #   pass      = smoothed Z at or under 2.3 MOhm (provisional; unworn buds
-        #               on a desk read 3.0-3.7 MOhm, so this sits 1.3-1.6x below
-        #               an open circuit)
-        #   policy    = any_required: one good contact per bud is enough
-        #   stability = the pass must hold 5 s uninterrupted before allGood
-        #   staleness = a reading older than 3.5 s cannot satisfy the window
+        # VERDICT LAYER (spec B.3, asymmetric). The verdict's one job is worn
+        # vs not worn, decided per side by a WornGate (zone_sdk/impedance.py):
+        #   enter   = 3 consecutive trusted estimates at or under 2.3 MOhm
+        #             (strict; ~2.5 s of clean readings to the first good)
+        #   stay    = tolerant: a chew or jaw shift that bounces the estimate
+        #             does not demote; only sustained rises, no_signal, or
+        #             staleness do. A desk bud (3.0-3.7 MOhm) can never enter.
+        #   policy  = any_required: one good contact per bud is enough (the
+        #             gate takes the best trusted channel for the side)
         # The granular states above still stream to the operator display; this
-        # block only decides allGood.
+        # block only decides the verdict. The verdict is OPERATOR-FACING ONLY
+        # and never gates the guest flow: start_session does not consult it.
         now_mono = time.monotonic()
-        instant_ok = True
+        verdict = {}
         for side in ("left", "right"):
             ear_d = channels[side]
             if ear_d is None:
-                continue          # a side that is not measuring cannot fail the other
-            ear_pass = False
-            for c in (ear_d["ch1"], ear_d["ch2"]):
-                if c is None or c["kohm"] is None:
-                    continue
-                if c["state"] == "no_signal":
-                    continue      # a broken measurement chain is never a pass
-                if c["kohm"] * 1000.0 <= WORN_PASS_OHM:
-                    ear_pass = True
-            if not ear_pass:
-                instant_ok = False
-        if instant_ok and (channels["left"] is not None or channels["right"] is not None):
-            if self._worn_since is None:
-                self._worn_since = now_mono
-            self._worn_last_ok = now_mono
-        else:
-            self._worn_since = None
-        stale = self._worn_last_ok is not None and (now_mono - self._worn_last_ok) > WORN_STALE_SEC
-        if stale:
-            self._worn_since = None
-        all_good = (self._worn_since is not None
-                    and (now_mono - self._worn_since) >= WORN_STABLE_SEC)
-        self._last_impedance = channels
-        self._log_impedance(channels, all_good)
-        self.tx.send(OUT.IMPEDANCE, channels=channels, allGood=all_good)
+                verdict[side] = None    # not measuring; cannot fail the other side
+                continue
+            chans = [(c["kohm"], c["state"])
+                     for c in (ear_d["ch1"], ear_d["ch2"]) if c is not None]
+            verdict[side] = self._worn_gate[side].update(chans, now_mono)
+        measured = [v for v in verdict.values() if v is not None]
+        all_good = bool(measured) and all(v == "good" for v in measured)
+        self.tx.send(OUT.IMPEDANCE, channels=channels, allGood=all_good,
+                     worn=verdict)
 
     def _log_impedance(self, channels, all_good):
         """A compact, human-readable impedance line for the diagnostic — logged on

@@ -12,7 +12,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "sidecar"))
 
 from zone_sdk.impedance import (   # noqa: E402
-    ChannelImpedanceEstimator, EMA_ALPHA, I_INJECT_A, R_SERIES_OHM,
+    ChannelImpedanceEstimator, EarImpedanceProcessor, EMA_ALPHA,
+    MIN_PLAUSIBLE_OHM, I_INJECT_A, R_SERIES_OHM,
     LSB_UV_PER_COUNT, MIN_COVERAGE, WORN_PASS_OHM, LOFF_INJECTION_HZ,
     EEG_SAMPLE_RATE_HZ, IMPEDANCE_WINDOW_SAMPLES,
 )
@@ -168,12 +169,52 @@ ok(f"an unworn bud on a desk (3.2 MOhm) is NOT worn", est2.worn() is False, est2
 print("\nzone_source constants agree with the estimator's")
 import re
 zs = open(os.path.join(_HERE, "..", "sidecar", "zone_source.py")).read()
-ok("WORN_PASS_OHM identical in both files",
-   "WORN_PASS_OHM = 2_300_000.0" in zs)
-ok("5 s stability + 3.5 s staleness present",
-   "WORN_STABLE_SEC = 5.0" in zs and "WORN_STALE_SEC = 3.5" in zs)
+ok("the 2.3 MOhm pass default is untouched (the doc says it has no headroom)",
+   '"FOCUSROOM_WORN_PASS_OHM", "2300000"' in zs)
+ok("the verdict is the asymmetric WornGate, reset on every arm",
+   "WornGate(" in zs and "g.reset()" in zs)
+ok("the verdict never gates the guest: start_session does not consult it",
+   "_worn_gate" not in zs.split("async def start_session")[1].split("def _flush_stale_buffers")[0])
 ok("post-disarm EEG discard present (1.5 s, provisional)",
    "POST_LEADOFF_DISCARD_SEC = 1.5" in zs and "_eeg_discard_until" in zs)
+
+print("\nA.1 wrap boundary + channel lockstep")
+p = Probe()
+p._process_packet(pkt(10), 1)
+p._process_packet(pkt((10 + 128) % 256, 1000), 1)   # delta exactly 128: forward gap
+ok("delta of exactly 128 is a forward gap, admitted",
+   [s[2] for s in p.seen] == [1, 129], [s[2] for s in p.seen])
+p = Probe()
+p._process_packet(pkt(10), 1)
+p._process_packet(pkt((10 + 129) % 256, 1000), 1)   # delta 129 reads as -127: replay
+ok("delta of 129 reads as a replay, refused", len(p.seen) == 1, len(p.seen))
+proc = EarImpedanceProcessor(side="L")
+proc.ingest(1000.0, 2000.0, 0.0, abs_idx=7)
+ok("both channels of a packet advance together on ONE stream position",
+   proc.ch1._buf[-1][1] == 7 and proc.ch2._buf[-1][1] == 7)
+
+print("\nA.4 plausibility floor (the missing-lead failure mode)")
+# lead command missing => amplitude ~1000x low. A worn bud maps below zero
+# (no_signal by the clamp); a DESK bud maps to ~800-1500 Ohm, which without
+# the floor would read as a superb contact and PASS. It must never.
+est3 = ChannelImpedanceEstimator()
+for i in range(256):
+    est3.push_sample(tone_counts(3_300_000.0, i) / 1000.0 + 1000, i * 0.004, abs_idx=i)
+snap3 = est3.compute_if_ready(True, 1e9)
+ok("a desk bud with the lead command missing reads no_signal, never a pass",
+   snap3.state == "no_signal", (snap3.state, est3._smoothed_kohm))
+ok("...and worn() refuses to treat it as evidence", est3.worn() is None)
+ok("...with the hint naming the missing tone",
+   snap3.hint is not None and "lead-off tone missing" in snap3.hint, snap3.hint)
+est4 = ChannelImpedanceEstimator()
+for i in range(256):
+    est4.push_sample(tone_counts(1_500_000.0, i) / 1000.0 + 1000, i * 0.004, abs_idx=i)
+snap4 = est4.compute_if_ready(True, 1e9)
+ok("a worn bud with the lead command missing is caught too",
+   snap4.state == "no_signal" and est4.worn() is None, (snap4.state, est4._smoothed_kohm))
+ok("a genuine 42 kOhm contact still sits ABOVE the floor (floor is 10 kOhm)",
+   MIN_PLAUSIBLE_OHM == 10_000.0 and snap42.state != "no_signal",
+   (MIN_PLAUSIBLE_OHM, snap42.state))
 
 print("\n" + ("all %d checks passed" % _pass if _fail == 0 else "%d FAILURE(S)" % _fail))
 sys.exit(0 if _fail == 0 else 1)
