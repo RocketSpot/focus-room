@@ -126,8 +126,11 @@ try:
     r = ValidationRecorder("Jane Doe participant #42", simulation=False, log=lambda *_: None)  # hostile label
     r.close("test")
     names = os.listdir(capdir)
+    # scan only the LABEL portion: the leading timestamp legitimately contains
+    # digits (this check failed at 10:42:35 because the clock contained "42")
+    labels = [n.split("_", 1)[1] if "_" in n else n for n in names]
     ok("item 4: a name-like label is NOT written into filenames",
-       all(("jane" not in n.lower() and "doe" not in n.lower() and "42" not in n and "#" not in n) for n in names), names)
+       all(("jane" not in n.lower() and "doe" not in n.lower() and "42" not in n and "#" not in n) for n in labels), names)
     ok("item 4: label reduced to a fixed non-identifying token",
        any(("_session." in n or "_real." in n or "_sim." in n) for n in names), names)
     meta = json.load(open(glob.glob(os.path.join(capdir, "*.meta.json"))[0], encoding="utf-8"))
