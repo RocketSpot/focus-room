@@ -105,6 +105,20 @@ const mk = () => {
     o._pendingReadingStart === false && o.beat === 'reading', o.beat);
 }
 
+// ---- the ops banner tells the two silences apart (seen live 2026-08-31) -------
+{
+  const D = require(path.join(__dirname, '..', 'lib', 'diagnose.js'));
+  const base = { beat: 'fit', sidecar: { running: true, ready: true },
+    buds: { left: true, right: true }, battery: {}, lastFrameAgo: 9000, link: { eeg: 'live' } };
+  const rej = D.diagnose(Object.assign({}, base, { analysisAlive: true }));
+  check('ops banner: frame silence with the analyser ticking is picky-analysis, not a dropped link',
+    !!rej.alerts.find(a => a.id === 'analysis-picky') && !rej.alerts.find(a => a.id === 'signal-stall'),
+    JSON.stringify(rej.alerts.map(a => a.id)));
+  const loss = D.diagnose(Object.assign({}, base, { analysisAlive: false }));
+  check('ops banner: true silence still reads as the signal stalling',
+    !!loss.alerts.find(a => a.id === 'signal-stall'));
+}
+
 // ---- H4b: a failed FIRST connect attempt is not a drop ------------------------
 // The auto-connect watcher tries on its own before anything was ever up. A
 // null -> false transition must not write the drop story (sticky signalIssue,

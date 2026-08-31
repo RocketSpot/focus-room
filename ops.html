@@ -422,6 +422,11 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
         break;
       case 'fit/battery': S.battery={leftPct:m.leftPct,rightPct:m.rightPct,ok:m.ok}; break;
       case 'fit/impedance': S.impedance={allGood:m.allGood,channels:m.channels}; break;
+      case 'eeg/analysis-v1':
+        // the analyser's accounting rides the INGEST clock: its arrival proves
+        // samples are reaching the analyser even when every window is rejected
+        S.lastAnalysisAt = Date.now();
+        break;
       case 'eeg/stats':
         S.stats=m;
         // the per-bud stream carries battery too, the streaming-fit path never
@@ -460,6 +465,7 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
   }
   function render(){
     S.lastFrameAgo = S.lastFrameAt ? (Date.now()-S.lastFrameAt) : null;
+    S.analysisAlive = S.lastAnalysisAt ? (Date.now()-S.lastAnalysisAt) < 5000 : false;
 
     // HONESTY: never show a green "healthy" tick with no live data behind it.
     // If the socket is down, or the room hasn't sent anything yet, say exactly
