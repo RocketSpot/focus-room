@@ -33,8 +33,37 @@ const mk = () => {
 };
 const seat = (o) => {
   o.onClientHello({ role: 'ipad', clientTime: Date.now() });
+  o._budsConnected = true;   // the ordinary case: buds already connected
   o.onClientMessage({ type: 'guest/event', kind: 'earbud_seated', payload: {}, t: Date.now() }, 'ipad');
 };
+const seatNoBuds = (o) => {
+  o.onClientHello({ role: 'ipad', clientTime: Date.now() });
+  o.onClientMessage({ type: 'guest/event', kind: 'earbud_seated', payload: {}, t: Date.now() }, 'ipad');
+};
+
+// ---- 2026-08-31: the guest seats BEFORE the buds connect ----
+// The real first hardware run of this flow: "seated" tapped ~20s before the
+// buds advertised. The fit must not arm against nothing; the phase waits for
+// the link, and the guest's own taps still outrank everything.
+{
+  const { o, sent } = mk();
+  seatNoBuds(o);
+  check('no buds yet: the tone is NOT armed against nothing',
+    !sent.includes('start_fit'), sent.join(','));
+  o.onSidecar({ type: 'eeg/connection', leftConnected: true, rightConnected: true, dropRateL: 0 });
+  check('the buds connecting starts the deferred impedance phase',
+    sent.includes('start_fit'), sent.join(','));
+  o._clearSession();
+}
+{
+  const { o, sent } = mk();
+  seatNoBuds(o);
+  o.onClientMessage({ type: 'guest/event', kind: 'baseline_start', payload: {}, t: Date.now() }, 'ipad');
+  check('guest outruns the connection: straight to the stream attempt, never gated',
+    sent.includes('start_session:signal_check') && !sent.includes('start_fit'), sent.join(','));
+  check('and the baseline window opened regardless', !!o.baseline);
+  o._clearSession();
+}
 
 // ---- exit 1: the worn verdict lands ----
 {

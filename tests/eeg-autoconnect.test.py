@@ -120,7 +120,7 @@ def t_session_active_hands_to_the_ladder():
     loop = _loop_src()
     assert "_maybe_reconnect(" in loop and "_session_active" in loop, \
         "mid-session the ladder owns recovery (it alone restarts the stream)"
-    seg = loop.split("if self._session_active:")[1].split("self.log(\"auto-connect: earbuds found")[0]
+    seg = loop.split("if self._session_active and getattr(self, \"_ever_validated\", False):")[1].split("self.log(\"auto-connect: earbuds found")[0]
     assert "self.connect" not in seg, \
         "a plain connect() mid-session restores the link but leaves the reading frozen"
 
@@ -299,9 +299,11 @@ def t_scenario_disconnect_stands_down_and_connect_rearms():
 
 
 def t_scenario_mid_session_goes_to_the_ladder():
+    # ...but ONLY when a validated pair exists to redial (2026-08-31)
     async def main():
         src, world = make_room(lambda n: BOTH)
         src._session_active = True
+        src._ever_validated = True
         ladder = []
         src._maybe_reconnect = lambda status: ladder.append(status)
 
@@ -370,14 +372,67 @@ def t_connect_is_idempotent_when_both_up():
     fast(main())
 
 
-def t_connect_refuses_while_ladder_owns_link():
+def t_operator_connect_cancels_a_running_ladder():
+    # 2026-08-31: three operator presses were refused for 54 s while a ladder
+    # with nothing to redial burned its backoffs. The OPERATOR outranks it.
     async def main():
         src, world = make_room(lambda n: [])
         src._auto_task.cancel()
         src._reconnecting = True
-        got = await src.connect()
-        assert got is None, "connect during the ladder must be a refusal, not an attempt"
+        async def fake_ladder():
+            try:
+                await asyncio.sleep(60)
+            finally:
+                src._reconnecting = False
+        src._reconnect_task = asyncio.get_running_loop().create_task(fake_ladder())
+        inner = []
+        async def fake_inner():
+            inner.append(1)
+            return True
+        src._connect_inner = fake_inner
+        got = await src.connect()                  # manual: auto defaults False
+        assert got is True, "the operator press must take over, not bounce: %r" % got
+        assert inner, "the validated connect must actually run"
+        assert src._reconnect_task.cancelled() or src._reconnect_task.done(), \
+            "the ladder must be cancelled first, never interleaved"
+        # ...but the AUTO loop still defers to a ladder
+        src._reconnecting = True
+        got2 = await src.connect(auto=True)
+        assert got2 is None, "auto must never cancel the ladder"
     fast(main())
+
+
+def t_session_without_validated_pair_uses_full_connect():
+    # 2026-08-31: buds advertised mid-"session" that had started with nothing
+    # connected. The ladder was handed a pair it had never validated and burned
+    # five futile attempts. No validated pair -> the full connect path.
+    async def main():
+        src, world = make_room(lambda n: BOTH)
+        src._session_active = True
+        src._ever_validated = False
+        ladder = []
+        src._maybe_reconnect = lambda status: ladder.append(status)
+        async def fake_connect(auto=False):
+            world["connects"].append(auto)
+            world["buds"] = {"left_connected": True, "right_connected": True}
+            return True
+        src.connect = fake_connect
+        await asyncio.sleep(0.5)
+        assert world["connects"], "the full validated connect must run"
+        assert not ladder, "the ladder has nothing to redial and must not be used"
+        src._auto_task.cancel()
+    fast(main())
+
+
+def t_heal_wiring_is_present():
+    # the stream-down session heals: on a start_session retry and on any
+    # successful connect landing inside an active session
+    assert "async def _ensure_streaming" in SRC
+    assert "_ensure_streaming(\"start_session retry\")" in SRC.split("async def start_session")[1].split("def _flush_stale_buffers")[0].replace("'", '"')
+    tail = SRC.split("async def _connect_inner")[1].split("async def discover")[0]
+    assert "_ensure_streaming(\"post-connect heal\")" in tail.replace("'", '"'), \
+        "a connect inside a stream-down session must finish the job"
+    assert "_ever_validated = True" in tail
 
 
 for name, fn in sorted((k, v) for k, v in list(globals().items()) if k.startswith("t_")):

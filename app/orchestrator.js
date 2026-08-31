@@ -155,6 +155,7 @@ class Orchestrator extends EventEmitter {
     this._clearReadingFallback();
     this._clearFitHint();
     this._fitImpPhase = false;
+    this._fitImpWaiting = false;
     if (this._fitImpCap) { clearTimeout(this._fitImpCap); this._fitImpCap = null; }
     // review CE-4: a stale deferred interruption from guest 1 fired guest 2's
     // one interruption 2s into their reading; these latches die with a session
@@ -205,6 +206,7 @@ class Orchestrator extends EventEmitter {
     this._linkLostAt = null;
     this._budsConnected = null;  // last eeg/connection verdict (null = not reported yet)
     this._fitImpPhase = false;   // signal check: impedance phase before the stream
+    this._fitImpWaiting = false; // ...deferred until the buds actually connect
     this._fitImpCap = null;
     this._eegDownCause = null;   // 'loss' | 'rejection' while _eegDown is true
     this._lastAnalysisTickMs = null;
@@ -508,7 +510,18 @@ class Orchestrator extends EventEmitter {
           // they are reading the seating copy while it runs. Then the check
           // STREAMS live so the guest SEES their α/β/γ waves (not an
           // electrode/impedance readout). Not recorded, streamLog opens at reading.
-          this._beginFitImpedance();
+          if (this._budsConnected === true) {
+            this._beginFitImpedance();
+          } else {
+            // 2026-08-31: the guest tapped "seated" ~20s before the buds were
+            // even advertising; the fit armed against nothing, the cap fired a
+            // stream into nothing, and the room believed a session was running
+            // with zero frames. The phase now waits for the link; the guest
+            // reads the seating copy meanwhile, and their own taps still
+            // outrank everything.
+            this._fitImpWaiting = true;
+            this.log('signal check: waiting for the earbuds to connect before the impedance phase');
+          }
         }
         break;
       case 'fit':
@@ -528,7 +541,9 @@ class Orchestrator extends EventEmitter {
             this.baseline.endedAt = this.now();
             this.log(`baseline: captured ${this.baseline.frames.length} frames / ${this.baseline.bands.length} band samples`);
           }
-          if (this._fitImpPhase) {
+          if (this._fitImpWaiting) {
+            this._fitImpWaiting = false;   // never armed; nothing to stop
+          } else if (this._fitImpPhase) {
             // confirmed before the stream ever started: disarm the tone, there
             // is no signal-check stream to stop
             this._fitImpPhase = false;
@@ -1087,6 +1102,14 @@ class Orchestrator extends EventEmitter {
   }
 
   _fitStreamStart(why) {
+    if (this._fitImpWaiting) {
+      // guest outran the connection: no tone was ever armed; go straight to
+      // the stream attempt (the sidecar heals it when the buds land)
+      this._fitImpWaiting = false;
+      this.sup.send(SIDECAR_IN.START_SESSION, { reason: 'signal_check' });
+      this.log(`signal check: streaming without the impedance phase (${why}; buds not yet connected)`);
+      return;
+    }
     if (!this._fitImpPhase) return;
     this._fitImpPhase = false;
     if (this._fitImpCap) { clearTimeout(this._fitImpCap); this._fitImpCap = null; }
@@ -1311,6 +1334,11 @@ class Orchestrator extends EventEmitter {
             // fabricated 'buds_reconnected' for a drop that never happened
             this.log('earbud link restored');
             this._record('buds_reconnected', this.now());
+            if (this._fitImpWaiting && this.beat === 'fit') {
+              this._fitImpWaiting = false;
+              this.log('earbuds connected, starting the deferred impedance phase');
+              this._beginFitImpedance();
+            }
             // a reading held at the safe point resumes on the link coming
             // back, not only on the first frame (none flow at the picker)
             if (this._pendingReadingStart && this.beat === 'picker') {
@@ -1320,6 +1348,11 @@ class Orchestrator extends EventEmitter {
             }
           } else {
             this.log('earbud link up');
+            if (this._fitImpWaiting && this.beat === 'fit') {
+              this._fitImpWaiting = false;
+              this.log('earbuds connected, starting the deferred impedance phase');
+              this._beginFitImpedance();
+            }
           }
           this._broadcastState();
         }

@@ -200,6 +200,7 @@ class ZoneSource:
         # the console while the room sits empty, and it reports only the two
         # moments an operator cares about, found-and-connecting and connected.
         self._connect_in_flight = False
+        self._ever_validated = False   # a full validated connect succeeded this launch
         self._auto_last_note = 0.0
         self._auto_fail_streak = 0
         self._auto_last_err = ""
@@ -299,7 +300,7 @@ class ZoneSource:
                     self.log(f"auto-connect: found buds but standing back ({why})")
                     await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
                     continue
-                if self._session_active:
+                if self._session_active and getattr(self, "_ever_validated", False):
                     # Mid-session the ladder owns recovery: it reconnects only
                     # the lost side and cycles stop/start streaming so frames
                     # actually flow again. A plain connect() here would restore
@@ -309,11 +310,20 @@ class ZoneSource:
                     self._maybe_reconnect("auto_scan_found")
                     await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
                     continue
+                # session active but NO pair was ever validated this launch:
+                # the ladder's per-side redial has nothing to redial (observed
+                # 2026-08-31: five futile attempts over 57 s against buds that
+                # had never connected). Only the full validated connect can
+                # work here - and it heals the session's stream itself.
                 self.log("auto-connect: earbuds found, connecting on their own")
                 ok = await self.connect(auto=True)
                 if ok:
                     self._auto_fail_streak = 0
                     self.log("auto-connect: earbuds connected, no operator action needed")
+                    # pause even on success: if the SDK reports ok while the
+                    # status has not settled yet, the next gate pass must not
+                    # spin through scan->connect with no pacing
+                    await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
                 elif ok is None:
                     # someone else's connect is mid-flight; defer, touch nothing
                     await asyncio.sleep(AUTOCONNECT_IDLE_SEC)
@@ -401,13 +411,27 @@ class ZoneSource:
             # not a failed attempt, so the auto loop keeps its hands off the state
             self.log("connect already in flight, ignoring the duplicate request")
             return None
-        if self._reconnecting or self._rotating:
-            # the ladder/rotation runs per-device connects on the same
-            # connection object; a full-pair connect_selected on top of it is
-            # exactly the duplicate-notifying-client hazard the ladder guards
-            # against for the SDK's recovery. Refuse, never interleave.
-            self.log("connect refused: a reconnect/rotation owns the link right now")
+        if self._rotating:
+            self.log("connect refused: a service rotation owns the link right now")
             return None
+        if self._reconnecting:
+            if auto:
+                # the auto loop defers; interleaving two connect flows on one
+                # connection object is the duplicate-notifying-client hazard
+                self.log("connect refused: the reconnect ladder owns the link right now")
+                return None
+            # The OPERATOR outranks the ladder (2026-08-31: three presses were
+            # refused for 54 s while a ladder with nothing to redial burned its
+            # backoffs). Cancel it cleanly, then run the full validated connect.
+            task = getattr(self, "_reconnect_task", None)
+            self.log("operator connect takes over: cancelling the reconnect ladder")
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+            self._reconnecting = False
         st = self.sdk.get_buds_status()
         l_up, r_up = bool(st.get("left_connected")), bool(st.get("right_connected"))
         if l_up and r_up:
@@ -454,10 +478,18 @@ class ZoneSource:
         status = self.sdk.get_buds_status()
         self._left_up = bool(status.get("left_connected"))
         self._right_up = bool(status.get("right_connected"))
+        if ok:
+            self._ever_validated = True
         self.tx.send(OUT.CONNECTION,
                      leftConnected=self._left_up,
                      rightConnected=self._right_up,
                      connected=ok)
+        # 2026-08-31: the guest's signal check had "started" before any bud was
+        # connected, so its stream never existed - and the connect that finally
+        # landed left them staring at a live link with zero frames. A connect
+        # arriving inside a stream-down session finishes the job it enables.
+        if ok and self._session_active and not self._streaming:
+            await self._ensure_streaming("post-connect heal")
         return ok
 
     # ---------------- catalogue-free connect (SDK self-discovery hooks) ----------------
@@ -723,10 +755,17 @@ class ZoneSource:
     # ---------------- live session ----------------
     async def start_session(self):
         # re-entrancy guard (parity with sim): a duplicate START_SESSION must
-        # not wipe the live buffer mid-reading.
+        # not wipe the live buffer mid-reading. But a session whose stream
+        # NEVER STARTED (started with no buds connected - 2026-08-31: the guest
+        # seated before the buds were even advertising) must be healable, or
+        # the guest sits on the signal check with connected buds and zero
+        # frames while every retry bounces off this guard.
         if self._session_active:
-            self.log("start_session ignored — session already active")
-            return True
+            if self._streaming:
+                self.log("start_session ignored — session already active")
+                return True
+            self.log("session active but the stream is down — restarting it in place")
+            return await self._ensure_streaming("start_session retry")
         # ensure impedance is disarmed (it cannot run with streaming)
         if self.sdk.get_buds_status().get("impedance_armed"):
             await self.sdk.stop_impedance()
@@ -756,6 +795,25 @@ class ZoneSource:
         if self._streaming:
             asyncio.create_task(self._stream_liveness_check())
         return ok
+
+    async def _ensure_streaming(self, why):
+        """Start the stream INSIDE an already-active session without touching
+        the engine or the analyser's references (same guest, same session).
+        Used when the session began before the buds finished connecting."""
+        if self.sdk.get_buds_status().get("impedance_armed"):
+            await self.sdk.stop_impedance()
+            self._eeg_discard_until = time.monotonic() + POST_LEADOFF_DISCARD_SEC
+        self._flush_stale_buffers(why)
+        self._metrics_since_stream = 0
+        if self._eeg_stream is None:
+            self._eeg_stream = EegStream(self.tx, self.log, simulation=False,
+                                         expected_rate_hz=250)
+        ok = await self.sdk.start_streaming()
+        self._streaming = bool(ok)
+        self.log(f"streaming started ({why}): {ok}")
+        if self._streaming:
+            asyncio.create_task(self._stream_liveness_check())
+        return bool(ok)
 
     def _flush_stale_buffers(self, why):
         """Drop residual EEG samples between fit and streaming (and after a
