@@ -1,7 +1,7 @@
 {
   "name": "zone-focus-room",
   "productName": "Zone Focus Room",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "private": true,
   "description": "The Focus Room — single-room visitor EEG experience. Electron brain + bundled Python (Zone SDK) sidecar.",
   "author": "Zone",
