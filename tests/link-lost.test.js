@@ -51,7 +51,9 @@ function mk() {
   const { o } = mk();
   o._eegSimulation = false;
   o.beat = 'picker';
-  o._eegDown = true;
+  // review CE-3: _eegDown cannot survive to the picker (setBeat clears it on
+  // leaving the streaming beats), so the hold keys on the CONNECTION truth
+  o._budsConnected = false;
   o._onIntake({ reading: { id: 'octopus', title: 'How an Octopus Thinks' }, t: Date.now() });
   check('the reading does NOT begin while the buds are down', o.beat === 'picker', o.beat);
   check('the held start is remembered', o._pendingReadingStart === true);

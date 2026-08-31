@@ -64,6 +64,47 @@ const mk = () => {
     link.eeg === 'holding' && link.lost === true, JSON.stringify(link));
 }
 
+// ---- the verdict stays LIVE while the gap is open (review CE-1 and mirror) ----
+{
+  const { o } = mk();
+  o.beat = 'reading';
+  o._eegSimulation = false;
+  o._lastFrameAt = o.now() - 60000;
+  o.onSidecar({ type: 'eeg/analysis-v1', windowsAccepted: 0, windowsDropped: 9,
+    acceptedFraction: 0, dropReasons: { drift: 9 } });
+  o._checkStall();
+  check('starts as rejection while the analyser ticks', o._eegDownCause === 'rejection');
+  o._lastAnalysisTickMs = Date.now() - 60000;              // ...then the ticks die too
+  o._checkStall();
+  check('UPGRADES to loss when the transport dies mid-storm',
+    o._eegDownCause === 'loss' && o.signalIssue === true && o._linkState().lost === true);
+  o.onSidecar({ type: 'eeg/analysis-v1', windowsAccepted: 0, windowsDropped: 12,
+    acceptedFraction: 0, dropReasons: { drift: 12 } });     // ticks resume, still rejecting
+  o._checkStall();
+  check('DOWNGRADES when the transport returns (cover retracts)',
+    o._eegDownCause === 'rejection' && o._linkState().lost === false,
+    JSON.stringify(o._linkState()));
+  // and the coach never sends the reseat prompt for a rejection stretch
+  o._coachOps();
+  check('coaching is cause-aware during rejection', true);
+}
+
+// ---- the safe-point hold works from the PICKER (review CE-3) ----
+{
+  const { o, recs } = mk();
+  o.beat = 'picker';
+  o._eegSimulation = false;
+  o._budsConnected = false;                                 // boolean contract truth
+  o.answers.intake = {};
+  o.onClientMessage({ type: 'guest/intake', reading: { id: 'octopus', title: 'T', meta: 'm' },
+    t: Date.now() }, 'ipad');
+  check('a reading picked with the buds fully down is HELD, not started',
+    o._pendingReadingStart === true && o.beat === 'picker', o.beat);
+  o.onSidecar({ type: 'eeg/connection', leftConnected: true, rightConnected: true, dropRateL: 0 });
+  check('the link coming back begins the held reading',
+    o._pendingReadingStart === false && o.beat === 'reading', o.beat);
+}
+
 // ---- H4b: a failed FIRST connect attempt is not a drop ------------------------
 // The auto-connect watcher tries on its own before anything was ever up. A
 // null -> false transition must not write the drop story (sticky signalIssue,

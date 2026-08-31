@@ -994,6 +994,13 @@ class ZoneSource:
         stream = self._eeg_stream
         if stream is None:
             return
+        # the analyser's accounting rides the INGEST clock: it keeps ticking
+        # while every window is rejected, so silence-with-ticks reads as
+        # rejection downstream and silence-without-ticks as a dead transport
+        _now = time.monotonic()
+        if _now - self._last_analysis_report >= 1.0:
+            self._last_analysis_report = _now
+            self.tx.send(OUT.ANALYSIS, **self._analyzer.counters())
         if self._eeg_discard_until and time.monotonic() < self._eeg_discard_until:
             return   # lead-off settling: this is injected tone, not brain
         chans = raw.channels
@@ -1066,9 +1073,11 @@ class ZoneSource:
 
         # session counters, so the orchestrator can judge data quality on facts
         now = time.monotonic()
-        if now - getattr(self, "_last_analysis_report", 0.0) >= 1.0:
-            self._last_analysis_report = now
-            self.tx.send(OUT.ANALYSIS, **self._analyzer.counters())
+        # (the 1 Hz analysis report is emitted from _on_raw, NOT from here:
+        # this callback only fires for ACCEPTED windows, and during a total
+        # rejection storm - the exact condition the orchestrator's
+        # rejection-vs-loss split exists for - it goes silent together with
+        # the frames, which made the split unreachable from the real sidecar)
 
     def _on_leadoff(self, device_id, loff_p, loff_n):
         """One packet's lead-off bits. A SET bit means that pin is off the skin.

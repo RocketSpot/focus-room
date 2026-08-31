@@ -46,25 +46,33 @@ HOP_SEC = 1.0
 FLATLINE_REL = 0.20        # amplitude below this fraction of reference ⇒ dead contact
 BLOWUP_REL = 3.5           # measured-band amplitude above this multiple ⇒ clench
 STEP_REL = 10.0            # a single jump this many times the robust gradient ⇒ pop
-# DRIFT LIMITS, REBUILT AFTER THE 2026-08-29 HARDWARE SESSION. The old gate
-# measured slow travel on the RAW signal and rejected ~90% of a real session's
-# windows - every rejection tagged drift - which starved the room's line and
-# read as constant "disconnecting" while both links ran healthy at ~240 Hz.
-# The mistake: a dry ear electrode's wander is enormous but lives almost
-# entirely BELOW 0.4 Hz, and the 0.5 Hz analysis high-pass deletes it before
-# anything is measured. Probed directly (see tests/eeg-spectral.test.py):
-# sub-0.4 Hz wander at 100x the brain signal (raw ratio 409) leaves delta at
-# -0.12 dB. Judging the raw signal rejected windows for energy that never
-# reached the PSD. Drift in the 0.5-1.5 Hz residual is what actually leaks
-# into the 2-4 Hz band: measured, corruption begins near a post-filter ratio
-# of ~6-7 (delta +2.3 dB) and grows from there. So the gate now judges the
-# slow component OF THE FILTERED SIGNAL - the only drift that can bend a
-# number - with the threshold at the measured corruption boundary.
-# Env-tunable for the hardware team's formulas; per-window ratio percentiles
-# ride the 1 Hz analysis report so real sessions keep calibrating this.
-DRIFT_REL = float(os.environ.get("FOCUSROOM_DRIFT_REL", "5.0"))
-DRIFT_SELF_REL = float(os.environ.get("FOCUSROOM_DRIFT_SELF_REL", "8.5"))
-DRIFT_PROBE_HZ = 1.5       # the slow component drift is measured on, below the analysis band
+# THE DRIFT GATE, SPECTRAL (third rebuild, each one measured). History: the
+# raw-domain ptp gate rejected ~90% of the 2026-08-29 real session for
+# sub-0.4 Hz electrode wander that the 0.5 Hz analysis high-pass deletes
+# before anything is measured (probed: 100x wander, delta -0.12 dB). The
+# filtered-ptp replacement fixed that but was frequency-blind: adversarial
+# review measured a 1.8 Hz tone at ratio 3.8 slipping through at +13 dB
+# delta, because corruption is governed by proximity to the 2 Hz band edge
+# (Welch's 2 s segments blur ~1 Hz), which a time-domain ptp cannot see.
+# So the probe is now SPECTRAL, on the raw interior (no filtfilt edge
+# transients), split by what each region can actually do to the numbers:
+#   NEAR  [1.55, 2.0) Hz - tight against the band edge, where leakage is
+#         strongest. Measured: clean p95 0.25, natural movement p95 0.35,
+#         corrupting tones (incl. a 100-110 bpm pulse fundamental) p5 0.37.
+#   EDGE  [1.2, 2.0) Hz - the broadband leakage zone. Clean p95 0.38,
+#         natural movement ~0.5x at +0.1 dB delta, corruption from 0.55x up.
+#   DEEP  [0.4, 1.2) Hz - absorbed by the per-window 1/f fit. Measured: 35x
+#         wander leaves delta at -0.2 dB. Sanity ceiling only.
+#   below 0.4 Hz     - a cubic detrend removes it; it cannot reach the PSD.
+# KNOWN LIMIT, documented not hidden: a narrow near-edge tone below ~0.7x
+# the signal amplitude (e.g. a faint pulse fundamental at 108-115 bpm) can
+# still slip through at up to ~+2 dB delta. The real cure is finer
+# low-frequency PSD resolution; parked for the hardware team's formulas.
+# Env-tunable; per-window percentiles ride the analysis report so real
+# sessions keep calibrating this.
+DRIFT_NEAR_REL = float(os.environ.get("FOCUSROOM_DRIFT_NEAR_REL", "0.36"))
+DRIFT_EDGE_REL = float(os.environ.get("FOCUSROOM_DRIFT_EDGE_REL", "0.45"))
+DRIFT_DEEP_REL = float(os.environ.get("FOCUSROOM_DRIFT_DEEP_REL", "60.0"))
 EDGE_GUARD_SEC = 0.5       # discarded each end of the window for the artifact tests only
 REF_WINDOWS = 60           # accepted windows contributing to the running references
 CHI_WINDOWS = 30           # accepted windows contributing to the running exponent
@@ -99,8 +107,9 @@ class BandAnalyzer:
         self._cb = None
         # cached filter designs: the slow component drift is judged on, and the
         # measured band the amplitude and step criteria are judged on
-        self._slow_sos = _sig.butter(2, DRIFT_PROBE_HZ, btype="low", fs=self.fs, output="sos")
-        self._drift_ratios = _deque(maxlen=600)   # calibration telemetry, ~10 min
+        # calibration telemetry: per-CHANNEL appends, 4/window, so 2400 ~= 10 min
+        self._drift_edge = _deque(maxlen=2400)
+        self._drift_deep = _deque(maxlen=2400)
         self._meas_sos = _sig.butter(4, [S.ANALYSIS_LO_HZ, S.ANALYSIS_HI_HZ],
                                      btype="band", fs=self.fs, output="sos")
         self._edge = int(round(EDGE_GUARD_SEC * self.fs))
@@ -136,7 +145,8 @@ class BandAnalyzer:
         self.windows_dropped = 0
         self.drop_reasons = {}
         if not keep_references:
-            self._drift_ratios.clear()   # calibration telemetry is per guest
+            self._drift_edge.clear()     # calibration telemetry is per guest
+            self._drift_deep.clear()
 
     # ---------------- ingest ----------------
     def ingest(self, cols, labels=None):
@@ -172,6 +182,26 @@ class BandAnalyzer:
         while self._since_hop >= self.hop_n and max(len(b) for b in self._buf) >= self.window_n:
             self._since_hop -= self.hop_n
             self._emit_window()
+    def _drift_probe(self, raw):
+        """Band amplitudes of the raw interior after a cubic detrend: RMS-scale
+        amplitude in [0.4, 1.2) (deep) and [1.2, 2.0) (edge). Computed on RAW
+        so the analysis high-pass's window-edge transients (tau ~0.8 s, twice
+        the artifact edge guard) cannot inflate the measure; the detrend kills
+        everything below ~0.3 Hz harder than the high-pass does."""
+        x = raw[self._edge:-self._edge].astype(float)
+        n = len(x)
+        if n < 64:
+            return 0.0, 0.0
+        t = np.arange(n)
+        x = x - np.polyval(np.polyfit(t, x, 3), t)
+        spec = np.fft.rfft(x * np.hanning(n))
+        f = np.fft.rfftfreq(n, 1.0 / self.fs)
+        pw = (np.abs(spec) / (n * 0.5)) ** 2
+        a_deep = float(np.sqrt(np.sum(pw[(f >= 0.4) & (f < 1.2)]) / 2.0))
+        a_edge = float(np.sqrt(np.sum(pw[(f >= 1.2) & (f < 2.0)]) / 2.0))
+        a_near = float(np.sqrt(np.sum(pw[(f >= 1.55) & (f < 2.0)]) / 2.0))
+        return a_deep, a_edge, a_near
+
     def _screen(self, i, raw):
         """Decide whether ONE channel's window is usable. Returns (ok, reason, filt).
 
@@ -188,14 +218,13 @@ class BandAnalyzer:
         windows that were being thrown away for a blow-up that existed only
         below the analysis band. Guests are meant to be able to move.
 
-        Drift is judged on the slow component OF THE ANALYSIS SIGNAL, after
-        the 0.5 Hz high-pass. The raw-domain version of this test was wrong in
-        exactly the way that matters on real hardware: it rejected windows for
-        sub-0.4 Hz electrode wander that the filter removes before anything is
-        measured (probed: 100x wander, delta -0.12 dB), while the drift that
-        DOES corrupt the 2-4 Hz band is the 0.5-1.5 Hz residual that survives
-        the filter - which is what this measures. Peak-to-peak travel rather
-        than a linear slope, since real contact drift wanders, not ramps.
+        Drift is judged SPECTRALLY on the raw interior (cubic-detrended, so
+        sub-0.4 Hz wander cannot masquerade as anything): the edge band
+        [1.2, 2.0) is what leaks into the measured 2-4 Hz band through the
+        Welch segments' resolution blur, and the deep band [0.4, 1.2) is
+        absorbed by the per-window 1/f fit and gets a sanity ceiling only.
+        See the constants block for the measured boundaries and the one
+        documented blind spot near the band edge.
         """
         if len(raw) < self.window_n // 2:
             return False, "short", None
@@ -207,8 +236,7 @@ class BandAnalyzer:
             return False, "clipping", None
 
         filt = S.analysis_filter(raw, self.fs)
-        slow = _sig.sosfiltfilt(self._slow_sos, filt)
-        drift_range = float(np.ptp(slow[self._edge:-self._edge]))
+        a_deep, a_edge, a_near = self._drift_probe(raw)
         # Statistics are taken from the INTERIOR of the window. Zero-phase
         # filtering rings at the edges in proportion to the low-frequency
         # content it removed, and that ringing was being detected as electrode
@@ -233,8 +261,16 @@ class BandAnalyzer:
         # were never seated properly sail through unchecked: measured, three of
         # the first thirty windows of a violently drifting recording were being
         # accepted purely because the detector had not warmed up yet.
-        self._drift_ratios.append(drift_range / (amp_ref or amp))
-        if drift_range > DRIFT_SELF_REL * amp:
+        # one denominator for gate and telemetry alike: the reference once it
+        # exists, the window's own amplitude only before that (cold start uses
+        # the SAME thresholds - looser cold gates let corrupt opening windows
+        # seed the references and the signal-check display)
+        ref = amp_ref or amp
+        if amp_ref:
+            self._drift_edge.append(a_edge / amp_ref)
+            self._drift_deep.append(a_deep / amp_ref)
+        if a_near > DRIFT_NEAR_REL * ref or a_edge > DRIFT_EDGE_REL * ref \
+                or a_deep > DRIFT_DEEP_REL * ref:
             return False, "drift", None
 
         if amp_ref:
@@ -242,8 +278,6 @@ class BandAnalyzer:
                 return False, "flatline", None
             if amp > BLOWUP_REL * amp_ref:
                 return False, "amplitude", None
-            if drift_range > DRIFT_REL * amp_ref:
-                return False, "drift", None
         if grad_ref and grad > 0:
             peak = float(np.max(np.abs(dmeas)))
             if peak > STEP_REL * grad_ref:
@@ -251,8 +285,13 @@ class BandAnalyzer:
 
         # mains contamination, measured rather than assumed
         rms = float(np.sqrt(np.mean(meas ** 2))) or 1e-9
+        # probe the RAW signal: the analysis filter's notches have already
+        # removed mains from `filt`, which made this gate permanently inert -
+        # it exists to catch OVERWHELMING hum (a contact so bad the electrode
+        # is an antenna), and only the raw signal still carries it
+        raw_interior = raw[self._edge:-self._edge].astype(float)
         for f0 in S.LINE_HZ:
-            if _goertzel_mag(filt, self.fs, f0) / rms > LINE_RATIO_BAD:
+            if _goertzel_mag(raw_interior, self.fs, f0) / rms > LINE_RATIO_BAD:
                 return False, "line", None
 
         return True, None, filt
@@ -351,7 +390,10 @@ class BandAnalyzer:
             "dropReasons": dict(self.drop_reasons),
             "exponentMedian": float(np.median(self._chi_hist)) if self._chi_hist else None,
             # calibration telemetry: where this session's windows actually sit
-            # against the drift gate, so real heads keep tuning the defaults
-            "driftRatioP50": float(np.percentile(self._drift_ratios, 50)) if self._drift_ratios else None,
-            "driftRatioP95": float(np.percentile(self._drift_ratios, 95)) if self._drift_ratios else None,
+            # against the drift gates (single denominator: the warm reference),
+            # so real heads keep tuning the defaults
+            "driftEdgeP50": float(np.percentile(self._drift_edge, 50)) if self._drift_edge else None,
+            "driftEdgeP95": float(np.percentile(self._drift_edge, 95)) if self._drift_edge else None,
+            "driftDeepP50": float(np.percentile(self._drift_deep, 50)) if self._drift_deep else None,
+            "driftDeepP95": float(np.percentile(self._drift_deep, 95)) if self._drift_deep else None,
         }

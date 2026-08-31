@@ -156,6 +156,11 @@ class Orchestrator extends EventEmitter {
     this._clearFitHint();
     this._fitImpPhase = false;
     if (this._fitImpCap) { clearTimeout(this._fitImpCap); this._fitImpCap = null; }
+    // review CE-4: a stale deferred interruption from guest 1 fired guest 2's
+    // one interruption 2s into their reading; these latches die with a session
+    this._interruptionDeferred = false;
+    this._pendingReadingStart = false;
+    this._analysisCounters = null;
     this.answers = { intake: {}, onMind: '', reading: null, archetype: 'deep', archetypeName: 'Deep Diver' };
     this.timeline = { streamEpoch: null, lastFrame: null }; // EEG timeline anchor (master ms)
     this.events = [];            // [{kind, masterT, eegT}]
@@ -204,6 +209,7 @@ class Orchestrator extends EventEmitter {
     this._eegDownCause = null;   // 'loss' | 'rejection' while _eegDown is true
     this._lastAnalysisTickMs = null;
     this._analysisPrevTotal = 0;
+    this._interruptionDeferred = false;
     this._streamGaps = [];       // [{from, to}] stream-clock seconds with no signal
     this._gapOpenT = null;       // stream time a still-open gap started at
     // The stream clock must never run backwards. A sidecar restart re-anchors
@@ -245,7 +251,15 @@ class Orchestrator extends EventEmitter {
       this._startStallWatch();
     } else {
       this._stopStallWatch();
-      if (this._eegDown) { this._eegDown = false; this._eegDownCause = null; this._gapOpenT = null; }
+      if (this._eegDown) {
+        // a gap still open when the guest moves on (finishing the page with a
+        // dead stream) is a real no-signal tail; the record must carry it
+        if (this._gapOpenT != null) {
+          const gap = { from: this._gapOpenT, to: this._streamT() };
+          if (gap.to - gap.from >= 1) this._streamGaps.push(gap);
+        }
+        this._eegDown = false; this._eegDownCause = null; this._gapOpenT = null;
+      }
     }
     this._streamingBeatWas = this._streamingBeat();
     this.log(`beat: ${prev} → ${beat}`);
@@ -297,7 +311,7 @@ class Orchestrator extends EventEmitter {
     const e = this._eegEligibility;
     let side = null, reason = null;
     const lo = this._loffOff;
-    if (this._eegDown) { side = 'both'; reason = 'link'; }
+    if (this._eegDown && this._eegDownCause !== 'rejection') { side = 'both'; reason = 'link'; }
     else if (lo && (lo.left || lo.right)) {
       // measured contact beats inferred contact
       side = (lo.left && lo.right) ? 'both' : (lo.left ? 'left' : 'right');
@@ -449,7 +463,11 @@ class Orchestrator extends EventEmitter {
       // the picker, the iPad shows its held-session cover, the operator gets
       // the alert, and the moment the stream returns the reading begins on
       // its own, because the guest already chose it. Only the start waits.
-      if (this._eegDown && this._eegDownCause !== 'rejection' && this._eegSimulation === false) {
+      // _eegDown cannot survive to the picker (setBeat clears it on leaving
+      // the streaming beats), so the hold keys on the CONNECTION truth: buds
+      // reported fully down by the boolean contract = a reading started now
+      // is guaranteed skewed. Rejection stretches never set this.
+      if (this._budsConnected === false && this._eegSimulation === false) {
         this._pendingReadingStart = true;
         this.log('reading HELD: earbuds are down, will begin when the stream returns');
         this._coachOps();
@@ -597,6 +615,11 @@ class Orchestrator extends EventEmitter {
   }
 
   _beginReading() {
+    // gaps recorded during the signal check are stamped on the FIT clock;
+    // the reading resets that clock, so carrying them over breaks the reveal
+    // chart across reading-seconds where the data was actually clean
+    this._streamGaps = [];
+    this._gapOpenT = null;
     // wall-clock anchor for the progress trigger, so a fast scroller still
     // cannot pull the notification into the settle-in stretch
     this._readingStartedAtMs = this.now();
@@ -864,7 +887,8 @@ class Orchestrator extends EventEmitter {
   _streamingBeat() { return this.beat === 'fit' || this.beat === 'reading'; }
 
   _checkStall() {
-    if (!this._streamingBeat() || this._lastFrameAt == null || this._eegDown) return;
+    if (!this._streamingBeat() || this._lastFrameAt == null) return;
+    if (this._eegDown) return this._reclassifyStall();
     if (this.now() - this._lastFrameAt < EEG_STALL_MS) return;
     // TWO very different silences. If the analyser is still processing windows
     // (the 1 Hz accounting keeps advancing), samples ARE arriving and the
@@ -889,6 +913,30 @@ class Orchestrator extends EventEmitter {
       this.log(`analysis rejecting windows in '${this.beat}' (transport alive; ` +
         `accepted ${r.windowsAccepted || 0}/${(r.windowsAccepted || 0) + (r.windowsDropped || 0)}, ` +
         `reasons ${JSON.stringify(r.dropReasons || {})}) - gap opened, no link loss shown`);
+    }
+  }
+
+  // The verdict stays LIVE while the gap is open. A rejection stretch whose
+  // analysis ticks stop has become a real transport loss (buds walked out of
+  // range mid-storm): upgrade, with the full story the guest and operator are
+  // owed. A "loss" whose ticks resume was never dead (or came back rejecting,
+  // e.g. post-reconnect settling): downgrade, retract the cover. The first
+  // version froze the verdict at gap-open; review walked a guest sitting 30
+  // minutes at a dead link that the room called 'live'.
+  _reclassifyStall() {
+    const analysisAlive = this._lastAnalysisTickMs
+      && (Date.now() - this._lastAnalysisTickMs) < 5000;
+    if (this._eegDownCause === 'rejection' && !analysisAlive) {
+      this._eegDownCause = 'loss';
+      this.signalIssue = true;
+      this.log(`the rejection stretch lost its transport too - now a real link loss in '${this.beat}'`);
+      this._broadcastState();
+      this._coachOps();
+    } else if (this._eegDownCause === 'loss' && analysisAlive) {
+      this._eegDownCause = 'rejection';
+      this.log('transport is back and processing (windows still rejected) - retracting the link-loss story');
+      this._broadcastState();
+      this._coachOps();
     }
   }
 
@@ -1183,7 +1231,8 @@ class Orchestrator extends EventEmitter {
           windowsAccepted: msg.windowsAccepted, windowsDropped: msg.windowsDropped,
           acceptedFraction: msg.acceptedFraction, dropReasons: msg.dropReasons || {},
           exponentMedian: msg.exponentMedian,
-          driftRatioP50: msg.driftRatioP50, driftRatioP95: msg.driftRatioP95,
+          driftEdgeP50: msg.driftEdgeP50, driftEdgeP95: msg.driftEdgeP95,
+          driftDeepP50: msg.driftDeepP50, driftDeepP95: msg.driftDeepP95,
         };
         break;
       case SIDECAR_OUT.BRAINWAVES:
@@ -1262,6 +1311,13 @@ class Orchestrator extends EventEmitter {
             // fabricated 'buds_reconnected' for a drop that never happened
             this.log('earbud link restored');
             this._record('buds_reconnected', this.now());
+            // a reading held at the safe point resumes on the link coming
+            // back, not only on the first frame (none flow at the picker)
+            if (this._pendingReadingStart && this.beat === 'picker') {
+              this._pendingReadingStart = false;
+              this.log('link restored, beginning the held reading');
+              this._beginReading();
+            }
           } else {
             this.log('earbud link up');
           }

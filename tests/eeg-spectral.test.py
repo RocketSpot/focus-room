@@ -248,8 +248,17 @@ ok(f"a settling electrode (sub-0.4 Hz wander at ~27x the signal) is ACCEPTED "
    f"({a_set.windows_accepted} windows) and delta stays flat ({d_set:+.2f} dB)",
    a_set.windows_accepted >= 20 and abs(d_set) <= 0.6, a_set.counters())
 ok("...and the analysis report carries the calibration percentiles",
-   a_set.counters().get("driftRatioP50") is not None
-   and a_set.counters().get("driftRatioP95") is not None, a_set.counters())
+   a_set.counters().get("driftEdgeP50") is not None
+   and a_set.counters().get("driftDeepP95") is not None, a_set.counters())
+
+# the frequency-blindness regression from adversarial review: a 1.8 Hz tone at
+# a plausible pulse-artifact amplitude read +13 dB delta through the ptp gate.
+# The spectral near-band gate must reject it wholesale.
+_tone = 60.0 * np.sin(2 * np.pi * 1.8 * _t)
+a_tn, got_tn = run(M.ear_eeg(7500, chi=1.3, background=30.0, alpha_units=8.0,
+                             beta_units=4.0, theta_units=4.0) + _tone)
+ok(f"a 1.8 Hz artifact strong enough to bend delta is dropped "
+   f"({a_tn.windows_accepted} accepted)", a_tn.windows_accepted <= 2, a_tn.counters())
 
 ch = M.ear_eeg(7500, chi=1.3, background=30.0, alpha_units=8.0, beta_units=4.0, theta_units=4.0)
 ch[2] = np.full(7500, 5.0)
