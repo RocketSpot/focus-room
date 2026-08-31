@@ -45,6 +45,7 @@ const intake = (fields) => orch.onClientMessage({ type: 'guest/intake', ...field
 
   process.env.FOCUSROOM_IDLE_RESET_MS = '120'; // read at arm time — applies from the next (re)arm
 
+  orch._budsConnected = true;  // buds connected: the phase arms immediately
   guestEvent('earbud_seated');
   check('earbud_seated advances to fit', orch.beat === 'fit');
   check('entering fit sends CONNECT + START_FIT (the impedance phase opens the signal check)',
@@ -80,6 +81,7 @@ const intake = (fields) => orch.onClientMessage({ type: 'guest/intake', ...field
   orch.onSidecarReady();
   check('onSidecarReady at welcome sends nothing', sent.length === 0, sentTypes().join(','));
 
+  orch._budsConnected = true;  // buds connected: the phase arms immediately
   guestEvent('earbud_seated'); // welcome → fit
   sent.length = 0;
   orch.onSidecarReady();
