@@ -143,6 +143,10 @@ class Orchestrator extends EventEmitter {
   reset() {
     this.beat = 'idle';
     this._clearSession();
+    // LINK state lives OUTSIDE the session lifecycle: _clearSession runs per
+    // guest, and wiping the connection verdict there blinded the next guest's
+    // seat decision until the first heartbeat arrived
+    this._budsConnected = null;  // last eeg/connection verdict (null = not reported yet)
     this._clearWatchdog(); // idle has no inactivity budget
   }
 
@@ -204,7 +208,9 @@ class Orchestrator extends EventEmitter {
     // the next guest's first hello record a spurious multi-hour link_restored
     // event into the fresh session's log.
     this._linkLostAt = null;
-    this._budsConnected = null;  // last eeg/connection verdict (null = not reported yet)
+    // NOTE deliberately NOT cleared: _budsConnected is LINK state, not session
+    // state - nulling it here blinded the next guest's seat decision until
+    // the first connection heartbeat arrived
     this._fitImpPhase = false;   // signal check: impedance phase before the stream
     this._fitImpWaiting = false; // ...deferred until the buds actually connect
     this._fitImpCap = null;

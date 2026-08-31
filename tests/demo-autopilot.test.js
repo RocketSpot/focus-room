@@ -39,6 +39,7 @@ const orch = new Orchestrator({ supervisor, server, log: () => {} });
 // ---- guards ----
 orch.startDemo();
 ok('startDemo is a no-op when demo not enabled', !orch._demoActive && beats.length === 0);
+orch._budsConnected = true;  // sim buds read connected near-instantly
 orch.enableDemo();
 orch.startDemo();
 ok('startDemo arms once enabled + idle', orch._demoActive === true);
