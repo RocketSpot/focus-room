@@ -232,6 +232,25 @@ for drift, expect_all_dropped in ((30.0, False), (400.0, True)):
            f"windows accepted, delta {d:+.2f} dB",
            a2.windows_accepted > 10 and abs(d) <= 0.6, a2.counters())
 
+# THE 2026-08-29 REGRESSION. A real settling electrode: enormous wander, all of
+# it below 0.4 Hz, where the 0.5 Hz analysis high-pass deletes it before any
+# number is computed. The raw-domain drift gate rejected ~90% of that session
+# (every rejection tagged drift), starved the room's line, and read as constant
+# "disconnecting" while both links ran at ~240 Hz. The gate now judges the slow
+# component of the FILTERED signal, so this must sail through, clean.
+_t = np.arange(7500) / 250.0
+_wander = (np.sin(2 * np.pi * 0.07 * _t) + 0.6 * np.sin(2 * np.pi * 0.19 * _t + 1.0)
+           + 0.3 * np.sin(2 * np.pi * 0.31 * _t + 2.2)) * 800.0
+a_set, got_set = run(M.ear_eeg(7500, chi=1.3, background=30.0, alpha_units=8.0,
+                               beta_units=4.0, theta_units=4.0) + _wander)
+d_set = float(np.median([g["osc"]["delta"] for g in got_set[4:]])) if len(got_set) > 4 else 99.0
+ok(f"a settling electrode (sub-0.4 Hz wander at ~27x the signal) is ACCEPTED "
+   f"({a_set.windows_accepted} windows) and delta stays flat ({d_set:+.2f} dB)",
+   a_set.windows_accepted >= 20 and abs(d_set) <= 0.6, a_set.counters())
+ok("...and the analysis report carries the calibration percentiles",
+   a_set.counters().get("driftRatioP50") is not None
+   and a_set.counters().get("driftRatioP95") is not None, a_set.counters())
+
 ch = M.ear_eeg(7500, chi=1.3, background=30.0, alpha_units=8.0, beta_units=4.0, theta_units=4.0)
 ch[2] = np.full(7500, 5.0)
 ch[3] = np.full(7500, 6.0)

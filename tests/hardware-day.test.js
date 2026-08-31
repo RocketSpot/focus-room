@@ -27,6 +27,43 @@ const mk = () => {
   return { o, recs };
 };
 
+// ---- 2026-08-29: rejection is not loss ----------------------------------------
+// Both buds ran at ~240 Hz all session while the analyser rejected ~90% of
+// windows (drift); the room called that a lost link, raised the iPad cover,
+// and set sticky signalIssue. Silence with the analyser still processing is
+// REJECTION: an honest gap, an operator log line, and nothing else.
+{
+  const { o, recs } = mk();
+  o.beat = 'reading';
+  o._eegSimulation = false;
+  o._lastFrameAt = o.now() - 60000;                       // frames long quiet...
+  o.onSidecar({ type: 'eeg/analysis-v1', windowsAccepted: 1, windowsDropped: 9,
+    acceptedFraction: 0.1, dropReasons: { drift: 9 } });   // ...but windows processing
+  o.onSidecar({ type: 'eeg/analysis-v1', windowsAccepted: 1, windowsDropped: 19,
+    acceptedFraction: 0.05, dropReasons: { drift: 19 } });
+  o._checkStall();
+  check('rejection: the gap opens', o._eegDown === true && o._eegDownCause === 'rejection');
+  check('rejection: NO sticky signalIssue', o.signalIssue !== true, String(o.signalIssue));
+  const link = o._linkState();
+  check('rejection: the room never claims the link is in trouble',
+    link.lost === false && link.eeg !== 'holding', JSON.stringify(link));
+  o._onStreamAlive();
+  check('rejection: an accepted frame closes it cleanly',
+    o._eegDown === false && o._eegDownCause === null);
+}
+{
+  const { o } = mk();
+  o.beat = 'reading';
+  o._eegSimulation = false;
+  o._lastFrameAt = o.now() - 60000;                        // frames quiet AND
+  // no analysis ticks at all: the transport is genuinely dead
+  o._checkStall();
+  check('real loss: still the full story', o._eegDownCause === 'loss' && o.signalIssue === true);
+  const link = o._linkState();
+  check('real loss: holding + lost, exactly as before',
+    link.eeg === 'holding' && link.lost === true, JSON.stringify(link));
+}
+
 // ---- H4b: a failed FIRST connect attempt is not a drop ------------------------
 // The auto-connect watcher tries on its own before anything was ever up. A
 // null -> false transition must not write the drop story (sticky signalIssue,

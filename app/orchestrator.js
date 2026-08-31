@@ -201,6 +201,9 @@ class Orchestrator extends EventEmitter {
     this._budsConnected = null;  // last eeg/connection verdict (null = not reported yet)
     this._fitImpPhase = false;   // signal check: impedance phase before the stream
     this._fitImpCap = null;
+    this._eegDownCause = null;   // 'loss' | 'rejection' while _eegDown is true
+    this._lastAnalysisTickMs = null;
+    this._analysisPrevTotal = 0;
     this._streamGaps = [];       // [{from, to}] stream-clock seconds with no signal
     this._gapOpenT = null;       // stream time a still-open gap started at
     // The stream clock must never run backwards. A sidecar restart re-anchors
@@ -238,11 +241,11 @@ class Orchestrator extends EventEmitter {
     // first frame of the new stream starts the clock rather than an old frame
     // instantly reading as a dropout.
     if (this._streamingBeat()) {
-      if (!this._streamingBeatWas) { this._lastFrameAt = null; this._eegDown = false; this._gapOpenT = null; }
+      if (!this._streamingBeatWas) { this._lastFrameAt = null; this._eegDown = false; this._eegDownCause = null; this._gapOpenT = null; }
       this._startStallWatch();
     } else {
       this._stopStallWatch();
-      if (this._eegDown) { this._eegDown = false; this._gapOpenT = null; }
+      if (this._eegDown) { this._eegDown = false; this._eegDownCause = null; this._gapOpenT = null; }
     }
     this._streamingBeatWas = this._streamingBeat();
     this.log(`beat: ${prev} → ${beat}`);
@@ -332,14 +335,17 @@ class Orchestrator extends EventEmitter {
   // What the surfaces need to render a calm, honest connection state. Never an
   // error code: 'holding' means the room is waiting, not that anything failed.
   _linkState() {
+    const realLoss = this._eegDown && this._eegDownCause !== 'rejection';
     return {
-      eeg: this._eegDown ? 'holding' : (this._lastFrameAt ? 'live' : 'waiting'),
+      // during a rejection stretch the transport IS live: the line shows its
+      // own honest gap, but the room never claims the link is in trouble
+      eeg: realLoss ? 'holding' : (this._lastFrameAt ? 'live' : 'waiting'),
       buds: this._budsConnected,
       guest: this._guestReachable(),
       // TRUE only on a real, total loss mid-session: the one condition the
       // room is allowed to name to a guest, with a full cover asking for the
       // operator. Signal QUALITY is still never mentioned anywhere.
-      lost: !!(this._eegDown && this._eegSimulation === false
+      lost: !!(realLoss && this._eegSimulation === false
         && ['fit', 'intake', 'picker', 'reading', 'strongest'].includes(this.beat)),
     };
   }
@@ -443,7 +449,7 @@ class Orchestrator extends EventEmitter {
       // the picker, the iPad shows its held-session cover, the operator gets
       // the alert, and the moment the stream returns the reading begins on
       // its own, because the guest already chose it. Only the start waits.
-      if (this._eegDown && this._eegSimulation === false) {
+      if (this._eegDown && this._eegDownCause !== 'rejection' && this._eegSimulation === false) {
         this._pendingReadingStart = true;
         this.log('reading HELD: earbuds are down, will begin when the stream returns');
         this._coachOps();
@@ -860,12 +866,30 @@ class Orchestrator extends EventEmitter {
   _checkStall() {
     if (!this._streamingBeat() || this._lastFrameAt == null || this._eegDown) return;
     if (this.now() - this._lastFrameAt < EEG_STALL_MS) return;
+    // TWO very different silences. If the analyser is still processing windows
+    // (the 1 Hz accounting keeps advancing), samples ARE arriving and the
+    // transport is alive - the analyser is REJECTING what it hears (movement,
+    // settling electrodes). Telling the guest the link was lost for that was
+    // the 2026-08-29 failure: both buds ran at ~240 Hz all session while the
+    // room showed "holding" and the iPad raised the lost-link cover. Rejection
+    // opens an honest gap in the data and an operator log line, nothing more:
+    // no link story, no reseat coaching, no sticky signalIssue.
+    const analysisAlive = this._lastAnalysisTickMs
+      && (Date.now() - this._lastAnalysisTickMs) < 5000;
     this._eegDown = true;
-    this.signalIssue = true;              // sticky: the reveal leans on clean stretches
-    this._gapOpenT = this._streamT();     // the data has a hole from here
-    this._broadcastState();
-    this._coachOps();
-    this.log(`EEG stream went quiet in '${this.beat}', holding the session and waiting for the link`);
+    this._eegDownCause = analysisAlive ? 'rejection' : 'loss';
+    this._gapOpenT = this._streamT();     // the data has a hole from here either way
+    if (this._eegDownCause === 'loss') {
+      this.signalIssue = true;            // sticky: the reveal leans on clean stretches
+      this._broadcastState();
+      this._coachOps();
+      this.log(`EEG stream went quiet in '${this.beat}', holding the session and waiting for the link`);
+    } else {
+      const r = (this._analysisCounters || {});
+      this.log(`analysis rejecting windows in '${this.beat}' (transport alive; ` +
+        `accepted ${r.windowsAccepted || 0}/${(r.windowsAccepted || 0) + (r.windowsDropped || 0)}, ` +
+        `reasons ${JSON.stringify(r.dropReasons || {})}) - gap opened, no link loss shown`);
+    }
   }
 
   // Any frame proves the link is alive again. Closing the gap here (rather than
@@ -895,10 +919,12 @@ class Orchestrator extends EventEmitter {
       // only record a gap the analysis should actually skip over
       if (gap.to - gap.from >= 1) this._streamGaps.push(gap);
       this._gapOpenT = null;
-      this.log(`EEG stream resumed, ${(gap.to - gap.from).toFixed(1)}s gap recorded`);
+      const why = this._eegDownCause === 'rejection' ? 'windows accepted again' : 'link back';
+      this.log(`EEG stream resumed (${why}), ${(gap.to - gap.from).toFixed(1)}s gap recorded`);
     } else {
       this.log('EEG stream resumed');
     }
+    this._eegDownCause = null;
     this._broadcastState();
     this._coachOps();
   }
@@ -1144,10 +1170,18 @@ class Orchestrator extends EventEmitter {
         // once a second for every session that ever ran, and until now dropped
         // on the floor with no consumer, which is why diagnosing the first
         // hardware day took code archaeology instead of reading a histogram.
+        {
+          const total = (msg.windowsAccepted || 0) + (msg.windowsDropped || 0);
+          // any GROWTH in processed windows proves samples are reaching the
+          // analyser: the transport is alive even if every window is rejected
+          if (total > (this._analysisPrevTotal || 0)) this._lastAnalysisTickMs = Date.now();
+          this._analysisPrevTotal = total;
+        }
         this._analysisCounters = {
           windowsAccepted: msg.windowsAccepted, windowsDropped: msg.windowsDropped,
           acceptedFraction: msg.acceptedFraction, dropReasons: msg.dropReasons || {},
           exponentMedian: msg.exponentMedian,
+          driftRatioP50: msg.driftRatioP50, driftRatioP95: msg.driftRatioP95,
         };
         break;
       case SIDECAR_OUT.BRAINWAVES:

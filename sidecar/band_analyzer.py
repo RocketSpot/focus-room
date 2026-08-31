@@ -27,6 +27,9 @@ from __future__ import annotations
 
 from collections import deque
 
+import os
+from collections import deque as _deque
+
 import numpy as np
 from scipy import signal as _sig
 
@@ -43,9 +46,24 @@ HOP_SEC = 1.0
 FLATLINE_REL = 0.20        # amplitude below this fraction of reference ⇒ dead contact
 BLOWUP_REL = 3.5           # measured-band amplitude above this multiple ⇒ clench
 STEP_REL = 10.0            # a single jump this many times the robust gradient ⇒ pop
-DRIFT_REL = 12.0           # slow-component travel this many times the REFERENCE amplitude
-DRIFT_SELF_REL = 20.0      # ...or this many times the window's OWN amplitude, which needs
-                           # no reference and so still fires on the very first window
+# DRIFT LIMITS, REBUILT AFTER THE 2026-08-29 HARDWARE SESSION. The old gate
+# measured slow travel on the RAW signal and rejected ~90% of a real session's
+# windows - every rejection tagged drift - which starved the room's line and
+# read as constant "disconnecting" while both links ran healthy at ~240 Hz.
+# The mistake: a dry ear electrode's wander is enormous but lives almost
+# entirely BELOW 0.4 Hz, and the 0.5 Hz analysis high-pass deletes it before
+# anything is measured. Probed directly (see tests/eeg-spectral.test.py):
+# sub-0.4 Hz wander at 100x the brain signal (raw ratio 409) leaves delta at
+# -0.12 dB. Judging the raw signal rejected windows for energy that never
+# reached the PSD. Drift in the 0.5-1.5 Hz residual is what actually leaks
+# into the 2-4 Hz band: measured, corruption begins near a post-filter ratio
+# of ~6-7 (delta +2.3 dB) and grows from there. So the gate now judges the
+# slow component OF THE FILTERED SIGNAL - the only drift that can bend a
+# number - with the threshold at the measured corruption boundary.
+# Env-tunable for the hardware team's formulas; per-window ratio percentiles
+# ride the 1 Hz analysis report so real sessions keep calibrating this.
+DRIFT_REL = float(os.environ.get("FOCUSROOM_DRIFT_REL", "5.0"))
+DRIFT_SELF_REL = float(os.environ.get("FOCUSROOM_DRIFT_SELF_REL", "8.5"))
 DRIFT_PROBE_HZ = 1.5       # the slow component drift is measured on, below the analysis band
 EDGE_GUARD_SEC = 0.5       # discarded each end of the window for the artifact tests only
 REF_WINDOWS = 60           # accepted windows contributing to the running references
@@ -82,6 +100,7 @@ class BandAnalyzer:
         # cached filter designs: the slow component drift is judged on, and the
         # measured band the amplitude and step criteria are judged on
         self._slow_sos = _sig.butter(2, DRIFT_PROBE_HZ, btype="low", fs=self.fs, output="sos")
+        self._drift_ratios = _deque(maxlen=600)   # calibration telemetry, ~10 min
         self._meas_sos = _sig.butter(4, [S.ANALYSIS_LO_HZ, S.ANALYSIS_HI_HZ],
                                      btype="band", fs=self.fs, output="sos")
         self._edge = int(round(EDGE_GUARD_SEC * self.fs))
@@ -116,6 +135,8 @@ class BandAnalyzer:
         self.windows_accepted = 0
         self.windows_dropped = 0
         self.drop_reasons = {}
+        if not keep_references:
+            self._drift_ratios.clear()   # calibration telemetry is per guest
 
     # ---------------- ingest ----------------
     def ingest(self, cols, labels=None):
@@ -167,11 +188,14 @@ class BandAnalyzer:
         windows that were being thrown away for a blow-up that existed only
         below the analysis band. Guests are meant to be able to move.
 
-        Drift keeps its own criterion, judged on the RAW signal before any
-        high-pass, because asking a filtered signal about the thing the filter
-        just removed is not a test. It uses the peak-to-peak travel of the slow
-        component rather than a linear slope, since real contact drift wanders
-        rather than ramping.
+        Drift is judged on the slow component OF THE ANALYSIS SIGNAL, after
+        the 0.5 Hz high-pass. The raw-domain version of this test was wrong in
+        exactly the way that matters on real hardware: it rejected windows for
+        sub-0.4 Hz electrode wander that the filter removes before anything is
+        measured (probed: 100x wander, delta -0.12 dB), while the drift that
+        DOES corrupt the 2-4 Hz band is the 0.5-1.5 Hz residual that survives
+        the filter - which is what this measures. Peak-to-peak travel rather
+        than a linear slope, since real contact drift wanders, not ramps.
         """
         if len(raw) < self.window_n // 2:
             return False, "short", None
@@ -182,10 +206,9 @@ class BandAnalyzer:
         if at_rail > CLIP_FRACTION_BAD:
             return False, "clipping", None
 
-        slow = _sig.sosfiltfilt(self._slow_sos, raw)
-        drift_range = float(np.ptp(slow[self._edge:-self._edge]))
-
         filt = S.analysis_filter(raw, self.fs)
+        slow = _sig.sosfiltfilt(self._slow_sos, filt)
+        drift_range = float(np.ptp(slow[self._edge:-self._edge]))
         # Statistics are taken from the INTERIOR of the window. Zero-phase
         # filtering rings at the edges in proportion to the low-frequency
         # content it removed, and that ringing was being detected as electrode
@@ -210,6 +233,7 @@ class BandAnalyzer:
         # were never seated properly sail through unchecked: measured, three of
         # the first thirty windows of a violently drifting recording were being
         # accepted purely because the detector had not warmed up yet.
+        self._drift_ratios.append(drift_range / (amp_ref or amp))
         if drift_range > DRIFT_SELF_REL * amp:
             return False, "drift", None
 
@@ -326,4 +350,8 @@ class BandAnalyzer:
             "acceptedFraction": (self.windows_accepted / total) if total else 0.0,
             "dropReasons": dict(self.drop_reasons),
             "exponentMedian": float(np.median(self._chi_hist)) if self._chi_hist else None,
+            # calibration telemetry: where this session's windows actually sit
+            # against the drift gate, so real heads keep tuning the defaults
+            "driftRatioP50": float(np.percentile(self._drift_ratios, 50)) if self._drift_ratios else None,
+            "driftRatioP95": float(np.percentile(self._drift_ratios, 95)) if self._drift_ratios else None,
         }
