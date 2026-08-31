@@ -1172,9 +1172,11 @@ class Orchestrator extends EventEmitter {
         // hardware day took code archaeology instead of reading a histogram.
         {
           const total = (msg.windowsAccepted || 0) + (msg.windowsDropped || 0);
-          // any GROWTH in processed windows proves samples are reaching the
-          // analyser: the transport is alive even if every window is rejected
-          if (total > (this._analysisPrevTotal || 0)) this._lastAnalysisTickMs = Date.now();
+          // any CHANGE in processed windows proves samples are reaching the
+          // analyser: the transport is alive even if every window is rejected.
+          // A DROP below the previous total is the analyser's session-boundary
+          // reset, which is itself evidence of a live sidecar processing anew.
+          if (total !== (this._analysisPrevTotal || 0)) this._lastAnalysisTickMs = Date.now();
           this._analysisPrevTotal = total;
         }
         this._analysisCounters = {
