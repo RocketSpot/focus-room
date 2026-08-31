@@ -107,6 +107,65 @@ states = [g.update([(1600.0, "high_z"), (3500.0, "open")], t) for t in (0.0, 0.5
 ok("any_required: one good channel carries the side (best trusted channel wins)",
    states[-1] == "good", states)
 
+# Exact shape of the 2026-08-31 physical fit failure. Every channel was
+# open/bad/no-contact, but several noisy values and raw windows fell under the
+# broad 2.3 MOhm worn threshold. Before the phase was part of the vote, left
+# became good after the first three rows and both ears eventually made
+# allGood=true. A channel's explicit bad QC verdict now outranks that number.
+fit_run = [
+    (0.0,
+     [(1412.7, "open", 1412.7, "bad"), (1060.8, "open", 1060.8, "bad")],
+     None),
+    (0.5,
+     [(1501.6, "open", 1709.0, "bad"), (1162.5, "open", 1399.7, "bad")],
+     None),
+    (1.0,
+     [(1310.9, "open", 866.0, "bad"), (1030.0, "open", 720.9, "bad")],
+     [(1077.8, "open", 1077.8, "bad"), (3648.9, "open", 3648.9, "bad")]),
+    (1.5,
+     [(1417.3, "open", 1665.6, "bad"), (1138.7, "open", 1392.3, "bad")],
+     [(1988.1, "open", 4112.1, "bad"), (2871.9, "open", 1059.1, "bad")]),
+    (2.0,
+     [(1221.3, "open", 764.0, "bad"), (990.3, "open", 644.1, "bad")],
+     [(2078.5, "open", 2289.3, "bad"), (2343.0, "open", 1108.8, "bad")]),
+    (2.5,
+     [(1424.8, "open", 1899.4, "bad"), (1170.3, "open", 1590.2, "bad")],
+     [(2768.4, "open", 4378.4, "bad"), (2308.9, "open", 2229.3, "bad")]),
+    (3.0,
+     [(1319.7, "open", 1074.7, "bad"), (1090.4, "open", 904.2, "bad")],
+     [(2391.1, "open", 1510.7, "bad"), (1903.6, "open", 957.9, "bad")]),
+    (3.5,
+     [(1480.5, "open", 1855.5, "bad"), (1237.7, "open", 1581.4, "bad")],
+     [(2552.3, "open", 2928.4, "bad"), (2020.0, "open", 2291.8, "bad")]),
+    (4.0,
+     [(1201.5, "open", 550.6, "bad"), (1014.4, "open", 493.2, "bad")],
+     [(2123.3, "open", 1122.4, "bad"), (1699.9, "open", 952.9, "bad")]),
+]
+left_gate, right_gate = WornGate(), WornGate()
+fit_trace = []
+for t, left_channels, right_channels in fit_run:
+    left_state = left_gate.update(left_channels, t)
+    right_state = right_gate.update(right_channels, t) if right_channels else right_gate.state
+    fit_trace.append((left_state, right_state))
+ok("SESSION REGRESSION: open/bad/no-contact channels never produce a worn ear",
+   all(left != "good" and right != "good" for left, right in fit_trace), fit_trace)
+ok("SESSION REGRESSION: two bad-QC ears can never produce allGood",
+   all(not (left == "good" and right == "good") for left, right in fit_trace), fit_trace)
+
+g = WornGate()
+phase_good_trace = [g.update([(420.0, "high_z", 420.0, "good")], t)
+                    for t in (0.0, 0.5, 1.0)]
+ok("a genuinely phase-good contact still reaches good on schedule",
+   phase_good_trace[-1] == "good", phase_good_trace)
+
+# Bad phase must not merely block a fresh enter. Once an ear was good, a stream
+# of low-looking but explicitly open/no-contact rows must stop refreshing the
+# trusted clock and demote after the normal short staleness grace.
+phase_lost_trace = [g.update([(420.0, "open", 420.0, "bad")], t)
+                    for t in (1.5, 2.5, 4.0, 5.1)]
+ok("bad QC cannot preserve a previously-good worn verdict indefinitely",
+   phase_lost_trace[-1] == "bad", phase_lost_trace)
+
 
 # =====================================================================
 print("\ngate: the unworn direction (impossible for a desk)")

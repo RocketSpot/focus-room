@@ -124,6 +124,29 @@ class SurfaceServer extends EventEmitter {
       // renderer error reports (sendBeacon from every surface): a JS error on
       // any page lands in the room's diagnostic trail instead of dying in a
       // console nobody is watching. Body capped; content is data, never code.
+      // What each screen actually DREW (see surface-report.js). Same shape as the
+      // error beacon: small, capped, and it can never block a surface.
+      if (pathname === '/surface-report' && req.method === 'POST') {
+        const limit = 32768;
+        const parts = [];
+        let received = 0;
+        let tooLarge = false;
+        req.on('data', (c) => {
+          const chunk = Buffer.isBuffer(c) ? c : Buffer.from(c);
+          const take = Math.max(0, Math.min(chunk.length, limit - received));
+          if (take) { parts.push(chunk.subarray(0, take)); received += take; }
+          if (take < chunk.length) tooLarge = true;
+        });
+        req.on('end', () => {
+          // Never parse or relay a truncated object: accepting its prefix would
+          // make the cap look enforced while still recording attacker-chosen data.
+          if (!tooLarge) {
+            try { this.emit('surface-report', JSON.parse(Buffer.concat(parts, received).toString('utf8'))); } catch (_) {}
+          }
+          res.writeHead(204); res.end();
+        });
+        return;
+      }
       if (pathname === '/client-error' && req.method === 'POST') {
         let body = '';
         req.on('data', (c) => { if (body.length < 8192) body += c; });
@@ -199,6 +222,24 @@ class SurfaceServer extends EventEmitter {
           headers['Content-Length'] = String(end - start + 1);
           res.writeHead(206, headers);
           return fs.createReadStream(filePath, { start, end }).pipe(res);
+        }
+        // EVERY surface reports what it drew, without any page having to opt in:
+        // the tag is injected server-side, so pages added later are covered too
+        // and no surface file carries instrumentation of its own. HTML is small,
+        // so it is read whole; the Content-Length must be the INJECTED length,
+        // which is why this runs before the header is written.
+        if (ext === '.html') {
+          return fs.readFile(filePath, 'utf8', (err, html) => {
+            if (err) { res.writeHead(500); return res.end('read error'); }
+            const tag = '<script src="/surface-report.js" defer></script>';
+            const out = html.includes('surface-report.js') ? html
+              : (html.includes('</head>') ? html.replace('</head>', tag + '\n</head>')
+                : tag + html);
+            const buf = Buffer.from(out, 'utf8');
+            headers['Content-Length'] = String(buf.length);
+            res.writeHead(200, headers);
+            return res.end(buf);
+          });
         }
         headers['Content-Length'] = String(stat.size);
         res.writeHead(200, headers);

@@ -9,8 +9,13 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
 })();
 </script>
 <meta charset="UTF-8">
-<!-- viewport-fit=cover + no user-scaling = a real app surface, not a zoomable web page -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<!-- viewport-fit=cover + no user-scaling = a real app surface, not a zoomable web page.
+     interactive-widget=resizes-content asks the browser to keep the LAYOUT viewport
+     and the visible area in agreement when the software keyboard opens, instead of
+     shrinking the visual viewport out from under a position:fixed app root. iPadOS
+     ignores it today, so the controller re-anchors as well; this costs nothing and
+     is the correct declaration the day Safari honours it. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <title>The Focus Room, iPad · Guest Flow</title>
 <!-- Add-to-Home-Screen → launches standalone (no Safari chrome), portrait, full-bleed.
      navigator.standalone then flips on body.device below to drop the preview bezel. -->
@@ -24,7 +29,13 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
 <link rel="stylesheet" href="tokens.css">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; background: #060605; overflow: hidden; font-family: var(--font-sans); }
+  /* dvh, not vh: 100vh on iPadOS is the TALL viewport, the one that assumes
+     Safari's bars are hidden, so with the bars showing the shell measured taller
+     than the display and the bottom of the room hung off the edge. The plain
+     100% stays as the pre-dvh fallback. overscroll-behavior stops the rubber-band
+     drag that peels the app off the top of the screen and shows the shell. */
+  html, body { height: 100%; height: 100dvh; background: #060605; overflow: hidden;
+               overscroll-behavior: none; font-family: var(--font-sans); }
   #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
            background: radial-gradient(120% 90% at 50% 40%, #121110 0%, #070706 70%, #040403 100%); }
   #room { transform-origin: center center; }
@@ -88,7 +99,7 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
   }
 
   /* review controls (outside the iPad), auto-hidden with ?kiosk=1 */
-  #controls { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center;
+  #controls { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center;
     gap: 9px; z-index: 80; background: rgba(20,20,20,0.85); border: 1px solid var(--hair-strong); backdrop-filter: blur(12px);
     border-radius: var(--r-pill); padding: 7px 9px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;
     text-transform: uppercase; color: var(--fg-muted); transition: opacity var(--dur-base); }
@@ -104,14 +115,27 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
      Strip the desktop-preview bezel and let the guest canvas fill the WHOLE display.
      The controller sizes .screen to the real viewport (in pre-scale units) and
      cover-scales #room, so this fills any iPad edge to edge with no letterbox. */
-  body.device #stage { background: #060605; }
+  /* ---- THE SHELL MUST NEVER PAINT BLACK ----
+     The guest canvas is a scaled box centred in #stage, so the instant iPadOS
+     hands back a viewport the canvas disagrees with, even by a rounding pixel,
+     whatever sits behind it shows. Painted #060605 that was the black band a
+     guest saw across the top with the keyboard up, across the bottom after it
+     left, and still across the bottom of the closing screen. The ground is now
+     the room's own field colour, kept in step with the live screen by
+     LightField / DarkField (ipad/ui.jsx), so an exposed sliver is invisible
+     instead of a bar. The geometry fixes below mean it should never be exposed
+     at all; this is the guarantee that a miss is not a visual failure. */
+  html.device, body.device, body.device #stage { background: var(--room-ground, #EFEAE3); }
+  /* A fixed body cannot be scrolled by iOS's reveal-the-focused-input scroll,
+     which is the other half of how the room got dragged off the top. */
+  body.device { position: fixed; inset: 0; width: 100%; touch-action: manipulation; }
   body.device .ipad { width: auto; height: auto; padding: 0; border: 0; border-radius: 0;
                       background: none; box-shadow: none; }
   body.device .camera { display: none; }
   body.device .screen { border-radius: 0; box-shadow: none; }
   body.device #controls { display: none !important; }
-  /* dvh tracks Safari's disappearing bars; svh/lvh fall back on older iPadOS */
-  body.device, body.device html { height: 100dvh; }
+  /* dvh tracks Safari's disappearing bars; the 100% before it is the fallback */
+  html.device, body.device { height: 100%; height: 100dvh; }
 
   /* ---------------- TURN IT UPRIGHT ----------------
      The room is composed for portrait. Rather than break the layout sideways, one
@@ -119,7 +143,11 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
      over and over, slowly. No alarm, no red, nothing that reads as an error. */
   #rotate { position: fixed; inset: 0; z-index: 200; display: none;
             align-items: center; justify-content: center; flex-direction: column; gap: 30px;
-            background: #060605; text-align: center; padding: 40px; }
+            background: #060605; text-align: center;
+            /* viewport-fit=cover puts this overlay under the status bar and the
+               home indicator, so its copy needs the insets the canvas does not */
+            padding: calc(40px + env(safe-area-inset-top)) calc(40px + env(safe-area-inset-right))
+                     calc(40px + env(safe-area-inset-bottom)) calc(40px + env(safe-area-inset-left)); }
   #rotate.on { display: flex; animation: introFade 420ms var(--ease-out) both; }
   #rotate .mark { width: 74px; height: 104px; border-radius: 13px;
                   border: 2px solid var(--c-signal); position: relative;

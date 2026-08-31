@@ -1398,13 +1398,19 @@ class ZoneSource:
         for side in ("left", "right"):
             ear_d = channels[side]
             if ear_d is None:
-                verdict[side] = None    # not measuring; cannot fail the other side
+                verdict[side] = None    # not measuring; allGood must remain false
                 continue
-            chans = [(c["kohm"], c["state"], c["kohmRaw"])
+            # The numerical worn threshold is necessary but not sufficient.
+            # Carry the estimator's independent QC phase into WornGate so a
+            # low-looking value explicitly classified bad/open/no-contact
+            # cannot promote the ear (the exact false pass seen 2026-08-31).
+            chans = [(c["kohm"], c["state"], c["kohmRaw"], c["phase"])
                      for c in (ear_d["ch1"], ear_d["ch2"]) if c is not None]
             verdict[side] = self._worn_gate[side].update(chans, now_mono)
-        measured = [v for v in verdict.values() if v is not None]
-        all_good = bool(measured) and all(v == "good" for v in measured)
+        # allGood means BOTH physical earbuds passed. The previous measured-
+        # sides reduction let one good ear make allGood true while the other
+        # ear had no snapshot yet.
+        all_good = all(verdict.get(side) == "good" for side in ("left", "right"))
         self.tx.send(OUT.IMPEDANCE, channels=channels, allGood=all_good,
                      worn=verdict)
         self._last_impedance = channels

@@ -196,10 +196,14 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
   .v.mut{color:var(--fg-2)} .v.mut .vdot{background:var(--fg-3)}
 
   /* ---------- controls ---------- */
-  .btns{display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+  .btns{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
   .btns + .btns{margin-top:12px;padding-top:13px;border-top:1px solid var(--hair)}
   .btns-note{font:500 9px/1 var(--font-mono);letter-spacing:var(--tr-mono-sm);text-transform:uppercase;
-    color:var(--fg-3);flex:none;margin-right:2px}
+    color:var(--fg-3);flex:1 0 100%;margin:1px 2px 2px}
+  .control{display:flex;flex:1 1 190px;min-width:170px;flex-direction:column;gap:7px;
+    padding:10px;border:1px solid var(--hair);border-radius:var(--r-md);background:rgba(32,31,29,.56)}
+  .control button{width:100%;flex:none;min-width:0}
+  .control-note{color:var(--fg-3);font-size:11.5px;line-height:1.4;padding:0 4px 2px}
   button{position:relative;font:500 13.5px/1 var(--font-sans);color:var(--fg);background:var(--bg-elevated-2);
     border:1px solid var(--hair-strong);border-radius:var(--r-pill);padding:13px 19px;min-height:46px;
     flex:1 1 auto;min-width:136px;cursor:pointer;-webkit-tap-highlight-color:transparent;
@@ -216,6 +220,8 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
   button.warnbtn:hover{background:var(--warn-soft);color:var(--warn);border-color:rgba(224,166,87,.6)}
   button.danger{color:var(--bad);border-color:var(--bad-line)}
   button.danger:hover{background:var(--bad-soft);color:var(--bad);border-color:rgba(228,89,58,.66)}
+  button:disabled,button:disabled:hover{cursor:not-allowed;transform:none;color:var(--fg-3);
+    border-color:var(--hair);background:rgba(38,36,33,.46);box-shadow:none;opacity:.62}
   button.sent{animation:sentRing 700ms var(--ease-out)}
 
   /* ---------- activity log ---------- */
@@ -313,8 +319,9 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
     .chip .v{font-size:16px}
     .banner{gap:13px}
     .banner .glyph{width:34px;height:34px;font-size:14px}
-    button{flex:1 1 calc(50% - 9px);min-width:0;padding:13px 14px}
-    .btns-note{flex:1 0 100%;margin-bottom:2px}
+    button{min-width:0;padding:13px 14px}
+    .control{flex:1 1 calc(50% - 10px);min-width:140px}
+    .btns-note{margin-bottom:2px}
     .nums{grid-template-columns:repeat(auto-fill,minmax(102px,1fr))}
     #coach{width:calc(100vw - 24px)}
   }
@@ -349,16 +356,24 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
 
   <h2 class="sec">Controls</h2>
   <div class="btns" role="group" aria-label="Room controls">
-    <button class="go" data-cmd="discover">Find earbuds</button>
-    <button class="go" data-cmd="connect">Connect</button>
-    <button data-cmd="disconnect">Disconnect</button>
-    <button data-cmd="start_session">Start session</button>
-    <button data-cmd="stop_session">Stop session</button>
+    <span class="btns-note">Earbud connection</span>
+    <div class="control"><button class="go" data-cmd="discover">Scan for earbuds</button>
+      <span class="control-note" data-copy="Looks nearby; it does not start a guest session.">Looks nearby; it does not start a guest session.</span></div>
+    <div class="control"><button class="go" data-cmd="connect">Connect earbuds</button>
+      <span class="control-note" data-copy="Links the available Zone earbuds to this room.">Links the available Zone earbuds to this room.</span></div>
+    <div class="control"><button data-cmd="disconnect">Disconnect earbuds</button>
+      <span class="control-note" data-copy="Ends the earbud link; available only while the room is idle.">Ends the earbud link; available only while the room is idle.</span></div>
   </div>
-  <div class="btns" role="group" aria-label="Manual triggers">
-    <span class="btns-note">Manual triggers</span>
-    <button class="warnbtn" data-cmd="test_signal">Inject test signal</button>
-    <button class="warnbtn danger" data-cmd="mark" data-kind="interruption">Fire the interruption</button>
+  <div class="btns" role="group" aria-label="Engineering checks">
+    <span class="btns-note">Engineering checks</span>
+    <div class="control"><button data-cmd="start_session">Start test stream</button>
+      <span class="control-note" data-copy="Opens a manual EEG stream only while no guest is in the room.">Opens a manual EEG stream only while no guest is in the room.</span></div>
+    <div class="control"><button data-cmd="stop_session">Stop test stream</button>
+      <span class="control-note" data-copy="Closes the manual stream opened from this console.">Closes the manual stream opened from this console.</span></div>
+    <div class="control"><button class="warnbtn" data-cmd="test_signal">Inject test waveform</button>
+      <span class="control-note" data-copy="Synthetic diagnostic input; impossible during a guest session.">Synthetic diagnostic input; impossible during a guest session.</span></div>
+    <div class="control"><button class="warnbtn danger" data-cmd="mark" data-kind="interruption">Fire guest notification</button>
+      <span class="control-note" data-copy="Shows the one notification only while the guest is reading.">Shows the one notification only while the guest is reading.</span></div>
   </div>
 
   <h2 class="sec">What's happening</h2>
@@ -380,8 +395,37 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
   // ---- the room's live state, assembled from the feed ----
   var S = { mode:null, sidecar:{}, buds:{left:null,right:null}, battery:{}, impedance:null,
             stats:null, signalQuality:null, beat:null, link:null, discovered:null,
-            lastError:null, lastFrameAt:0 };
+            lastError:null, lastFrameAt:0, lastAnalysisAt:0, lastTransportAt:0,
+            transportAlive:false, everStreamed:false, budsEverUp:false,
+            manualStreaming:false };
   var live = { bands:{}, metrics:{}, frame:{} };   // for the "live numbers" panel
+  var STREAMING_BEAT = { fit:true, reading:true };
+  var TRANSPORT_FRESH_MS = 5500;
+
+  // Liveness belongs to one stream stretch. The fit check and the guest reading
+  // are separate streams, so a frame from fit may never make reading look live.
+  function setBeat(next){
+    if(!next || next===S.beat) return;
+    if(STREAMING_BEAT[next]){
+      S.lastFrameAt=0; S.lastAnalysisAt=0; S.lastTransportAt=0;
+      S.transportAlive=false; S.everStreamed=false;
+    }
+    if(next==='idle') S.manualStreaming=false;
+    S.beat=next;
+  }
+  function transportTick(streamEvidence){
+    S.lastTransportAt=Date.now();
+    if(streamEvidence) S.everStreamed=true;
+  }
+  function rememberBuds(left,right){
+    if(left!=null) S.buds.left=!!left;
+    if(right!=null) S.buds.right=!!right;
+    if(S.buds.left||S.buds.right){ S.budsEverUp=true; S.lastError=null; }
+    // A deliberate/engine-level disconnect while the room is idle establishes
+    // a new connection epoch. The next guest is waiting for a first link; they
+    // did not inherit a "drop" from yesterday's or a diagnostic connection.
+    else if(S.beat==='idle'&&S.buds.left===false&&S.buds.right===false) S.budsEverUp=false;
+  }
 
   // ---- tiny DOM helpers ----------------------------------------------------
   // The console repaints twice a second. Anything that rewrites unchanged DOM
@@ -411,11 +455,20 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
   // ---- ingest one telemetry event ----
   function onSidecarMsg(m){
     switch(m.type){
-      case 'eeg/frame': S.lastFrameAt=Date.now(); S.signalQuality=m.signalQuality; live.frame=m; break;
-      case 'eeg/brainwaves': live.bands=m; break;
-      case 'eeg/metrics': live.metrics=m; break;
+      case 'eeg/frame': S.lastFrameAt=Date.now(); transportTick(true); S.signalQuality=m.signalQuality; live.frame=m; break;
+      case 'eeg/brainwaves': transportTick(true); live.bands=m; break;
+      case 'eeg/metrics': transportTick(true); live.metrics=m; break;
       case 'eeg/connection':
-        if(m.leftConnected!==undefined){ S.buds={left:!!m.leftConnected,right:!!m.rightConnected}; }
+        if(m.leftConnected!==undefined){
+          rememberBuds(m.leftConnected,m.rightConnected);
+          // A per-bud up heartbeat is transport evidence. A both-down report is
+          // explicit loss evidence, not a reason to call transport alive.
+          if(m.leftConnected||m.rightConnected) transportTick(false);
+        } else if(m.status==='left_connected') { rememberBuds(true,null); transportTick(false); }
+        else if(m.status==='right_connected') { rememberBuds(null,true); transportTick(false); }
+        else if(m.status==='left_disconnected') rememberBuds(false,null);
+        else if(m.status==='right_disconnected') rememberBuds(null,false);
+        else if(m.status==='disconnected') rememberBuds(false,false);
         // battery rides the connection heartbeat (batteryL/R), the streaming
         // path never sends fit/battery, so this is where the chips learn it
         if(m.batteryL!=null||m.batteryR!=null) S.battery={leftPct:m.batteryL,rightPct:m.batteryR,ok:true};
@@ -426,14 +479,17 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
         // the analyser's accounting rides the INGEST clock: its arrival proves
         // samples are reaching the analyser even when every window is rejected
         S.lastAnalysisAt = Date.now();
+        transportTick(true);
         break;
       case 'eeg/stats':
         S.stats=m;
+        var d1=m.dev1||{},d2=m.dev2||{};
+        if(d1.connected||d2.connected){ rememberBuds(d1.connected,d2.connected); transportTick(false); }
         // the per-bud stream carries battery too, the streaming-fit path never
         // sends fit/battery, so the chips sat on ", " through a whole session
         if(m.batteryL!=null||m.batteryR!=null) S.battery={leftPct:m.batteryL,rightPct:m.batteryR,ok:true};
         break;
-      case 'discovered': S.discovered=m.devices||[]; break;
+      case 'discovered': S.discovered=m.devices||[]; if(S.discovered.length) S.lastError=null; break;
       case 'error': S.lastError={code:m.code,msg:m.msg,at:Date.now()}; break;
     }
     var h = D.humanize('sidecar:message', m); if(h) pushLog(h.level,h.text);
@@ -466,6 +522,8 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
   function render(){
     S.lastFrameAgo = S.lastFrameAt ? (Date.now()-S.lastFrameAt) : null;
     S.analysisAlive = S.lastAnalysisAt ? (Date.now()-S.lastAnalysisAt) < 5000 : false;
+    S.transportAlive = S.lastTransportAt ? (Date.now()-S.lastTransportAt) < TRANSPORT_FRESH_MS : false;
+    updateControls();
 
     // HONESTY: never show a green "healthy" tick with no live data behind it.
     // If the socket is down, or the room hasn't sent anything yet, say exactly
@@ -509,8 +567,10 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
   function paintChips(){
     var eng = S.sidecar.running===false?['Stopped','bad'] : S.sidecar.ready?['Ready','ok'] : S.sidecar.running?['Starting','warn']:['\u2013','mut'];
     var buds = (function(){ var l=S.buds.left,rr=S.buds.right;
-      if(l==null&&rr==null) return ['Unknown','mut'];
-      if(l&&rr) return ['Both','ok']; if(!l&&!rr) return ['None','bad']; return [(l?'Left':'Right')+' only','warn']; })();
+      if(l==null&&rr==null) return S.link&&S.link.buds===true?['Linked','ok']:['Unknown','mut'];
+      if(l&&rr) return ['Both','ok'];
+      if(!l&&!rr) return S.budsEverUp?['None',S.beat==='idle'?'mut':'bad']:['Not linked yet','warn'];
+      return [(l?'Left':'Right')+' only','warn']; })();
     var bat = (function(){ var a=S.battery.leftPct,c=S.battery.rightPct; if(a==null&&c==null) return ['\u2013','mut'];
       var lo=Math.min(a==null?100:a,c==null?100:c); return [(a==null? '–' :a+'%')+' / '+(c==null? '–' :c+'%'), lo<20?'warn':'ok']; })();
     var contact = S.impedance? (S.impedance.allGood?['Clean','ok']:['Not yet','warn']) : ['\u2013','mut'];
@@ -578,7 +638,8 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
       // the exact words to use. Carries no raw EEG, just a side, a reason, a line.
       else if(m.type==='ops/coach'){ paintCoach(m); }
       else if(m.type==='session/state'){
-        if(m.beat)S.beat=m.beat; S.link=m.link||S.link;
+        if(m.beat)setBeat(m.beat); S.link=m.link||S.link;
+        if(S.link&&S.link.buds===true) S.budsEverUp=true;
         // the streaming signal check has no impedance messages, its clean-read
         // verdict rides canonical state, and the Contact chip should say so
         // (never overrides a real impedance read from the hardware fit path)
@@ -620,15 +681,70 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
   function tickBadges(){ var mb=$('modeBadge'); if(S.mode==='sim'){mb.textContent='Simulation';mb.className='badge sim';}
     else if(S.mode==='real'){mb.textContent='Real EEG';mb.className='badge real';} else {mb.textContent='–';mb.className='badge';} }
 
+  // Every manual control names both its valid window and why it is unavailable.
+  // The server enforces the high-risk test-signal/interruption guards too; this
+  // client-side gate stops an operator from issuing a confusing no-op first.
+  function controlRule(cmd){
+    if(!conn) return {on:false,why:'The operator console is reconnecting to the room.'};
+    if(!seenData) return {on:false,why:'Waiting for the room state.'};
+    var ready=!!(S.sidecar&&S.sidecar.ready&&S.sidecar.running!==false);
+    if(!ready) return {on:false,why:'Wait for the signal engine to become ready.'};
+    var idle=S.beat==='idle';
+    var early=S.beat==='welcome'||S.beat==='fit';
+    var lost=!!(S.link&&S.link.lost);
+    var left=!!S.buds.left,right=!!S.buds.right;
+    var anyBud=left||right||!!(S.link&&S.link.buds===true);
+    var both=left&&right;
+    if(cmd==='discover') return (idle||early)
+      ? {on:true} : {on:false,why:'Scanning is locked while a guest measurement is in progress.'};
+    if(cmd==='connect') {
+      if(both&&!lost) return {on:false,why:'Both earbuds are already linked.'};
+      return (idle||early||lost) ? {on:true}
+        : {on:false,why:'The room has not reported a link loss; let the live session continue.'};
+    }
+    if(cmd==='disconnect') return idle&&anyBud
+      ? {on:true} : {on:false,why:idle?'No earbud link is active.':'Disconnect is locked while a guest is in the room.'};
+    if(cmd==='start_session') {
+      if(!idle) return {on:false,why:'A guest session controls its own EEG stream.'};
+      if(!anyBud) return {on:false,why:'Connect the earbuds before opening a test stream.'};
+      return S.manualStreaming ? {on:false,why:'The manual test stream is already open.'}:{on:true};
+    }
+    if(cmd==='stop_session') return idle&&S.manualStreaming
+      ? {on:true}:{on:false,why:idle?'No manual test stream is open.':'A guest session controls its own EEG stream.'};
+    if(cmd==='test_signal') {
+      if(!idle) return {on:false,why:'Synthetic input is locked out during every guest session.'};
+      return anyBud ? {on:true}:{on:false,why:'Connect the earbuds before injecting the test waveform.'};
+    }
+    if(cmd==='mark') return S.beat==='reading'&&S.everStreamed&&!lost
+      ? {on:true}:{on:false,why:'The guest notification is available only during a live reading.'};
+    return {on:false,why:'This action is not available.'};
+  }
+  function updateControls(){
+    document.querySelectorAll('button[data-cmd]').forEach(function(btn){
+      var rule=controlRule(btn.dataset.cmd);
+      btn.disabled=!rule.on;
+      btn.setAttribute('aria-disabled',rule.on?'false':'true');
+      var note=btn.parentNode&&btn.parentNode.querySelector('.control-note');
+      var normal=note&&note.getAttribute('data-copy');
+      if(note) note.textContent=rule.on?(normal||''):rule.why;
+      btn.title=rule.on?(normal||btn.textContent):rule.why;
+    });
+  }
+
   // controls → ops command over the same socket
   document.querySelectorAll('button[data-cmd]').forEach(function(btn){
     btn.addEventListener('click',function(){
+      var rule=controlRule(btn.dataset.cmd);
+      if(!rule.on){ pushLog('info',rule.why); updateControls(); return; }
       var payload = btn.dataset.kind? {kind:btn.dataset.kind}:{};
       bus.send({type:'ops/cmd', cmd:btn.dataset.cmd, payload:payload, t:Date.now()});
+      if(btn.dataset.cmd==='start_session') S.manualStreaming=true;
+      if(btn.dataset.cmd==='stop_session'||btn.dataset.cmd==='disconnect') S.manualStreaming=false;
       pushLog('info','You: '+btn.textContent);
       // a single soft gold ring: the command left the console
       restart(btn,'sent');
       setTimeout(function(){ btn.classList.remove('sent'); }, 720);
+      updateControls();
     });
   });
 

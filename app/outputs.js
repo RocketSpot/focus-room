@@ -40,6 +40,9 @@ const HERO_CAPTION = 'Here is how your focus moved during one reading today, mea
 function buildData(reveal, answers, dateStr) {
   const reads = (reveal && reveal.reads) || [];
   const arch = (reveal && reveal.archetype) || { label: 'deep', name: 'Deep Diver' };
+  const measured = !!(reveal && !reveal.lost
+    && reveal.eegDerivedClaimsAllowed !== false && arch.measured !== false
+    && Array.isArray(reveal.samplesForReveal) && reveal.samplesForReveal.length >= 8);
   const door = DOORS[(answers && answers.closeDoor)] || DOORS.investor;
   const region = reveal && reveal.region ? reveal.region : 'your reading';
   const r = (i, fallback) => (reads[i] ? (reads[i].ledger ? reads[i].ledger.did : reads[i].sentence) : fallback);
@@ -50,6 +53,7 @@ function buildData(reveal, answers, dateStr) {
   const demo = !!(reveal && reveal.dataQualityStatus === 'invalid-for-eeg-interpretation');
   if (demo) {
     return {
+      measured: false,
       arch: arch.label, name: arch.name, date: dateStr,
       samples: [], troughT: null,
       caption: [
@@ -106,13 +110,17 @@ function buildData(reveal, answers, dateStr) {
       ];
 
   const data = {
-    arch: arch.label,
-    name: arch.name,
+    measured,
+    arch: measured ? arch.label : 'deep',
+    name: measured ? arch.name : 'Not measured this session',
     date: dateStr,
-    samples: (reveal && reveal.samplesForReveal) || [],
+    // An empty/unusable session must never reach a render page as an empty
+    // "Deep Diver": all three pages otherwise fall back to their standalone
+    // synthetic preview, including a made-up interruption marker.
+    samples: measured ? ((reveal && reveal.samplesForReveal) || []) : [],
     // null (no orange marker on the card/profile/email line) when the
     // notification never fired, interruptT is null exactly then.
-    troughT: reveal && reveal.interruptT != null && reads[2] ? reads[2].anchorT : null,
+    troughT: measured && reveal && reveal.interruptT != null && reads[2] ? reads[2].anchorT : null,
     // card: 3 short lines
     caption: caption.map((line, i) => honest(line, `card.cap${i + 1}`)),
     // profile: one descriptive line, no scores
@@ -120,7 +128,8 @@ function buildData(reveal, answers, dateStr) {
       ? 'A light-signal session, read honestly and never estimated.'
       : `${cap(reads[0] ? reads[0].v : 'a calm settle')}, then ${reads[1] ? reads[1].v : 'even focus'}.`, 'profile.desc'),
     // email: the four reads, plain language
-    heroCaption: honest(HERO_CAPTION, 'email.caption'),
+    heroCaption: honest(measured ? HERO_CAPTION
+      : 'The room did not record enough usable signal to draw or name a focus profile. Nothing here is estimated or filled in.', 'email.caption'),
     read_1: honest(reads[0] ? reads[0].sentence : 'Your read started cleanly and held.', 'email.read1'),
     read_2: honest(r(1, 'Your focus ran steady through the clean stretch.'), 'email.read2'),
     read_3: honest(r(2, 'One interruption hit, and your line responded.'), 'email.read3'),
@@ -322,13 +331,39 @@ function composeEmail(templateHtml, data, withLine = true) {
   return templateHtml.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in slots ? String(slots[k]) : ''));
 }
 
-async function sendEmail(data, toEmail, provider) {
+// The shareable profile and print-ready card are already rendered by the time a
+// guest reaches the email screen. Attach those exact files to the report instead
+// of silently leaving them on the room computer. Paths come only from our own
+// output job, never from a guest payload.
+function collectReportAttachments(artifacts) {
+  const out = [];
+  const warnings = [];
+  const add = (key, name, contentType) => {
+    const file = artifacts && artifacts[key];
+    if (!file) {
+      if (artifacts && artifacts[`${key}Expected`] !== false) warnings.push(`${name} unavailable`);
+      return;
+    }
+    try {
+      out.push({ name, content: fs.readFileSync(file).toString('base64'), contentType });
+    } catch (e) {
+      warnings.push(`${name} unavailable`);
+    }
+  };
+  add('cardPdf', 'focus-room-card.pdf', 'application/pdf');
+  add('profilePng', 'focus-profile.png', 'image/png');
+  return { attachments: out, warnings };
+}
+
+async function sendEmail(data, toEmail, provider, options = {}) {
   const templateHtml = fs.readFileSync(path.join(config.webRoot, 'email.html'), 'utf8');
   // the line image is a garnish, not the meal: with no renderer on this host
   // (web mode) the report still sends, just without the picture
   let linePng = null;
-  try { linePng = await renderEmailLinePng(data); }
-  catch (e) { console.log(`[outputs] email line image skipped: ${e.message}`); }
+  if (data.measured !== false && options.renderLine !== false) {
+    try { linePng = await renderEmailLinePng(data); }
+    catch (e) { console.log(`[outputs] email line image skipped: ${e.message}`); }
+  }
   const html = composeEmail(templateHtml, data, !!linePng);
   if (!provider) provider = makeEmailProvider({ outDir: OUT_DIR });
   // The Zone wordmark rides along as an inline (cid) attachment. Gmail and Outlook
@@ -345,13 +380,22 @@ async function sendEmail(data, toEmail, provider) {
   } catch (e) {
     console.log(`[outputs] logo skipped: ${e.message}`);
   }
-  const result = await provider.send({
-    to: toEmail,
-    subject: `Your Focus Room read · ${data.name}`,
-    htmlBody: html,
-    attachments,
-  });
-  return result;
+  const reportFiles = collectReportAttachments(options.artifacts);
+  attachments.push(...reportFiles.attachments);
+  const attachmentNames = attachments.map((a) => a.name);
+  try {
+    const result = await provider.send({
+      to: toEmail,
+      subject: `Your Focus Room read · ${data.name}`,
+      htmlBody: html,
+      attachments,
+    });
+    return { ...result, attachmentNames, attachmentWarnings: reportFiles.warnings };
+  } catch (e) {
+    e.attachmentNames = attachmentNames;
+    e.attachmentWarnings = reportFiles.warnings;
+    throw e;
+  }
 }
 
 // ---- the two entry points the orchestrator calls ----
@@ -363,12 +407,24 @@ async function processResults(reveal, answers) {
   try {
     const data = buildData(reveal, answers, dateStr());
     out.data = data;
-    const c = await renderCard(data); out.cardPdf = c.pdfPath; out.cardPrinted = c.printed;
+    if (data.measured === false) {
+      // card.html's no-data branch is a design preview with a synthetic line,
+      // marker, and archetype. Do not print that fiction for an invalid run.
+      out.cardSkipped = 'not-measured';
+    } else {
+      const c = await renderCard(data); out.cardPdf = c.pdfPath; out.cardPrinted = c.printed;
+    }
   } catch (e) { console.log(`[outputs] card failed: ${e.message}`); }
   try {
     const data = buildData(reveal, answers, dateStr());
     if (!out.data) out.data = data;
-    const p = await renderProfile(data); out.profilePng = p.pngPath; out.profileReady = true;
+    if (data.measured === false) {
+      // This also prevents "Not measured this session" (132px) from clipping
+      // out of the profile SVG while its empty line becomes a fake Deep curve.
+      out.profileSkipped = 'not-measured';
+    } else {
+      const p = await renderProfile(data); out.profilePng = p.pngPath; out.profileReady = true;
+    }
   } catch (e) { console.log(`[outputs] profile failed: ${e.message}`); }
   return out;
 }
@@ -376,17 +432,59 @@ async function processResults(reveal, answers) {
 // anchored: a clearly invalid address never reaches the provider
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-async function sendReport(reveal, answers, toEmail) {
+// A guest who typed their address was promised a report. Every way that promise
+// can break now comes back as a RESULT the caller has to look at, never as a
+// thrown error a try/catch can quietly drop: the send that failed in the room on
+// 2026-08-31 threw out of here into a bare catch that only wrote to a console
+// nobody was watching, so the trail on disk, the ops feed and the session record
+// all recorded nothing at all and the owner learned about it from the guest.
+// sent is the compatibility flag for provider acceptance; delivered remains
+// null because the app does not yet consume Postmark delivery webhooks.
+async function sendReport(reveal, answers, toEmail, options = {}) {
   const to = String(toEmail == null ? '' : toEmail).trim();
   const data = buildData(reveal, answers, dateStr());
   if (!EMAIL_RE.test(to)) {
     // skip the send with a logged reason, but still write the dev-file
     // artifact so the rendered report stays recoverable.
     console.error(`[outputs] email send skipped: invalid address ${JSON.stringify(to)}, report saved to disk instead`);
-    const saved = await sendEmail(data, to, new DevFileProvider(OUT_DIR));
-    return { ...saved, ok: false, skipped: 'invalid-address' };
+    try {
+      const saved = await sendEmail(data, to, options.devProvider || new DevFileProvider(OUT_DIR), {
+        artifacts: options.artifacts, renderLine: options.renderLine,
+      });
+      return { ...saved, ok: false, sent: false, accepted: false, delivered: false,
+        status: 'skipped-invalid-address', skipped: 'invalid-address',
+        diagnosis: 'the address the guest entered is not a valid email address, so nothing was sent.' };
+    } catch (e) {
+      return { ok: false, composed: false, sent: false, accepted: false, delivered: false,
+        status: 'skipped-invalid-address', skipped: 'invalid-address', error: e.message,
+        diagnosis: 'the address the guest entered is not a valid email address, and the fallback copy could not be written either.' };
+    }
   }
-  return sendEmail(data, to);
+  try {
+    const r = await sendEmail(data, to, options.provider, {
+      artifacts: options.artifacts, renderLine: options.renderLine,
+    });
+    return { composed: false, sent: false, accepted: false, delivered: null, ...r };
+  } catch (e) {
+    return {
+      ok: false,
+      composed: !!(e.composed || e.pendingPath),
+      sent: false,
+      accepted: false,
+      delivered: false,
+      status: e.status || 'provider-failed',
+      provider: e.provider || null,
+      error: e.message,
+      // what the operator should DO, not just what broke
+      diagnosis: e.diagnosis || 'the report could not be sent, see the error above.',
+      // the composed report survives on disk, so it can go out by hand
+      pendingPath: e.pendingPath || null,
+      postmarkCode: e.postmarkCode != null ? e.postmarkCode : null,
+      httpStatus: e.httpStatus != null ? e.httpStatus : null,
+      attachmentNames: e.attachmentNames || [],
+      attachmentWarnings: e.attachmentWarnings || [],
+    };
+  }
 }
 
 function dateStr() {
@@ -396,4 +494,7 @@ function dateStr() {
   return `${p(d.getMonth() + 1)}/${p(d.getDate())}/${d.getFullYear()}`;
 }
 
-module.exports = { buildData, renderCard, renderProfile, sendEmail, sendReport, processResults, composeEmail };
+module.exports = {
+  buildData, renderCard, renderProfile, sendEmail, sendReport, processResults,
+  composeEmail, collectReportAttachments,
+};

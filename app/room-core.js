@@ -47,6 +47,47 @@ const SURFACE_FORWARD = new Set([
   // routed to the TV role only (item 11), handled explicitly in wireSidecar.
 ]);
 
+// Diagnostics leave the process (disk trail + operator browser), so keep them
+// useful without copying credentials or a guest's full address into every log.
+function maskedRecipient(value) {
+  const s = String(value || '').trim();
+  const at = s.lastIndexOf('@');
+  if (at <= 0) return s ? '[invalid address]' : '[no address]';
+  const local = s.slice(0, at);
+  return `${local.slice(0, 1)}${local.length > 1 ? '***' : ''}${s.slice(at)}`;
+}
+
+function safeOpsText(value) {
+  if (value == null) return null;
+  return String(value)
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '[redacted credential]')
+    .replace(/\b(POSTMARK(?:_API_KEY|_SERVER_TOKEN)?|X-Postmark-Server-Token|Authorization)\s*[:=]\s*\S+/gi, '$1=[redacted credential]')
+    .slice(0, 800);
+}
+
+function reportFailureForOps(result, email, sessionId) {
+  const r = result || {};
+  return {
+    severity: 'error',
+    actionRequired: true,
+    sessionId: sessionId == null ? null : sessionId,
+    status: r.status || 'provider-failed',
+    recipient: maskedRecipient(email),
+    // sendReport/provider own these strings and deliberately keep tokens and
+    // upstream response bodies out of them.
+    error: safeOpsText(r.error),
+    skipped: r.skipped || null,
+    diagnosis: safeOpsText(r.diagnosis)
+      || 'The report was not sent. Open the saved session and resend it by hand.',
+    provider: r.provider || null,
+    postmarkCode: r.postmarkCode != null ? r.postmarkCode : null,
+    httpStatus: r.httpStatus != null ? r.httpStatus : null,
+    recoverAt: r.pendingPath || r.path || null,
+    attachmentNames: Array.isArray(r.attachmentNames) ? r.attachmentNames : [],
+    attachmentWarnings: Array.isArray(r.attachmentWarnings) ? r.attachmentWarnings : [],
+  };
+}
+
 // hooks (all optional):
 //   onDiag(channel, payload) , extra diagnostic sink (Electron's legacy window)
 //   onBeat({surface, beat})  , Electron navigates its TV window here
@@ -65,6 +106,11 @@ function createRoom(hooks = {}) {
   }
   const store = new Store();
   let pendingJoin = null; // the dot the next-loaded constellation should animate
+  // processResults starts at reveal time; sendReport happens minutes later.
+  // Retain only the small result promise (paths + flags), keyed by session, so
+  // the exact PDF/profile generated for guest A can be attached to guest A's
+  // email even if guest B has already entered the room.
+  const outputJobs = new Map();
 
   // Mirror the diagnostic feed to the host's sink (if any) and to every
   // connected operator console over the WS bus, under the 'ops' role.
@@ -332,6 +378,9 @@ function createRoom(hooks = {}) {
     }
     // renderer JS errors from any surface (sendBeacon endpoint in server.js)
     server.on('client-error', (report) => pushDiag('client:error', report));
+    // what each screen actually drew, including measured unfilled area, text
+    // overlaps and elements past the viewport (see surface-report.js)
+    server.on('surface-report', (r) => pushDiag('surface:screen', r));
 
     server.on('client-left', (info) => {
       pushDiag('client:leave', info);
@@ -348,10 +397,29 @@ function createRoom(hooks = {}) {
     orchestrator.on('event', (ev) => pushDiag('orch:event', ev));
 
     // Outputs: card auto-prints + profile renders the moment results are processed.
-    orchestrator.on('process-outputs', async ({ reveal, answers }) => {
+    orchestrator.on('process-outputs', async ({ reveal, answers, sessionId }) => {
+      const key = sessionId == null ? null : String(sessionId);
+      const job = outputs.processResults(reveal, answers);
+      if (key != null) {
+        // Cache only paths, not `out.data` (which contains the whole focus line).
+        outputJobs.set(key, job.then((out) => ({
+          cardPdf: out.cardPdf || null,
+          profilePng: out.profilePng || null,
+          cardPdfExpected: !out.cardSkipped,
+          profilePngExpected: !out.profileSkipped,
+        }), () => null));
+        // Sessions where the guest skips email otherwise have no consumer.
+        // Bound the cache while retaining far more than one room could have in
+        // flight during the render/send window.
+        while (outputJobs.size > 20) outputJobs.delete(outputJobs.keys().next().value);
+      }
       try {
-        const out = await outputs.processResults(reveal, answers);
-        pushDiag('outputs', { cardPdf: out.cardPdf, cardPrinted: out.cardPrinted, profilePng: out.profilePng, profileReady: out.profileReady });
+        const out = await job;
+        pushDiag('outputs', {
+          sessionId: sessionId == null ? null : sessionId,
+          cardPdf: out.cardPdf, cardPrinted: out.cardPrinted, cardSkipped: out.cardSkipped || null,
+          profilePng: out.profilePng, profileReady: out.profileReady, profileSkipped: out.profileSkipped || null,
+        });
         server.broadcast(SERVER.OUTPUT_READY, { cardPrinted: out.cardPrinted, profileReady: out.profileReady, emailSent: false });
       } catch (e) { console.error('[outputs] processResults failed:', e.message); }
     });
@@ -374,12 +442,54 @@ function createRoom(hooks = {}) {
     });
 
     // Email sends after the matched close (the captured address + the chosen door).
-    orchestrator.on('send-report', async ({ reveal, answers, email }) => {
+    // A failure here is the loudest thing the room can say short of stopping: the
+    // guest was told their report would land before they left the building, and
+    // the only person who can still keep that promise is the operator. So the
+    // outcome goes to the trail on disk, to the ops console, and onto the guest's
+    // own session record. This used to be a bare console.error, which meant a
+    // dead Postmark token produced a completely silent room.
+    orchestrator.on('send-report', async ({ reveal, answers, email, sessionId }) => {
+      let r;
+      const key = sessionId == null ? null : String(sessionId);
       try {
-        const r = await outputs.sendReport(reveal, answers, email);
-        pushDiag('outputs', { emailSent: r.ok, provider: r.provider, id: r.id, path: r.path });
-        server.broadcast(SERVER.OUTPUT_READY, { emailSent: !!r.ok });
-      } catch (e) { console.error('[outputs] sendReport failed:', e.message); }
+        let artifacts = null;
+        const outputJob = key == null ? null : outputJobs.get(key);
+        if (outputJob) {
+          try {
+            artifacts = await outputJob;
+          } catch (_) { /* the HTML report still sends; process failure is already logged */ }
+        }
+        r = await outputs.sendReport(reveal, answers, email, { artifacts });
+      } catch (e) {
+        // sendReport is written not to throw; if it ever does, that is itself a
+        // failure the operator must see rather than a line in a hidden console.
+        r = { ok: false, composed: false, sent: false, accepted: false, delivered: false,
+          status: 'pipeline-failed', error: 'report pipeline error',
+          diagnosis: 'the report pipeline stopped before it could hand the message to Postmark. Use the saved session record to resend it.' };
+      } finally {
+        if (key != null) outputJobs.delete(key);
+      }
+      // `sent` is provider acceptance; a dev-file write is composed but unsent.
+      const sent = !!r.sent;
+      pushDiag('outputs', {
+        sessionId: sessionId == null ? null : sessionId,
+        emailSent: sent, emailStatus: r.status || null,
+        accepted: !!r.accepted, delivered: r.delivered == null ? null : !!r.delivered,
+        provider: r.provider || null, id: r.id || null, path: r.path || null,
+        attachmentNames: Array.isArray(r.attachmentNames) ? r.attachmentNames : [],
+        attachmentWarnings: Array.isArray(r.attachmentWarnings) ? r.attachmentWarnings : [],
+      });
+      if (!sent) {
+        const failure = reportFailureForOps(r, email, sessionId);
+        console.error(`[outputs] REPORT NOT SENT (${failure.status}) for ${failure.recipient}: ${failure.diagnosis}`);
+        pushDiag('outputs:report-failed', failure);
+      }
+      // the guest's own record carries the exact acceptance/local/failure state
+      try { orchestrator.noteReportDelivery(r, sessionId); } catch (e) { pushDiag('outputs:report-failed', { recordError: e.message }); }
+      server.broadcast(SERVER.OUTPUT_READY, {
+        emailSent: sent,
+        emailStatus: r.status || (sent ? 'provider-accepted' : 'provider-failed'),
+      });
     });
   }
 
@@ -496,4 +606,4 @@ function createRoom(hooks = {}) {
   };
 }
 
-module.exports = { createRoom };
+module.exports = { createRoom, maskedRecipient, reportFailureForOps };

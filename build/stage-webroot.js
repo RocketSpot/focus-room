@@ -17,6 +17,7 @@ const out = path.join(repoRoot, 'build', 'webroot');
 const ENTRIES = [
   'tokens.css',
   'index.html',
+  'surface-report.js',   // injected into every served page by app/server.js
   'tv.html',        // the browser TV shell — docs point a browser TV at /tv.html
   'tv-live.html',
   'tv-signal.html',

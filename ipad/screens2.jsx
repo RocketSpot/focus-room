@@ -247,7 +247,6 @@
     const d = DOORS[who];
     const out = outputs || {};
     const arch = (answers.archetype || 'deep');
-    const archName = (FL && FL.ARCH[arch]) ? FL.ARCH[arch].name : 'Deep Diver';
     // The takeaway line is the guest's OWN line. It used to be
     // FL.linePath(archetype), the synthetic generator curve, so the last thing
     // a guest saw was a shape belonging to their archetype in general and to
@@ -268,9 +267,28 @@
     // generic archetype curve on a real guest's takeaway is not.
     const served = typeof location !== 'undefined' && !!location.host;
     const path = FL && (real || !served) ? FL.linePath(lineKey, box, { samples: 140 }) : '';
+    // WHETHER THE ROOM ACTUALLY READ THIS SESSION.
+    // The archetype LABEL that reaches this screen is not proof of a read: when the
+    // room refuses to interpret a session it still parks the label 'deep' on it so
+    // the constellation dot has a position and a colour (see noClaimReveal in
+    // app/reads.js), and naming that label through FL.ARCH printed a confident
+    // "Deep Diver" as the last thing a guest saw about a session the room had
+    // explicitly declined to measure, over a line slot that correctly drew nothing.
+    // The guest's own line is the honest witness: no line, no measured read, no name.
+    const measured = reveal ? reveal.measured !== false : !served;
+    const lineReady = !!real || !served;
+    const measuredName = reveal && reveal.archetype && reveal.archetype.name;
+    const archName = measured
+      ? (measuredName || ((FL && FL.ARCH[arch]) ? FL.ARCH[arch].name : 'Your measured read'))
+      : 'Not measured this session';
+    // Two different silences, and a guest deserves to know which one this is.
+    const unmeasuredNote = reveal
+      ? 'The room did not get enough clean signal from this session to name how you read. Nothing here is estimated or filled in.'
+      : 'Your read has not reached this screen. Please ask the room team before you go.';
+    const missingLineNote = 'Your session was measured, but its line did not reach this screen. Please ask the room team before you go so your report can be recovered.';
     // the same figures the wall quoted, so the two never disagree
     const reads = (reveal && reveal.reads) || [];
-    const facts = reads.filter((r) => r && r.stat && r.stat.value).slice(0, 3);
+    const facts = measured ? reads.filter((r) => r && r.stat && r.stat.value).slice(0, 3) : [];
     const setDoor = (k) => setAnswers({ ...answers, door: k });
     // honest takeaway: only name what the outputs pipeline confirmed. The email
     // sends on the CTA tap (close_choice → send-report), so before that moment
@@ -293,15 +311,20 @@
                 fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
                 background: who === k ? 'var(--c-near-black)' : 'transparent', color: who === k ? 'var(--c-offwhite)' : 'var(--fg-light-muted)', transition: 'all 160ms' } }, DOORS[k].who)))),
         e('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' } },
-          e(Mono, { color: 'var(--fg-light-muted)', style: { marginBottom: 16 } }, 'In your session today, you read as'),
-          e('h1', { className: 't-h1', style: { color: 'var(--fg-light)', fontSize: 60, letterSpacing: '-0.03em', marginBottom: 22 } }, archName),
-          // the guest's own line, with the notification marked where it landed
-          e('svg', { viewBox: '0 0 320 80', width: 320, height: 80, style: { marginBottom: facts.length ? 22 : 30 } },
-            e('path', { d: path, fill: 'none', stroke: 'var(--c-near-black)', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', opacity: 0.85 }),
-            real && reveal.interruptT != null && FL
-              ? (() => { const pt = FL.pointAt(lineKey, Math.max(0, Math.min(1, reveal.interruptT)), box);
-                  return e('circle', { cx: pt.x, cy: pt.y, r: 3.4, fill: 'var(--c-orange)' }); })()
-              : null),
+          e(Mono, { color: 'var(--fg-light-muted)', style: { marginBottom: 16 } },
+            measured ? 'In your session today, you read as' : 'In your session today'),
+          e('h1', { className: 't-h1', style: { color: 'var(--fg-light)', fontSize: measured ? 60 : 44, letterSpacing: '-0.03em', marginBottom: 22 } }, archName),
+          // the guest's own line, with the notification marked where it landed.
+          // With no measured line the slot is not left empty: an empty 320x80 svg
+          // reads as a graphic that failed to load, so it says why instead.
+          measured && lineReady
+            ? e('svg', { viewBox: '0 0 320 80', width: 320, height: 80, style: { marginBottom: facts.length ? 22 : 30 } },
+              e('path', { d: path, fill: 'none', stroke: 'var(--c-near-black)', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', opacity: 0.85 }),
+              real && reveal.interruptT != null && FL
+                ? (() => { const pt = FL.pointAt(lineKey, Math.max(0, Math.min(1, reveal.interruptT)), box);
+                    return e('circle', { cx: pt.x, cy: pt.y, r: 3.4, fill: 'var(--c-orange)' }); })()
+                : null)
+            : e('p', { className: 't-body-2', style: { color: 'var(--fg-light-muted)', fontSize: 16, lineHeight: 1.5, maxWidth: 520, marginBottom: 30 } }, measured ? missingLineNote : unmeasuredNote),
           // the measured figures, carried over verbatim from the wall
           facts.length ? e('div', { style: { display: 'flex', gap: 40, marginBottom: 30, flexWrap: 'wrap' } },
             facts.map((r, i) => e('div', { key: i, style: { minWidth: 120 } },

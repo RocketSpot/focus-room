@@ -10,6 +10,7 @@
 // ============================================================
 const { app, BrowserWindow, screen, globalShortcut, ipcMain, shell, Menu } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const config = require('./config');
 const crypto = require('crypto');
 const { createRoom } = require('./room-core');
@@ -111,6 +112,18 @@ let tvSurface = null;   // which TV surface is currently loaded
 const room = createRoom({
   onDiag: (channel, payload) => {
     if (diagWindow && !diagWindow.isDestroyed()) diagWindow.webContents.send(channel, payload);
+    // A reveal changes four times without changing beat or URL. Those are four
+    // different screens to a guest, so beat-only capture misses three of them.
+    // Capture the rendered TV after each data/step event, plus the interruption
+    // and constellation landing, using the same post-paint guard as navigation.
+    if (channel === 'room:out' && payload && (
+      payload.type === 'reveal/data' || payload.type === 'reveal/step'
+      || payload.type === 'interruption/fire' || payload.type === 'constellation/join')) {
+      const suffix = payload.type === 'reveal/step' && payload.payload
+        ? '-' + String(payload.payload.index ?? '') : '';
+      captureScreens('event-' + payload.type.replace(/[^a-z0-9]+/gi, '-') + suffix,
+        { expectedBeat: orchestrator && orchestrator.beat });
+    }
   },
   // Deliver the live raw-EEG stream to the AUTHORIZED TV renderer over IPC (finding #5 containment),
   // and ONLY while the signal surface is shown, so raw never even enters the renderer on other beats.
@@ -122,7 +135,8 @@ const room = createRoom({
   },
   // The orchestrator drives which TV surface shows for the current beat.
   onBeat: ({ surface, beat }) => {
-    navigateTv(surface);
+    const navigation = navigateTv(surface);
+    captureScreens('beat-' + beat, { navigation, expectedSurface: surface, expectedBeat: beat });
     // Silence the Mac for the whole time a guest is in the room, and hand it back
     // the moment they are done. 'idle' is the only beat with nobody in the chair.
     setDoNotDisturb(beat !== 'idle');
@@ -203,8 +217,80 @@ function initialTvUrl() {
     : tvUrlFor(tvSurface);
 }
 
+// VISUAL RECORD of what the room's own windows showed, one capture per beat.
+// The trail already records every payload sent and (via surface-report.js) the
+// measured geometry of what each page drew; this is the picture beside it, so a
+// glitch can be seen rather than reconstructed. The iPad is a separate device on
+// the network and cannot be captured from here: its geometry reports carry that
+// side. Captures are local-only diagnostics and never leave the machine.
+let captureSeq = 0;
+function waitForPaint(win) {
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return Promise.resolve();
+  // did-finish-load means the HTML arrived, not that its WebSocket payload drew
+  // or that fonts/layout committed. Two paint frames + a short settle captures
+  // what the display actually shows instead of the page it just navigated away
+  // from (the previous implementation mislabeled every proof image this way).
+  return win.webContents.executeJavaScript(`new Promise(function(resolve){
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ setTimeout(resolve, 420); }); });
+  })`, true).catch(() => {});
+}
+
+async function captureScreens(why, options = {}) {
+  try { await Promise.resolve(options.navigation); } catch (_) {}
+  const dir = path.join(config.dataDir, 'screens');
+  const safeWhy = String(why || 'screen').replace(/[^a-z0-9._-]+/gi, '-').slice(0, 90);
+  // the operator console opens in the system browser, so it has no window here
+  // to capture; surface-report.js carries its geometry instead
+  const shots = [['tv', tvWindow], ['diag', diagWindow]];
+  for (const [name, win] of shots) {
+    if (!win || win.isDestroyed()) continue;
+    await waitForPaint(win);
+    if (!win || win.isDestroyed() || win.webContents.isDestroyed()) continue;
+    // A fast demo can advance again while an earlier page is still painting.
+    // Never save a later page under an earlier beat's filename: skip it and say
+    // why in the trail. Real sessions are paced, so this is normally untouched.
+    if (options.expectedBeat && orchestrator && orchestrator.beat !== options.expectedBeat) {
+      try { room.pushDiag('surface:capture-skipped', {
+        surface: name, why: safeWhy, expectedBeat: options.expectedBeat, actualBeat: orchestrator.beat,
+      }); } catch (_) {}
+      continue;
+    }
+    const actualUrl = win.webContents.getURL();
+    if (name === 'tv' && options.expectedSurface
+      && actualUrl.indexOf('/tv-' + options.expectedSurface + '.html') === -1) {
+      // The one intentional exception is the launch quick-start sheet, which
+      // stays up through the idle/welcome constellation until a live TV surface
+      // takes over. Record it under its actual name, never as constellation.
+      if (actualUrl.indexOf('/quickstart.html') === -1) {
+        try { room.pushDiag('surface:capture-skipped', {
+          surface: name, why: safeWhy, expectedSurface: options.expectedSurface, actualUrl,
+        }); } catch (_) {}
+        continue;
+      }
+    }
+    const seq = String(++captureSeq).padStart(4, '0');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    try {
+      const img = await win.webContents.capturePage();
+      fs.mkdirSync(dir, { recursive: true });
+      // Lossless PNG: small type and one-pixel edge gaps are precisely what the
+      // proof exists to preserve; JPEG ringing can invent or hide both.
+      const file = path.join(dir, `${stamp}_${seq}_${name}_${safeWhy}.png`);
+      await fs.promises.writeFile(file, img.toPNG());
+      try { room.pushDiag('surface:capture', {
+        surface: name, why: safeWhy, file: path.basename(file), actualUrl,
+        size: img.getSize(), beat: orchestrator && orchestrator.beat,
+      }); } catch (_) {}
+    } catch (e) {
+      try { room.pushDiag('surface:capture-failed', {
+        surface: name, why: safeWhy, error: String((e && e.message) || e), actualUrl,
+      }); } catch (_) {}
+    }
+  }
+}
+
 function navigateTv(surface) {
-  if (!surface || surface === tvSurface) return;
+  if (!surface || surface === tvSurface) return Promise.resolve();
   if (quickstartPending && surface === 'constellation') {
     // The idle attractor must not evict the quickstart sheet. An iPad or ops
     // page left open from last time reconnects the moment the server binds,
@@ -212,10 +298,15 @@ function navigateTv(surface) {
     // sheet before the operator could read a single line of it. The sheet
     // yields only to a LIVE surface (a real guest starting a session), and
     // its own dismissal lands on the constellation anyway.
-    return;
+    return Promise.resolve();
   }
   tvSurface = surface;
-  if (tvWindow && !tvWindow.isDestroyed()) tvWindow.loadURL(tvUrlFor(surface));
+  if (tvWindow && !tvWindow.isDestroyed()) {
+    return tvWindow.loadURL(tvUrlFor(surface)).catch((e) => {
+      try { room.pushDiag('surface:navigation-failed', { surface, error: e.message }); } catch (_) {}
+    });
+  }
+  return Promise.resolve();
 }
 
 // ---------------- windows ----------------

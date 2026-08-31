@@ -162,22 +162,38 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
   </div>
 
   <script src="lib/focusline.js"></script>
+  <script src="lib/reveal-layout.js"></script>
   <script>
   (function () {
     var tv = document.getElementById('tv');
-    function fit() { var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080); tv.style.transform = 'scale(' + s + ')'; }
+    function fit() {
+      // A window that reports 0 (an Electron frame mid-creation, an offscreen or
+      // just-restored display) scaled the whole TV to zero and left the room
+      // showing a black screen with no error anywhere. Hold the last good scale.
+      var w = window.innerWidth, h = window.innerHeight;
+      if (!(w > 0 && h > 0)) return;
+      tv.style.transform = 'scale(' + Math.min(w / 1920, h / 1080) + ')';
+    }
     window.addEventListener('resize', fit); fit();
 
     var NS = 'http://www.w3.org/2000/svg';
     var FL = window.FocusLine;
-    // plot box, with the right margin reserved for the inline series labels
-    var BOX = { x: 150, y: 316, w: 1330, h: 372 };
+    var RL = window.RevealLayout;
+    // plot box, with the right margin reserved for the inline series labels.
+    // x=172 leaves a 52px gutter inside the page's 120px text rail, so the
+    // value-axis figures ("0.2%") sit in the gutter instead of hanging off the
+    // rail; the right edge stays at 1480, level with the prose block below.
+    var BOX = { x: 172, y: 316, w: 1308, h: 356 };
     var LBLX = BOX.x + BOX.w + 26;
     // the vertical stack below the plot, laid out once so nothing can collide:
-    // time axis → reading ribbon → event timeline → prose (fixed band in CSS)
-    var AXISY = BOX.y + BOX.h + 26;   // 714 · time labels
-    var RIBY  = BOX.y + BOX.h + 56;   // 744 · baseline of the reading-pace ribbon
-    var TLY   = BOX.y + BOX.h + 74;   // 762 · the event timeline
+    // time axis → ribbon caption → reading ribbon → event timeline → phase strip
+    // → prose (fixed band in CSS, top 806). Every row here is derived from the
+    // plot's own bottom edge, so moving the plot moves the whole stack with it.
+    var AXISY = BOX.y + BOX.h + 26;   // 698 · time labels
+    var RIBCY = BOX.y + BOX.h + 46;   // 718 · the ribbon's caption, above the ribbon
+    var RIBY  = BOX.y + BOX.h + 74;   // 746 · baseline of the reading-pace ribbon
+    var TLY   = BOX.y + BOX.h + 92;   // 764 · the event timeline
+    var PHZY  = TLY + 26;             // 790 · the phase-label strip
     var BANDS = [
       { k: 'delta', gl: 'δ', nm: 'Delta', ds: 'slow waves',       col: 'var(--w-delta)' },
       { k: 'theta', gl: 'θ', nm: 'Theta', ds: 'internal thinking', col: 'var(--w-theta)' },
@@ -209,7 +225,8 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
     var interruptT = 0.6;
     var sessionSec = 0;    // reading length in seconds, for the time axis
     var scrollTrack = [];  // [{t, p}] reading progress 0..1, when the iPad reported it
-    var gaps = [];         // [{from, to}] stream seconds with no signal at all (a dropout)
+    var gaps = [];         // explicit [{from, to}] ranges supplied by the room
+    var chartGaps = [];    // explicit + timestamp-derived ranges with no clean measurement
 
     // ---------------------------------------------------------------
     // THE CHART
@@ -232,12 +249,18 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
     // than sample-to-sample jitter, and draw it with monotone curves so it can
     // never bulge past its own samples.
     var scale = null;
-    function movAvg(a, w) {
+    function movAvg(a, w, runIds) {
       if (w < 2) return a.slice();
       var out = [], half = Math.floor(w / 2);
       for (var i = 0; i < a.length; i++) {
         var s = 0, c = 0;
-        for (var j = Math.max(0, i - half); j <= Math.min(a.length - 1, i + half); j++) { s += a[j]; c++; }
+        for (var j = Math.max(0, i - half); j <= Math.min(a.length - 1, i + half); j++) {
+          // A chart gap is missing evidence, not permission to blend the value
+          // before it with the value after it. Keep the envelope inside each
+          // contiguous run so the blank remains scientifically and visually real.
+          if (runIds && runIds[j] !== runIds[i]) continue;
+          s += a[j]; c++;
+        }
         out.push(s / c);
       }
       return out;
@@ -246,6 +269,7 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
     var CHART_FLOOR = 0.03;       // bands under 3% session share sit at the axis floor, not magnified
     function buildScale() {
       scale = null;
+      chartGaps = [];
       if (bandStream.length < 4) return;
       // A recording can OPEN on a stray pre-anchor row (t≈2.4, then the clock
       // restarts at 0). The path started at x(2.4s), jumped back to x(0), and
@@ -269,6 +293,20 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
       }
       var n = merged.length;
       if (n < 4) return;
+      // A blank line is not necessarily a Bluetooth loss. During the live run
+      // that prompted this fix, both buds stayed connected while movement made
+      // the analyser reject several stretches. The TV now derives every blank
+      // span from the accepted-row timestamps and merges the room's known stalls
+      // into the same neutral truth: there was no clean measurement to draw.
+      var gapInfo = RL.measurementGaps(merged, gaps);
+      chartGaps = gapInfo.gaps;
+      var runIds = [0], runId = 0;
+      for (var ri = 1; ri < merged.length; ri++) {
+        var aT = +merged[ri-1].t, bT = +merged[ri].t;
+        var crossesBlank = chartGaps.some(function(g){ return aT < g.to && bT > g.from; });
+        if (crossesBlank || bT - aT > gapInfo.threshold) runId++;
+        runIds.push(runId);
+      }
       var lastT = merged[n-1].t;
       var useT = isFinite(lastT) && lastT > 0;
       sessionSec = useT ? lastT : 0;
@@ -285,7 +323,7 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
       // under-smoothed into a staircase before
       var dt = (useT && n > 1) ? (lastT / (n-1)) : 1;
       var win = Math.max(3, Math.round(SMOOTH_SEC / Math.max(dt, 0.4)));
-      BANDS.forEach(function(b){ shares[b.k] = movAvg(shares[b.k], win); });
+      BANDS.forEach(function(b){ shares[b.k] = movAvg(shares[b.k], win, runIds); });
       BANDS.forEach(function(b){ var s = shares[b.k].slice().sort(function(a,c){return a-c;}); sessMed[b.k] = pctl(s, 0.5); });
       // Domain from the SUPPORTABLE bands only, and floored. Pooling every band's
       // shares let the noise-floor bands (gamma, ~0.3%) set the axis bottom, so on
@@ -303,6 +341,7 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
       var pad = (d1 - d0) * 0.08; d0 -= pad; d1 += pad;
       scale = {
         log: log, d0: d0, d1: d1, useT: useT, totalT: useT ? lastT : 1, n: n, shares: shares, merged: merged,
+        runIds: runIds, gapBreakSec: gapInfo.threshold,
         yOf: function (v) {
           var m = this.log ? Math.log10(Math.max(v, 1e-6)) : v;
           var f = (m - this.d0) / ((this.d1 - this.d0) || 1);
@@ -369,8 +408,6 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
       // and confident, through a stretch where there was nothing to draw. So
       // ALSO break wherever consecutive rows sit further apart than a live
       // stream can produce. A disconnection now reads as a blank stretch.
-      var GAP_BREAK_SEC = 4.5;   // the stream hops ~1s; 4.5 is unambiguous death
-      var prevT = null;
       var runs = [], cur = [];
       for (var i = 0; i < pix.length; i++) {
         // pix is indexed on the MERGED rows (buildScale averages L/R pairs and
@@ -380,14 +417,13 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
         var t = scale.merged[i] && isFinite(scale.merged[i].t) ? scale.merged[i].t : null;
         var inGap = false;
         if (t != null) {
-          for (var g = 0; g < gaps.length; g++) {
-            if (t > gaps[g].from && t < gaps[g].to) { inGap = true; break; }
+          for (var g = 0; g < chartGaps.length; g++) {
+            if (t > chartGaps[g].from && t < chartGaps[g].to) { inGap = true; break; }
           }
         }
-        var jumped = (t != null && prevT != null && (t - prevT) > GAP_BREAK_SEC);
+        var jumped = i > 0 && scale.runIds && scale.runIds[i] !== scale.runIds[i-1];
         if (inGap || jumped) { if (cur.length) { runs.push(cur); cur = []; } }
         if (!inGap) cur.push(pix[i]);
-        if (t != null) prevT = t;
       }
       if (cur.length) runs.push(cur);
       return runs.length ? runs : [pix];
@@ -397,8 +433,8 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
     // here", not as a rendering glitch.
     function drawGaps() {
       gapG.innerHTML = '';
-      if (!gaps.length || !scale || !sessionSec) return;
-      gaps.forEach(function(g){
+      if (!chartGaps.length || !scale || !sessionSec) return;
+      chartGaps.forEach(function(g){
         var x0 = BOX.x + BOX.w * Math.max(0, Math.min(1, g.from / sessionSec));
         var x1 = BOX.x + BOX.w * Math.max(0, Math.min(1, g.to / sessionSec));
         if (x1 - x0 < 1) return;
@@ -408,9 +444,15 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
           gapG.appendChild(el('line', { x1:x, x2:x, y1:BOX.y, y2:BOX.y+BOX.h,
             stroke:'var(--fg-faint)', 'stroke-opacity':0.3, 'stroke-width':1, 'stroke-dasharray':'2 6' }));
         });
-        // no words on a gap: a label here is a signal verdict, and the room never
-        // gives a guest one. The blank stretch with dashed edges says it wordlessly.
       });
+      // The original blank stretches looked like a broken chart, and because
+      // the Bluetooth link was healthy they also looked like unexplained data
+      // loss. Name exactly what a blank means without diagnosing the guest or
+      // pretending to know why the analyser declined those moments.
+      var key = el('text', { x:BOX.x+BOX.w, y:BOX.y-16, fill:'var(--fg-faint)', 'text-anchor':'end',
+        'font-family':'var(--font-mono)', 'font-size':12, 'letter-spacing':'1.7' });
+      key.textContent = 'BLANK = NO CLEAN MEASUREMENT · NOTHING FILLED IN';
+      gapG.appendChild(key);
     }
 
     function drawBands() {
@@ -506,15 +548,41 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
     [dimL, dimR, focusFill].forEach(function(r){ r.style.transition = 'x 620ms var(--ease-in-out), width 620ms var(--ease-in-out)'; spot.appendChild(r); });
     [edgeA, edgeB].forEach(function(l){ l.style.transition = 'x1 620ms var(--ease-in-out), x2 620ms var(--ease-in-out), stroke 400ms'; spot.appendChild(l); });
 
+    // ---- the phase-label strip -------------------------------------------
+    // Four captions plotted at the centre of their own time window is a pile-up:
+    // the windows overlap each other, several captions are wider than the window
+    // they name, and at the right-hand end of a real session three of them landed
+    // on top of one another ("STRONGEST·IS|IN OTHER|, SOMEWHERE"). Nothing in the
+    // old code could ever have prevented that, it only clamped each label to the
+    // chart's rails independently.
+    //
+    // So the strip is LAID OUT, not plotted. Two pure steps, both proved by
+    // tests/reveal-layout.test.js:
+    //
+    //   placeRow  pushes a row of boxes apart and back inside the track. A
+    //             forward sweep guarantees no overlap, a backward sweep from the
+    //             right rail guarantees the tail stays in bounds. It is exact
+    //             whenever the boxes physically fit, which is what pickStripTier
+    //             establishes first.
+    //   pickStripTier  chooses the wording. Full captions if they all fit, else
+    //             the active read keeps its full caption and the rest fall back
+    //             to the bare phase word, else every label is the bare word, and
+    //             in the last resort only the active read is named. The strip
+    //             gets quieter rather than louder, and it never lies by cropping.
+
+    // one off-screen text node, reused, so measuring never costs a reflow of the
+    // real strip and never leaves a stray label behind if a measure throws
+    var measurer = el('text', { x:-9999, y:-9999, 'font-family':'var(--font-mono)', 'font-size':13, 'letter-spacing':'2.2' });
+    document.getElementById('plot').appendChild(measurer);
+    function measureLabel(s) {
+      measurer.textContent = s;
+      try { return measurer.getComputedTextLength(); } catch (e) { return s.length * 11; }
+    }
+
     function drawTimeline() {
       tlG.innerHTML = '';
       tlG.appendChild(el('line', { x1:BOX.x, x2:BOX.x+BOX.w, y1:TLY, y2:TLY, stroke:'var(--hair-strong)', 'stroke-width':2 }));
-      // Each read's window as a segment on the session's own timeline. ONLY the
-      // active segment is named: the four labels sit wherever their windows fall,
-      // so with four of them printed at once they overlapped each other and read
-      // out of order (a strongest stretch early in the session put "STRONGEST"
-      // to the left of "RHYTHM").
-      R.forEach(function(rd, i){
+      var spans = R.map(function(rd, i){
         var a = BOX.x + BOX.w*Math.max(0,Math.min(1,rd.r0)), b = BOX.x + BOX.w*Math.max(0,Math.min(1,rd.r1));
         var isInt = rd.k === 'Interruption';
         var on = i === idx;
@@ -522,17 +590,28 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
           stroke: isInt ? 'var(--c-orange)' : 'var(--c-signal)', 'stroke-opacity': on ? 1 : 0.2 });
         seg.style.transition = 'stroke-opacity 500ms var(--ease-in-out), stroke-width 500ms var(--ease-in-out)';
         tlG.appendChild(seg);
-        var lb = el('text', { x: Math.max(BOX.x+70, Math.min((a+b)/2, BOX.x+BOX.w-70)), y:TLY+26, 'text-anchor':'middle',
-          fill: isInt?'var(--c-orange)':'var(--c-signal)',
+        var full = String(rd.k).toUpperCase() + '  ·  ' + String(rd.v || '').toUpperCase();
+        var short = String(rd.k).toUpperCase();
+        return { c: (a+b)/2, isInt: isInt, active: on, full: full, short: short,
+                 wFull: measureLabel(full), wShort: measureLabel(short) };
+      });
+      // Roughly four characters of clear space between neighbouring captions.
+      // A tight pad is technically enough to stop letters touching, but the row
+      // then saturates and every caption gets shoved hard against the next: no
+      // overlap, and still a wall of type nowhere near the window it names. A
+      // generous pad means a tier is only accepted when the strip can breathe.
+      var PHZPAD = 56;
+      var picked = RL.pickStripTier(spans, BOX.w, PHZPAD);
+      var lefts = RL.placeRow(picked.map(function(p){ return { c: spans[p.i].c, w: p.w }; }), BOX.x, BOX.x + BOX.w, PHZPAD);
+      picked.forEach(function(p, k){
+        var sp = spans[p.i];
+        var lb = el('text', { x: lefts[k] + p.w/2, y: PHZY, 'text-anchor':'middle',
+          fill: sp.isInt ? 'var(--c-orange)' : 'var(--c-signal)',
+          'fill-opacity': sp.active ? 1 : 0.38,
           'font-family':'var(--font-mono)', 'font-size':13, 'letter-spacing':'2.2' });
-        lb.textContent = String(rd.k).toUpperCase() + '  ·  ' + String(rd.v || '').toUpperCase();
+        lb.style.transition = 'fill-opacity 500ms var(--ease-in-out)';
+        lb.textContent = p.text;
         tlG.appendChild(lb);
-        // clamp by the label's REAL half-width, a fixed 70px margin let a long
-        // caption on an edge window ("STRONGEST · …") run past the chart's rail
-        try {
-          var hw = lb.getBBox().width / 2 + 4;
-          lb.setAttribute('x', Math.max(BOX.x + hw, Math.min((a+b)/2, BOX.x + BOX.w - hw)));
-        } catch (e) {}
       });
       // the notification, marked wherever it actually landed, and not at all
       // when it never fired (interruptT null)
@@ -549,9 +628,12 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
         });
         tlG.appendChild(el('path', { d: FL.smooth(pix), fill:'none', stroke:'var(--fg-muted)', 'stroke-opacity':0.55,
           'stroke-width':1.8, 'stroke-linecap':'round' }));
-        // in the left margin, clear of the ribbon itself, sitting it over the
-        // plot put the label directly under the line it was naming
-        var rl = el('text', { x:BOX.x-16, y:RIBY, 'text-anchor':'end', fill:'var(--fg-faint)',
+        // Above the ribbon's left end, the same idiom as RELATIVE BAND POWER
+        // above the plot. Right-anchored in the left gutter it needed ~98px of
+        // margin it did not have, so it hung out to x=36, past the page's own
+        // 120px rail and off the side of the chart. The ribbon can never reach
+        // higher than RIBY-18, so this baseline can never be touched by it.
+        var rl = el('text', { x:BOX.x, y:RIBCY, fill:'var(--fg-faint)',
           'font-family':'var(--font-mono)', 'font-size':11, 'letter-spacing':'1.6' });
         rl.textContent = 'HOW YOU READ'; tlG.appendChild(rl);
       }
@@ -575,9 +657,14 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
       if (isInt && interruptT != null) {
         var xi = BOX.x + BOX.w*Math.max(0,Math.min(1,interruptT));
         anno.appendChild(el('line', { x1:xi, y1:BOX.y-26, x2:xi, y2:BOX.y+BOX.h, stroke:'var(--c-orange-line)', 'stroke-width':2, 'stroke-dasharray':'3 7' }));
-        var lx = Math.max(BOX.x+108, Math.min(xi, BOX.x+BOX.w-108));
-        var pl = el('text', { x:lx, y:BOX.y-38, fill:'var(--c-orange)', 'text-anchor':'middle', 'font-family':'var(--font-mono)', 'font-size':16, 'letter-spacing':'2.6' });
+        var pl = el('text', { x:xi, y:BOX.y-38, fill:'var(--c-orange)', 'text-anchor':'middle', 'font-family':'var(--font-mono)', 'font-size':16, 'letter-spacing':'2.6' });
         pl.textContent = 'THE NOTIFICATION'; anno.appendChild(pl);
+        // clamp by the caption's REAL half-width. The old fixed 108px guess is
+        // only correct for one font metric; a wider face ran it off the rail.
+        try {
+          var phw = pl.getComputedTextLength() / 2 + 4;
+          pl.setAttribute('x', Math.max(BOX.x + phw, Math.min(xi, BOX.x + BOX.w - phw)));
+        } catch (e) {}
         anno.appendChild(el('circle', { cx:xi, cy:BOX.y-26, r:5, fill:'var(--c-orange)' }));
       }
       // Light the band lines this read is actually about, dim the rest. The
@@ -623,16 +710,32 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
       // overflow:hidden sliced the last line through the middle of its descenders.
       // Scaling the whole block with a transform DOES affect px children, and it
       // shrinks toward the top-left so the text stays anchored where it was laid out.
+      //
+      // The counter-width MUST be in px. As a percentage it resolved against the
+      // 1920px TV, not the block's own 1360px: the first step widened the block
+      // to 2087px, which is 1920px on screen, so the prose ran 440px past its
+      // right edge under the legend column and off the 1800px rail. It also made
+      // the loop exit at once, because a block twice as wide stops overflowing
+      // vertically, so the text never actually got smaller.
       prose.style.transform = '';
       prose.style.width = '';
-      var avail = prose.clientHeight;
+      prose.style.height = '';
+      var laidH = prose.clientHeight;
+      var laidW = prose.clientWidth;   // the block's own CSS box, at scale 1
       var scaleF = 1;
-      while (prose.scrollHeight > avail && scaleF > 0.72) {
-        scaleF -= 0.04;
+      // Counter-scale BOTH dimensions. Scaling a 206px-tall overflow:hidden
+      // element without increasing its logical height still clips everything
+      // below 206px before the transform is applied. The physical box remains
+      // exactly 1360x206 while its logical box grows enough to hold the copy.
+      while (prose.scrollHeight > prose.clientHeight + 1 && scaleF > 0.54) {
+        scaleF = Math.max(0.54, scaleF - 0.03);
         prose.style.transformOrigin = 'top left';
-        prose.style.width = (100 / scaleF) + '%';   // reflow at the pre-scale width
+        prose.style.width = (laidW / scaleF) + 'px';
+        prose.style.height = (laidH / scaleF) + 'px';
         prose.style.transform = 'scale(' + scaleF + ')';
       }
+      prose.dataset.fitScale = scaleF.toFixed(2);
+      prose.dataset.layoutOverflow = prose.scrollHeight > prose.clientHeight + 1 ? 'true' : 'false';
     }
 
     var statEl = document.getElementById('stat'), statV = document.getElementById('statV'), statL = document.getElementById('statL');

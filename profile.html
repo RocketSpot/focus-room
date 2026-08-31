@@ -82,11 +82,119 @@
 
     function el(t, a) { var e = document.createElementNS(NS, t); for (var k in a) e.setAttribute(k, a[k]); return e; }
 
+    // Native SVG text never wraps. Preserve the 132px treatment for the four
+    // archetypes, then switch long status labels to a balanced two-line lockup
+    // that remains wholly inside the 1080px profile canvas.
+    function fitArchetypeName(node, value) {
+      var text = String(value || '');
+      var words = text.trim().split(/\s+/).filter(Boolean);
+      var maxWidth = 940;
+      node.removeAttribute('textLength');
+      node.removeAttribute('lengthAdjust');
+
+      function width(line, size) {
+        node.innerHTML = '';
+        node.setAttribute('font-size', size);
+        node.textContent = line;
+        return node.getComputedTextLength ? node.getComputedTextLength() : line.length * size * 0.55;
+      }
+
+      if (width(text, 132) <= maxWidth) {
+        node.setAttribute('y', 700);
+        node.setAttribute('font-size', 132);
+        node.setAttribute('data-line-count', '1');
+        node.setAttribute('aria-label', text);
+        return 1;
+      }
+
+      if (words.length < 2) {
+        var oneSize = 132;
+        while (oneSize > 68 && width(text, oneSize) > maxWidth) oneSize -= 1;
+        node.setAttribute('y', 700);
+        node.setAttribute('font-size', oneSize);
+        node.setAttribute('data-line-count', '1');
+        node.setAttribute('aria-label', text);
+        if (node.getComputedTextLength && node.getComputedTextLength() > maxWidth) {
+          node.setAttribute('textLength', maxWidth);
+          node.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+        }
+        return 1;
+      }
+
+      var size = 90;
+      var split = 1;
+      var best = Infinity;
+      for (var i = 1; i < words.length; i++) {
+        var a = words.slice(0, i).join(' ');
+        var b = words.slice(i).join(' ');
+        var aw = width(a, size), bw = width(b, size);
+        var score = Math.max(aw, bw) + Math.abs(aw - bw) * 0.15;
+        if (score < best) { best = score; split = i; }
+      }
+      var lines = [words.slice(0, split).join(' '), words.slice(split).join(' ')];
+      while (size > 68 && Math.max(width(lines[0], size), width(lines[1], size)) > maxWidth) size -= 1;
+
+      node.innerHTML = '';
+      node.setAttribute('y', 650);
+      node.setAttribute('font-size', size);
+      node.setAttribute('data-line-count', '2');
+      node.setAttribute('aria-label', text);
+      lines.forEach(function (line, index) {
+        var span = el('tspan', { x: 64, y: index === 0 ? 650 : 736 });
+        span.textContent = line;
+        node.appendChild(span);
+        if (span.getComputedTextLength && span.getComputedTextLength() > maxWidth) {
+          span.setAttribute('textLength', maxWidth);
+          span.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+        }
+      });
+      return 2;
+    }
+
+    function fitDescription(node, value, multilineName) {
+      var text = String(value || '');
+      var size = 34;
+      node.removeAttribute('textLength');
+      node.removeAttribute('lengthAdjust');
+      node.setAttribute('y', multilineName ? 800 : 770);
+      node.setAttribute('font-size', size);
+      node.textContent = text;
+      while (size > 24 && node.getComputedTextLength && node.getComputedTextLength() > 940) {
+        size -= 1;
+        node.setAttribute('font-size', size);
+      }
+      if (node.getComputedTextLength && node.getComputedTextLength() > 940) {
+        node.setAttribute('textLength', 940);
+        node.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+      } else {
+        node.removeAttribute('textLength');
+        node.removeAttribute('lengthAdjust');
+      }
+    }
+
+    function usableSamples(data) {
+      if (!data || data.measured === false || !Array.isArray(data.samples)) return [];
+      var samples = data.samples.filter(function (p) {
+        return p && Number.isFinite(Number(p.t)) && Number.isFinite(Number(p.v));
+      });
+      return samples.length >= 2 && Number(samples[samples.length - 1].t) > Number(samples[0].t)
+        ? samples : [];
+    }
+
     function render(arch, data) {
-      // real session data (injected via ?d=) feeds FocusLine; else synthetic preview
+      document.body.removeAttribute('data-rendered');
+      // No payload means the explicit standalone design preview. A supplied
+      // session with no usable samples remains blank; it must never inherit the
+      // selected archetype's generated curve or generated interruption dip.
+      var preview = !data;
+      var samples = usableSamples(data);
+      var hasLine = preview || samples.length > 0;
+      var hasRecordedTrough = !!(data && data.troughT != null && data.troughT !== ''
+        && Number.isFinite(Number(data.troughT)));
+      var hasInterruption = preview || (hasLine && hasRecordedTrough);
       var lineKey = arch;
-      if (data && data.samples && data.samples.length) {
-        FocusLine.setSamples('session', data.samples, data.troughT != null ? { interruptT: data.troughT } : null);
+      if (samples.length) {
+        FocusLine.setSamples('session', samples, hasInterruption ? { interruptT: Number(data.troughT) } : null);
         lineKey = 'session';
       }
       var name = (data && data.name) || COPY[arch].name;
@@ -94,17 +202,26 @@
 
       // signature line
       var g = document.getElementById('focus-line'); g.innerHTML = '';
-      var d = FocusLine.linePath(lineKey, BOX, { samples: 160 });
-      g.appendChild(el('path', { d: d, fill: 'none', stroke: '#DDCA8E', 'stroke-opacity': 0.3, 'stroke-width': 16, 'stroke-linecap': 'round', filter: 'url(#glow)' }));
-      g.appendChild(el('path', { d: d, fill: 'none', stroke: 'url(#sig)', 'stroke-width': 5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
-      // subtle dip dot (no number, just the story)
-      var trough = (data && data.troughT != null) ? data.troughT : FocusLine.interruptInfo(lineKey).trough;
-      var pt = FocusLine.pointAt(lineKey, trough, BOX);
-      g.appendChild(el('circle', { cx: pt.x, cy: pt.y, r: 9, fill: '#DDCA8E' }));
-      g.appendChild(el('circle', { cx: pt.x, cy: pt.y, r: 3.5, fill: '#1A1917' }));
+      g.setAttribute('data-line-rendered', hasLine ? '1' : '0');
+      g.setAttribute('data-interruption-rendered', hasInterruption ? '1' : '0');
+      if (hasLine) {
+        var d = FocusLine.linePath(lineKey, BOX, { samples: 160 });
+        g.appendChild(el('path', { d: d, fill: 'none', stroke: '#DDCA8E', 'stroke-opacity': 0.3, 'stroke-width': 16, 'stroke-linecap': 'round', filter: 'url(#glow)', 'data-role': 'focus-line' }));
+        g.appendChild(el('path', { d: d, fill: 'none', stroke: 'url(#sig)', 'stroke-width': 5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'data-role': 'focus-line' }));
+        // A real line without a recorded notification time remains just a line.
+        // Never search it for a convenient trough and call that an interruption.
+        if (hasInterruption) {
+          var trough = preview ? FocusLine.interruptInfo(lineKey).trough : Number(data.troughT);
+          var pt = FocusLine.pointAt(lineKey, trough, BOX);
+          g.appendChild(el('circle', { cx: pt.x, cy: pt.y, r: 9, fill: '#DDCA8E', 'data-role': 'interruption-marker' }));
+          g.appendChild(el('circle', { cx: pt.x, cy: pt.y, r: 3.5, fill: '#1A1917', 'data-role': 'interruption-marker' }));
+        }
+      }
 
-      document.getElementById('slot-archetype').textContent = name;
-      document.getElementById('slot-desc').textContent = desc;
+      var archetypeNode = document.getElementById('slot-archetype');
+      var descNode = document.getElementById('slot-desc');
+      archetypeNode.textContent = name;
+      descNode.textContent = desc;
 
       // quadrant map
       var q = document.getElementById('quad'); q.innerHTML = '';
@@ -112,7 +229,7 @@
       var keys = ['sprint', 'igniter', 'deep', 'steady'];
       keys.forEach(function (k) {
         var p = QPOS[k]; var cx = p[0] * gap, cy = p[1] * gap;
-        var on = k === arch;
+        var on = hasLine && k === arch;
         // signal sand for the active archetype, orange (#FF5714) is reserved for
         // the single interruption mark and nothing else.
         q.appendChild(el('circle', { cx: cx, cy: cy, r: on ? 11 : 6, fill: on ? '#DDCA8E' : '#42413E' }));
@@ -125,7 +242,11 @@
       // signal readiness only once the webfonts are in, font-display:swap could
       // otherwise let the PNG capture fallback faces (outputs render waits on this)
       var fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
-      fontsReady.then(function () { document.body.setAttribute('data-rendered', '1'); });
+      fontsReady.then(function () {
+        var nameLines = fitArchetypeName(archetypeNode, name);
+        fitDescription(descNode, desc, nameLines > 1);
+        document.body.setAttribute('data-rendered', '1');
+      });
     }
 
     // real data arrives via ?d= (small payloads) or is injected after load

@@ -62,6 +62,7 @@ function fmtClockExact(sec) {
 }
 const pct = (x) => Math.round(x * 100);
 const times = (n) => (n === 0 ? 'not once' : n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);
+const onlyTimes = (n) => (n === 0 ? 'not once' : n === 1 ? 'only once' : n === 2 ? 'only twice' : `${n} times`);
 // A band's move against its own session level. Past ±100% the percentage stops
 // being readable (and a small band's noise can produce "393% above"), so beyond
 // that we say what happened in words instead of quoting a runaway figure.
@@ -352,6 +353,20 @@ function bandFocusLine(bands, eventEegT) {
     let tot = 0; BANDS5.forEach((k) => { tot += s[k]; }); tot = tot || 1e-9;
     const o = { t: s.t }; BANDS5.forEach((k) => { o[k] = s[k] / tot; }); return o;
   });
+  // Accepted rows are not necessarily continuous. The 2026-08-31 recording had
+  // healthy Bluetooth but 5s, 6s and 14s holes where movement made the analyser
+  // reject every window. A centred smoother that reaches across one of those
+  // holes fabricates a bridge from the last value before it to the first value
+  // after it. Mark contiguous runs and never let a smoothing window cross one.
+  const steps = [];
+  for (let i = 1; i < sh.length; i++) if (sh[i].t > sh[i - 1].t) steps.push(sh[i].t - sh[i - 1].t);
+  const cadence = medianOf(steps) || 1;
+  const gapBreakSec = Math.max(3.2, cadence * 2.2);
+  let run = 0;
+  sh.forEach((s, i) => {
+    if (i && s.t - sh[i - 1].t > gapBreakSec) run += 1;
+    s._run = run;
+  });
   // 3) smooth into an envelope over a PHYSICAL window (band power undulates over
   //    tens of seconds; a sample-count window under-smooths short/sparse reads)
   const dt = sh.length > 1 ? (sh[sh.length - 1].t - sh[0].t) / (sh.length - 1) : 1;
@@ -363,6 +378,8 @@ function bandFocusLine(bands, eventEegT) {
   const sm = sh.map((_, i) => {
     const o = { t: sh[i].t };
     let loJ = Math.max(0, i - half), hiJ = Math.min(sh.length - 1, i + half);
+    while (loJ < i && sh[loJ]._run !== sh[i]._run) loJ += 1;
+    while (hiJ > i && sh[hiJ]._run !== sh[i]._run) hiJ -= 1;
     if (splitIdx >= 0) {
       if (i < splitIdx) hiJ = Math.min(hiJ, splitIdx - 1);   // pre-event window stays pre-event
       else loJ = Math.max(loJ, splitIdx);                     // post-event window stays post-event
@@ -390,9 +407,9 @@ function bandFocusLine(bands, eventEegT) {
   const relSpread = (percentile(sorted, 0.9) - percentile(sorted, 0.1)) / med;
   const line = sm.map((s, i) => {
     const v = clamp01(0.03 + ((ei[i] - lo) / span) * 0.94);
-    return { t: s.t, v, vr: v, ei: ei[i], shares: s };
+    return { t: s.t, v, vr: v, ei: ei[i], shares: s, run: s._run };
   });
-  return { line, flat: relSpread < 0.28, ei, shares: sm };
+  return { line, flat: relSpread < 0.28, ei, shares: sm, cadence, gapBreakSec };
 }
 
 function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eegClaimsAllowed, dataQualityStatus, baseline }) {
@@ -401,7 +418,12 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   // claims (a staff/demonstration override, or, in real mode, a session that never
   // reached reveal eligibility), present the reveal WITHOUT any EEG-derived number and
   // WITHOUT a "measured" archetype. The room still walks through; it just says less.
-  if (eegClaimsAllowed === false) return noClaimReveal(dataQualityStatus);
+  if (eegClaimsAllowed === false) {
+    const lastBandT = Array.isArray(bands) && bands.length ? (bands[bands.length - 1].t || 0) : 0;
+    const lastSampleT = samples && samples.length ? (samples[samples.length - 1].t || 0) : 0;
+    return noClaimReveal(dataQualityStatus,
+      { interruptSec: interruptEegT, durSec: Math.max(lastBandT, lastSampleT) });
+  }
   // A recording can OPEN on a stray pre-anchor row (t≈2.4, then the clock
   // restarts at 0), it corrupted the first seconds of everything derived from
   // the bands. Trim any leading rows that sit before a clock restart.
@@ -428,6 +450,16 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
 
   const totalT = samples[samples.length - 1].t || 1;
   const rawT = samples.map((p) => p.t);
+  const sampleSteps = [];
+  for (let i = 1; i < rawT.length; i++) if (rawT[i] > rawT[i - 1]) sampleSteps.push(rawT[i] - rawT[i - 1]);
+  const sampleCadence = medianOf(sampleSteps) || 1;
+  const sampleGapBreak = Math.max(3.2, sampleCadence * 2.2);
+  const sampleRuns = [];
+  let sampleRun = 0;
+  for (let i = 0; i < rawT.length; i++) {
+    if (i && rawT[i] - rawT[i - 1] > sampleGapBreak) sampleRun += 1;
+    sampleRuns.push(samples[i].run != null ? samples[i].run : sampleRun);
+  }
   const vrs = samples.map((p) => (typeof p.vr === 'number' ? p.vr : p.v));
   const vrmin = Math.min(...vrs), vrmax = Math.max(...vrs);
   const rawRange = vrmax - vrmin;                      // how much engagement actually moved
@@ -441,7 +473,9 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   };
 
   // finalized line for the reveal (legible, not exaggerated)
-  const fin = samples.map((p, i) => ({ t: p.t, v: clamp01(0.03 + ((vrs[i] - vrmin) / vspan) * 0.94) }));
+  const fin = samples.map((p, i) => ({
+    t: p.t, v: clamp01(0.03 + ((vrs[i] - vrmin) / vspan) * 0.94), run: sampleRuns[i],
+  }));
   const frac = (s) => clamp01(s / totalT);
   const at = (f) => {
     const tt = f * totalT; let best = fin[0];
@@ -455,7 +489,8 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   for (let i = 0; i < fin.length; i++) {
     if (fin[i].v >= 0.7) {
       const w = fin.slice(i, i + 4);
-      if (w.length >= 3 && mean(w.map((p) => p.v)) >= 0.65) { settleFrac = frac(fin[i].t); break; }
+      if (w.length >= 3 && w.every((p) => p.run === fin[i].run)
+        && mean(w.map((p) => p.v)) >= 0.65) { settleFrac = frac(fin[i].t); break; }
     }
   }
   const quickly = settleFrac <= 0.33;
@@ -491,15 +526,45 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   const variability = std(mids.map((p) => p.v));
   const variable = variability >= 0.14;
 
-  // --- strongest stretch (highest-average window, excludes the dip) ---
-  let bestStart = 0, bestAvg = -1;
-  for (let s = 0; s <= 1 - WIN; s += 0.01) {
-    if (intFired && s < recoveredT && s + WIN > interruptT) continue;
-    let sum = 0, c = 0;
-    for (let f = s; f <= s + WIN; f += 0.01) { sum += at(f); c++; }
-    const avg = sum / c; if (avg > bestAvg) { bestAvg = avg; bestStart = s; }
+  // --- strongest CONTIGUOUS measured stretch -----------------------------
+  // The old fractional sampler asked at() for values every 1% of the session.
+  // at() returns the nearest accepted row, so a 14s analysis hole became a
+  // repeated edge value and could win "strongest 10 sec" despite containing
+  // almost no measurement. Search only real rows inside one contiguous run and
+  // require that run to cover the full target duration.
+  const targetStrongSec = Math.max(5, totalT * WIN);
+  let bestStartSec = null, bestEndSec = null, bestAvg = -1;
+  for (let i = 0; i < fin.length; i++) {
+    const startSec = fin[i].t;
+    const endSec = Math.min(totalT, startSec + targetStrongSec);
+    if (endSec - startSec < Math.min(5, targetStrongSec * 0.75)) continue;
+    if (intFired && startSec < secs(recoveredT) && endSec > secs(interruptT)) continue;
+    const points = [];
+    for (let j = i; j < fin.length && fin[j].run === fin[i].run && fin[j].t <= endSec + 1e-6; j++) points.push(fin[j]);
+    if (points.length < 3) continue;
+    // The last accepted row must reach the intended end. A cadence of slack
+    // accounts for window centres without letting a multi-second hole pass.
+    if (points[points.length - 1].t < endSec - sampleCadence * 1.25) continue;
+    const avg = mean(points.map((p) => p.v));
+    if (avg > bestAvg) {
+      bestAvg = avg;
+      bestStartSec = startSec;
+      bestEndSec = endSec;
+    }
   }
-  const ssMid = bestStart + WIN / 2;
+  // A very short recording can have no full target window. Say "moment" later,
+  // and anchor it to a real accepted row rather than stretching across a hole.
+  let strongWindowComplete = bestStartSec != null;
+  if (!strongWindowComplete) {
+    let best = fin[0];
+    for (const point of fin) if (point.v > best.v) best = point;
+    bestStartSec = best.t;
+    bestEndSec = best.t;
+    bestAvg = best.v;
+  }
+  const bestStart = frac(bestStartSec);
+  const bestEnd = frac(bestEndSec);
+  const ssMid = (bestStart + bestEnd) / 2;
   const region = regionOf(ssMid);
 
   // FLAT = focus stayed even. When the signal came from the bands, flatness is
@@ -529,12 +594,14 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   // measure of "waves" that needs no scale to be true
   let crossings = 0;
   for (let i = 1; i < mids.length; i++) {
-    if ((mids[i - 1].v - engagedAvg) * (mids[i].v - engagedAvg) < 0) crossings++;
+    if (mids[i - 1].run === mids[i].run
+      && (mids[i - 1].v - engagedAvg) * (mids[i].v - engagedAvg) < 0) crossings++;
   }
-  // share of the engaged stretch spent close to that steady level
+  // Share of ACCEPTED measured moments close to that steady level. Calling it
+  // a share of "the time" silently counts analysis holes as if they were clean.
   const insideBand = mids.length
     ? Math.round((mids.filter((p) => Math.abs(p.v - engagedAvg) <= 0.125).length / mids.length) * 100) : 0;
-  const strongFromSec = secs(bestStart), strongToSec = secs(bestStart + WIN);
+  const strongFromSec = bestStartSec, strongToSec = bestEndSec;
   // Every figure in a sentence must agree with the OTHERS ON SCREEN, not just
   // with the raw signal. Three honest-but-independent roundings once produced
   // "your strongest 10 sec ran from 0:05 to 0:10", so the stretch's stated
@@ -543,7 +610,7 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   const strongShownSec = roundClock(strongToSec) - roundClock(strongFromSec);
   // On a very short session both clocks can round to the SAME value, "ran from
   // 0:15 to 0:15", so a from–to claim needs the shown clocks to actually span.
-  const strongClocksOk = strongShownSec >= 5;
+  const strongClocksOk = strongWindowComplete && strongShownSec >= 5;
   // Capped at 100: a session that never reached a settle hold has
   // settleFrac=1, and round5 could push the shown figure past the session
   // length ("the first 102% of your reading", a nonsense claim).
@@ -607,13 +674,20 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   const rhythmWord = flat ? 'remarkably even' : (wavy ? 'short, quick waves' : (steady ? 'long, steady stretches' : 'a slow, wandering drift'));
   const dipWord = flat || modest ? 'a small, honest dip' : (sharp ? 'a sharp drop, a long climb back' : 'a clear dip, a steady climb back');
 
-  const q1 = intake[0], q2 = intake[1];
+  const q1 = intake[0], q2 = intake[1], q3 = intake[2];
+  // The guest is asked three things on the way in and the room compared only two
+  // of them. The warm-up answer belongs beside the settle they actually ran: it
+  // is the cleanest self-report-versus-measurement the session produces, and it
+  // is the comparison guests find most striking when the two disagree.
+  const settleDid = flat
+    ? `You came in level and stayed there, so there was no climb to time.`
+    : `You reached your steady level in ${fmtDur(settleSec)}, the first ${settlePctShown}% of your reading.`;
   const lean = signalIssue ? ' These figures come from the clean stretches of your read.' : '';
   const rhythmDid = (flat
-    ? `It held level. Your focus stayed within a quarter of its own range ${insideBand}% of the time.`
+      ? `It held level. ${insideBand}% of your measured moments stayed within a quarter of its own range.`
     : wavy ? `It moved in waves, crossing its own steady level ${times(crossings)}.`
-      : steady ? `It ran in long stretches, crossing its own steady level only ${times(crossings)}.`
-        : `It drifted slowly across its range, sitting inside its steady band only ${insideBand}% of the time.`) + lean;
+      : steady ? `It ran in long stretches, crossing its own steady level ${onlyTimes(crossings)}.`
+        : `It drifted slowly across its range, with only ${insideBand}% of measured moments inside its steady band.`) + lean;
   // The interruption's "your reading" line leads with whatever actually shows: a
   // measured focus dip, or the band that moved most, there is ALWAYS one to name.
   const intBandPhrase = intShift ? `${BAND_SHORT[intShift.k]}, your ${BAND_MEANS[intShift.k]}, ${intShift.d >= 0 ? roseT(intShift.d) : fellT(intShift.d)}` : '';
@@ -624,13 +698,25 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
   // the neutral fact that a notification arrived; the experimental figures live in
   // the internal `provisional` block for engineering only.
   // Always describes what the notification DID, never "nothing", never "small".
+  // HOW LONG IT HELD ONTO YOU. Recovery used to appear only when the focus line
+  // showed a "real dip" (>=5% of range AND >=0.04 raw), so the most human fact
+  // the session produces - how long it took you to get back - was withheld from
+  // most guests. The line returns to its pre-marker level or it does not, and
+  // both of those are worth saying. Only a genuinely unmeasurable recovery (the
+  // notification landing too close to the end for a post window) stays silent.
+  const recoveryMeasurable = intFired && Number.isFinite(recoverSec)
+    && recoveredT > interruptT && recoveredT <= 0.98;
+  const recoveryPhrase = !recoveryMeasurable ? ''
+    : recoverSec >= 1
+      ? ` It took ${fmtDur(recoverSec)} to get back to where you were.`
+      : ' You were back inside a second.';
   const dipDid = !intFired
     ? 'You finished before the room sent its notification.'
     : realDip
       ? `Your focus fell ${dipPctOwn}% of its own range and needed ${fmtDur(recoverSec)} to return.`
       : intShift
-        ? `Your ${BAND_SHORT[intShift.k]}, your ${BAND_MEANS[intShift.k]}, ${intShift.d >= 0 ? roseT(intShift.d) : fellT(intShift.d)} at the marker.`
-        : 'Your rhythms rearranged themselves around it.';
+        ? `Your ${BAND_SHORT[intShift.k]}, your ${BAND_MEANS[intShift.k]}, ${intShift.d >= 0 ? roseT(intShift.d) : fellT(intShift.d)} at the marker.${recoveryPhrase}`
+        : `Your rhythms rearranged themselves around it.${recoveryPhrase}`;
 
   const guessRegion = GUESS_REGION[answers.strongest] !== undefined ? GUESS_REGION[answers.strongest] : null;
   // "at 0:00" is a strange clock to quote, when the strongest run starts at the
@@ -654,6 +740,7 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
       r0: 0, r1: settleWinFrac, anchorT: settleWinFrac * 0.55,
       k: 'Settle', v: settleWord, color: 'signal',
       stat: { value: fmtDur(settleSec), label: 'to reach your steady level' },
+      ledger: q3 ? { said: quote(q3), did: settleDid } : null,
       sentence: flat
         ? `You reached your steady level ${fmtDur(settleSec)} in, without a sharp switch-on or a long warm-up.`
         : quickly ? `You were at your steady level ${fmtDur(settleSec)} in, which is the first ${settlePctShown}% of your reading. That is almost no warm-up at all.`
@@ -666,12 +753,12 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
       k: 'Rhythm', v: rhythmWord, color: 'signal',
       stat: wavy
         ? { value: String(crossings), label: 'crossings of your own steady level' }
-        : { value: `${insideBand}%`, label: 'of the time inside your steady band' },
+        : { value: `${insideBand}%`, label: 'of measured moments inside your steady band' },
       sentence: flat
-        ? `Once in, your focus stayed within a quarter of its own range ${insideBand}% of the time. Level focus is a finding, not a null result.`
+        ? `Once in, ${insideBand}% of your measured moments stayed within a quarter of your own range. Level focus is a finding, not a null result.`
         : wavy ? `Once in, your focus crossed its own steady level ${times(crossings)}. It moved in real waves rather than holding one level.`
-          : steady ? `Once you were in, you stayed in. Your focus sat inside its steady band ${insideBand}% of the time and crossed that level only ${times(crossings)}.`
-            : `Your focus drifted across its range rather than settling on one level. It sat inside its steady band ${insideBand}% of the time.`,
+          : steady ? `Once you were in, you stayed in across the clean stretches. ${insideBand}% of your measured moments sat inside your steady band, crossing that level ${onlyTimes(crossings)}.`
+            : `Your focus drifted across its range rather than settling on one level. ${insideBand}% of your measured moments sat inside its steady band.`,
       ledger: q2 ? { said: quote(q2), did: rhythmDid } : null,
     },
     {
@@ -708,7 +795,7 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
       sentence: !intFired
         ? 'You finished the reading before the room sent its one notification. That speed is its own finding.'
         : intShift
-          ? `One notification, at ${fmtClockExact(secs(interruptT))}. Right at the marker your ${BAND_SHORT[intShift.k]} rhythm, your ${BAND_MEANS[intShift.k]}, ${intShift.db != null ? intMoveText(intShift) : (intShift.d >= 0 ? rose(intShift.d) : fell(intShift.d))}.${realDip ? ` Your focus fell ${dipPctOwn}% of its own range with it, and took ${fmtDur(recoverSec)} to climb back.` : ' That is the notification, written in your rhythms.'}`
+          ? `One notification, at ${fmtClockExact(secs(interruptT))}. Right at the marker your ${BAND_SHORT[intShift.k]} rhythm, your ${BAND_MEANS[intShift.k]}, ${intShift.db != null ? intMoveText(intShift) : (intShift.d >= 0 ? rose(intShift.d) : fell(intShift.d))}.${realDip ? ` Your focus fell ${dipPctOwn}% of its own range with it, and took ${fmtDur(recoverSec)} to climb back.` : (recoveryPhrase || ' That is the notification, written in your rhythms.')}`
           : realDip
             ? `One notification, at ${fmtClockExact(secs(interruptT))}. Your focus fell ${dipPctOwn}% of its own range and took ${fmtDur(recoverSec)} to climb back to the level it held before.`
             : `One notification, at ${fmtClockExact(secs(interruptT))}. Your rhythms rearranged themselves around it, the balance you were holding before the notification is not the balance you held after.`,
@@ -731,15 +818,17 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
       // (When the clocks collapse on a tiny session, no from–to is claimed, so
       // the raw window stands.)
       r0: strongClocksOk && totalT > 0 ? roundClock(strongFromSec) / totalT : bestStart,
-      r1: strongClocksOk && totalT > 0 ? Math.min(1, roundClock(strongToSec) / totalT) : bestStart + WIN,
+      r1: strongClocksOk && totalT > 0 ? Math.min(1, roundClock(strongToSec) / totalT) : bestEnd,
       anchorT: ssMid,
       k: 'Strongest', v: 'your best run today', color: 'signal',
       stat: strongClocksOk
-        ? { value: `${fmtClock(strongFromSec)}–${fmtClock(strongToSec)}`, label: 'your highest run of the session' }
-        : { value: fmtClock(secs(ssMid)), label: 'your highest moment of the session' },
+        ? { value: `${fmtClock(strongFromSec)}–${fmtClock(strongToSec)}`, label: 'your highest fully measured run' }
+        : { value: fmtClock(secs(ssMid)), label: 'your highest measured moment of the session' },
       sentence: strongClocksOk
-        ? `Your strongest ${fmtDur(strongShownSec)} ran from ${fmtClock(strongFromSec)} to ${fmtClock(strongToSec)}, sitting ${strongAbove}% of your own range above your session average.`
-        : `Your strongest moment came around ${fmtClock(secs(ssMid))}, sitting ${strongAbove}% of your own range above your session average.`,
+        ? (strongAbove > 0
+          ? `Your strongest ${fmtDur(strongShownSec)} ran from ${fmtClock(strongFromSec)} to ${fmtClock(strongToSec)}, sitting ${strongAbove}% of your own range above your session average.`
+          : `Your strongest ${fmtDur(strongShownSec)} ran from ${fmtClock(strongFromSec)} to ${fmtClock(strongToSec)}. It was the highest fully measured run; shorter peaks beside a blank were not stretched into one.`)
+        : `Your strongest measured moment came around ${fmtClock(secs(ssMid))}, sitting ${strongAbove}% of your own range above your session average.`,
       ledger: answers.strongest ? { said: quote(answers.strongest), did: strongestDid } : null,
     },
   ];
@@ -775,6 +864,7 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
       realDip, recoverSec: realDip ? round5(recoverSec) : null,
       dipPctOwn, strongAbove, crossings, insideBand,
       strongFromSec: roundClock(strongFromSec), strongToSec: roundClock(strongToSec),
+      strongWindowComplete,
       interruptSec: intFired ? Math.round(secs(interruptT)) : null,
       interruptionProvisional: true,  // depth/recovery not validated (see timing)
     },
@@ -784,7 +874,8 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
     metric: { name: 'betaAlphaThetaRatio', validated: false, kind: 'focus_indicator' },
     timing: { method: 'app_fire_call', confidence: 'low', firmwareMarker: false },
     meta: { settleFrac: +settleFrac.toFixed(3), variability: +variability.toFixed(3),
-      rawRange: +rawRange.toFixed(3), rawDip: +rawDip.toFixed(3), sharp, modest, flat },
+      rawRange: +rawRange.toFixed(3), rawDip: +rawDip.toFixed(3), sharp, modest, flat,
+      sampleCadence: +sampleCadence.toFixed(3), sampleGapBreak: +sampleGapBreak.toFixed(3) },
   };
 }
 
@@ -793,10 +884,14 @@ function computeReads({ samples, answers, interruptEegT, signalIssue, bands, eeg
 // real session that never reached reveal eligibility ('insufficient-usable-data').
 // No stat blocks, no measured archetype, no interruption marker, the room says only
 // what is true. `lost:true` routes the card/profile/email to their honest fallbacks.
-function noClaimReveal(status) {
+function noClaimReveal(status, ctx) {
   const staff = status === 'invalid-for-eeg-interpretation';
   return {
-    reads: minimalReads(),
+    // THE FALLBACK MUST NOT LIE. This called minimalReads() with no arguments, so
+    // read 03 defaulted to "never sent, you finished first" - which a real guest
+    // was told on 2026-08-31 about a notification that fired 49.9 s into a 92 s
+    // reading. The events are known even when the numbers are not; pass them.
+    reads: minimalReads(ctx),
     // never labelled "successfully measured": a neutral, honest name; label 'deep' only
     // gives a downstream dot a valid (generic) position/colour, it is not a claim.
     archetype: { label: 'deep', name: staff ? 'Demonstration session' : 'Not measured this session', measured: false },

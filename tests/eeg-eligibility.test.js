@@ -59,6 +59,28 @@ function toReveal(orch) {
   ev(orch, 'strongest_stretch_guess', { choice: 'The ending' });  // strongest → standby (reveal computed)
 }
 
+// ---- 0) reveal evidence counts distinct temporal windows, not duplicate rows ----
+console.log('\n-- reveal evidence uses distinct windows --');
+{
+  const { orch } = makeOrch();
+  const duplicated = [];
+  for (let i = 0; i < 24; i++) {
+    duplicated.push({ t: i }, { t: i }, { t: i + 0.08 });
+  }
+  const evidence = orch._revealEvidence(duplicated);
+  check('duplicate/jittered analyser rows collapse to 24 temporal windows',
+    evidence.windows === 24 && evidence.rawRows === 72 && evidence.duplicateRows === 48,
+    JSON.stringify(evidence));
+  const sparseDuplicates = [];
+  for (let i = 0; i < 10; i++) {
+    sparseDuplicates.push({ t: i * 10 }, { t: i * 10 }, { t: i * 10 + 0.08 });
+  }
+  const sparse = orch._revealEvidence(sparseDuplicates);
+  check('30 duplicate-inflated rows cannot satisfy the 20-window gate',
+    sparse.rawRows === 30 && sparse.windows === 10 && sparse.enough === false,
+    JSON.stringify(sparse));
+}
+
 // ---- 1) the room is NEVER gated or held by signal quality ----
 // The guest experience must not depend on the signal being good, and the room must
 // never narrate the signal. Eligibility is still COMPUTED (it gates EEG-derived

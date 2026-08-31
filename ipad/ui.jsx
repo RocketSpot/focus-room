@@ -107,7 +107,21 @@
   }
 
   // ---- field wrappers with the signature ambient glow ----
+  // Each field tells the shell what colour it is standing on. The guest canvas
+  // is a scaled box, and any strip of the page the box does not cover paints
+  // --room-ground (ipad-flow.html). Before this it painted near-black, so an
+  // iPad viewport that disagreed with the canvas by any amount showed a black
+  // band beside a cream screen. Matching the ground to the live field makes a
+  // miss invisible rather than a bar across the screen.
+  function useRoomGround(color) {
+    useEffect(() => {
+      const root = document.documentElement;
+      root.style.setProperty('--room-ground', color);
+    }, [color]);
+  }
+
   function DarkField({ children, glow = true }) {
+    useRoomGround('#0F0F0E');   // the bottom stop of this field's gradient
     return e('div', {
       style: {
         position: 'absolute', inset: 0, overflow: 'hidden',
@@ -121,6 +135,7 @@
   }
 
   function LightField({ children }) {
+    useRoomGround('#EFEAE3');   // the bottom stop of this field's gradient
     return e('div', {
       style: {
         position: 'absolute', inset: 0, overflow: 'hidden',

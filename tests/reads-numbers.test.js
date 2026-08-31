@@ -229,6 +229,53 @@ ok('a run starting at the top of the reading starts at 0:00, not 0:05', () => {
   assert.ok(!/at 0:00/.test(rd.ledger ? rd.ledger.did : ''), 'say "right from the start", never "at 0:00"');
 });
 
+ok('a strongest stretch can never be selected across an analysis hole', () => {
+  const samples = [], bands = [];
+  const times = [];
+  for (let t = 0; t <= 55; t++) times.push(t);       // one long clean run
+  for (let t = 75; t <= 80; t++) times.push(t);     // tempting but too short
+  for (let t = 90; t <= 93; t++) times.push(t);     // another short island
+  times.forEach((t) => {
+    const lateHot = t >= 75;
+    const beta = lateHot ? 0.42 : (0.11 + t * 0.0015);
+    bands.push({ t, delta: 0.42, theta: 0.23, alpha: 0.16, beta, gamma: 0.004 });
+    samples.push({ t, v: lateHot ? 0.95 : 0.3 + t / 180, vr: lateHot ? 0.95 : 0.3 + t / 180 });
+  });
+  const r = computeReads({ samples, bands, answers: {}, interruptEegT: null });
+  const s = r.stats;
+  assert.strictEqual(s.strongWindowComplete, true, JSON.stringify(s));
+  assert.ok(s.strongToSec <= 60,
+    `the short high islands after the gaps cannot become a full strongest run: ${JSON.stringify(s)}`);
+  assert.ok(r.reads[3].r1 <= 0.65, JSON.stringify(r.reads[3]));
+});
+
+ok('zero crossings are described as "not once", never "only not once"', () => {
+  const samples = [], bands = [];
+  for (let t = 0; t <= 180; t++) {
+    const rise = Math.min(1, t / 30);
+    samples.push({ t, v: rise, vr: rise });
+    bands.push({ t, delta: 0.30, theta: 0.25, alpha: 0.20,
+      beta: 0.08 + 0.20 * rise, gamma: 0.004 });
+  }
+  const r = computeReads({ samples, bands,
+    answers: { intake: { 1: 'Honestly, all over the place' } }, interruptEegT: null });
+  assert.strictEqual(r.stats.crossings, 0, JSON.stringify(r.stats));
+  const copy = (r.reads || []).map((read) => [read.sentence, read.ledger && read.ledger.did].filter(Boolean).join(' ')).join(' ');
+  assert.ok(!/only not once/i.test(copy), copy);
+  assert.ok(/not once/i.test(copy), copy);
+});
+
+ok('a strongest run never advertises a meaningless 0% lift', () => {
+  const samples = [], bands = [];
+  for (let t = 0; t <= 60; t++) {
+    samples.push({ t, v: 0.5, vr: 0.5 });
+    bands.push({ t, delta: 0.30, theta: 0.25, alpha: 0.20, beta: 0.24, gamma: 0.004 });
+  }
+  const r = computeReads({ samples, bands, answers: {}, interruptEegT: null });
+  assert.strictEqual(r.stats.strongAbove, 0, JSON.stringify(r.stats));
+  assert.ok(!/0%/.test(r.reads[3].sentence), r.reads[3].sentence);
+});
+
 ok('the settle percentage agrees with the settle time as displayed', () => {
   [openingPeak(), dippy(), flatline(), driftHeavy()].forEach((fx) => {
     const r = run(fx);

@@ -217,7 +217,17 @@
         }
         else if (m.type === S.ARCHETYPE && m.label) setAnswers((a) => ({ ...a, archetype: m.label }));
         else if (m.type === S.REVEAL) {
-          setReveal({ samples: m.samples || [], interruptT: m.interruptT, reads: m.reads || [] });
+          setReveal({
+            samples: m.samples || [], interruptT: m.interruptT, reads: m.reads || [],
+            archetype: m.archetype || null,
+            // An explicit policy flag outranks the presence of a path. Keeping
+            // the two separate lets Close distinguish "not measured" from the
+            // operationally different "measured, but the line failed to load".
+            measured: m.eegDerivedClaimsAllowed === false
+              || (m.archetype && m.archetype.measured === false) ? false : true,
+            dataQualityStatus: m.dataQualityStatus || null,
+            stats: m.stats || null,
+          });
           // the reveal payload carries the computed archetype, so the takeaway
           // can never name a different one than the wall just showed
           if (m.archetype && m.archetype.label) setAnswers((a) => ({ ...a, archetype: m.archetype.label }));
@@ -330,7 +340,10 @@
     const touch = 'ontouchstart' in window || (navigator.maxTouchPoints || 0) > 1;
     const deviceMode = params.get('kiosk') === '0' ? false
       : (standalone || touch || params.get('kiosk') === '1');
-    if (deviceMode) document.body.classList.add('device');
+    // both elements: the ground colour has to be on <html> too, because that is
+    // what paints any strip the fixed #stage does not cover, and no selector
+    // rooted at body.device can ever reach it.
+    if (deviceMode) { document.body.classList.add('device'); document.documentElement.classList.add('device'); }
 
     // ============================================================
     // FILL THE WHOLE iPAD, whatever iPad it is.
@@ -348,6 +361,20 @@
     // Safari's bars come and go.
     // ============================================================
     const DESIGN_W = 816, DESIGN_H = 1172;
+    const stageEl = document.getElementById('stage');
+
+    // The LAYOUT viewport, measured off #stage itself. #stage is
+    // position:fixed;inset:0, so its own box is by definition the area a fixed
+    // element covers, whatever iPadOS currently believes the viewport to be.
+    // Measuring the thing we are filling beats asking any of the three height
+    // APIs, which disagree with each other exactly when the keyboard is up.
+    function layoutBox() {
+      const r = stageEl && stageEl.getBoundingClientRect();
+      const w = (r && r.width) || window.innerWidth;
+      const h = (r && r.height) || window.innerHeight;
+      return { w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
+    }
+
     function fit() {
       const room = document.getElementById('room'); if (!room) return;
       const screenEl = room.querySelector('.screen');
@@ -358,26 +385,74 @@
         if (screenEl) { screenEl.style.width = DESIGN_W + 'px'; screenEl.style.height = DESIGN_H + 'px'; }
         return;
       }
-      const vw = window.innerWidth;
-      const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+      // NEVER visualViewport.height. The software keyboard shrinks the VISUAL
+      // viewport by ~350px while the layout viewport stays full height, so
+      // sizing from it shrank the canvas the moment a guest tapped the on-mind
+      // textarea or the email field, and #stage went on centring that short
+      // canvas over a full-height screen: a band above it and a band below.
+      // Worse, the shortened size survived the keyboard leaving and rode along
+      // to the closing screen, which is why Deep Diver had a band at the bottom
+      // with no keyboard anywhere near it. The keyboard overlays this app the
+      // way it overlays a native one; it does not resize it.
+      const box = layoutBox();
       // cover the narrow axis so type and touch targets stay the designed size
-      const s = Math.max(vw / DESIGN_W, vh / DESIGN_H);
-      // then give the canvas exactly the viewport, expressed in pre-scale units
+      const s = Math.max(box.w / DESIGN_W, box.h / DESIGN_H);
+      // then give the canvas exactly the viewport, expressed in pre-scale units.
+      // ceil, never floor: rounding the canvas DOWN leaves a hairline of shell
+      // showing along an edge after the scale, and a hairline of black reads as
+      // a broken app.
       if (screenEl) {
-        screenEl.style.width = Math.ceil(vw / s) + 'px';
-        screenEl.style.height = Math.ceil(vh / s) + 'px';
+        screenEl.style.width = Math.ceil(box.w / s) + 'px';
+        screenEl.style.height = Math.ceil(box.h / s) + 'px';
       }
       room.style.transform = 'scale(' + s + ')';
     }
+
+    // iOS brings a focused input into view by SCROLLING THE LAYOUT VIEWPORT
+    // underneath the visual one. #stage is pinned to the layout viewport, so
+    // that scroll carried the whole room up off the top of the screen and left
+    // the shell showing as a band under the status bar. Put the offset back and
+    // undo the document scroll, so the room stays welded to what the guest can
+    // actually see, keyboard or no keyboard.
+    function anchor() {
+      if (!deviceMode || !stageEl) return;
+      const vv = window.visualViewport;
+      const top = vv ? Math.round(vv.offsetTop) : 0;
+      // only set a transform when there is an offset to correct: a transform on
+      // #stage would otherwise become the containing block for the fixed link
+      // strip and the lost-link cover
+      stageEl.style.transform = top ? 'translateY(' + top + 'px)' : '';
+      if (window.pageYOffset || window.pageXOffset) window.scrollTo(0, 0);
+    }
+
+    // Synchronous, deliberately. Coalescing this behind requestAnimationFrame
+    // meant the canvas silently stopped re-measuring whenever the surface was
+    // not painting (a backgrounded tab, a display asleep), and it came back at
+    // the stale size. fit() is one rect read and three style writes; it is
+    // cheaper than the bug.
+    function relayout() { anchor(); fit(); }
+    // iPadOS reports post-keyboard and post-rotation geometry late, in stages,
+    // and the LAST reading is the one the canvas keeps. One reading taken mid
+    // animation is how a dismissed keyboard left the canvas short for the whole
+    // rest of the session. Re-measure while it settles as well as during.
+    const SETTLE_MS = [60, 160, 360, 700];
+    function relayoutSettling() { relayout(); SETTLE_MS.forEach((d) => setTimeout(relayout, d)); }
+
     // iOS home-screen apps drop plain resize events on rotation, listen on
     // every channel a rotation or viewport change can announce itself.
-    window.addEventListener('resize', fit);
-    window.addEventListener('orientationchange', () => setTimeout(fit, 60));
+    window.addEventListener('resize', relayout);
+    window.addEventListener('orientationchange', relayoutSettling);
+    window.addEventListener('scroll', relayout, { passive: true });
     if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', fit);
-      window.visualViewport.addEventListener('scroll', fit);
+      window.visualViewport.addEventListener('resize', relayoutSettling);
+      window.visualViewport.addEventListener('scroll', relayout);
     }
-    window.addEventListener('pageshow', fit);
+    window.addEventListener('pageshow', relayoutSettling);
+    // the textarea on the on-mind screen and the email field are where iPadOS
+    // moves the viewport, and neither focus nor blur reliably fires a resize on
+    // its own on every iPadOS version.
+    document.addEventListener('focusin', relayoutSettling);
+    document.addEventListener('focusout', relayoutSettling);
     fit();
 
     // ============================================================
@@ -393,8 +468,12 @@
       const el = document.getElementById('rotate');
       if (!el) return;
       const check = () => {
-        const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-        const landscape = window.innerWidth > vh * 1.06;   // hysteresis, ignore near-square wobble
+        // the LAYOUT box again, not visualViewport.height. With the keyboard up
+        // the visual viewport of a portrait 11" iPad is shorter than it is wide,
+        // so reading orientation off it told a guest typing their email to turn
+        // the iPad upright while they were holding it upright.
+        const box = layoutBox();
+        const landscape = box.w > box.h * 1.06;   // hysteresis, ignore near-square wobble
         el.classList.toggle('on', landscape);
         document.body.classList.toggle('landscape', landscape);
         // iPadOS 16.4+ honours this in an installed (standalone) web app; it is a

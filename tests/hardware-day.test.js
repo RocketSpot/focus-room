@@ -109,13 +109,20 @@ const mk = () => {
 {
   const D = require(path.join(__dirname, '..', 'lib', 'diagnose.js'));
   const base = { beat: 'fit', sidecar: { running: true, ready: true },
-    buds: { left: true, right: true }, battery: {}, lastFrameAgo: 9000, link: { eeg: 'live' } };
-  const rej = D.diagnose(Object.assign({}, base, { analysisAlive: true }));
+    buds: { left: true, right: true }, budsEverUp: true, everStreamed: true,
+    battery: {}, lastFrameAgo: 9000, link: { eeg: 'live', buds: true, lost: false } };
+  const rej = D.diagnose(Object.assign({}, base, { analysisAlive: true, transportAlive: true }));
   check('ops banner: frame silence with the analyser ticking is picky-analysis, not a dropped link',
     !!rej.alerts.find(a => a.id === 'analysis-picky') && !rej.alerts.find(a => a.id === 'signal-stall'),
     JSON.stringify(rej.alerts.map(a => a.id)));
-  const loss = D.diagnose(Object.assign({}, base, { analysisAlive: false }));
-  check('ops banner: true silence still reads as the signal stalling',
+  // Frame silence ALONE is no longer permitted to invent a Bluetooth story.
+  // The stall wording requires the orchestrator's canonical loss verdict (or
+  // a post-ever-up both-down report), which is what a genuine drop supplies.
+  const loss = D.diagnose(Object.assign({}, base, {
+    analysisAlive: false, transportAlive: false,
+    buds: { left: false, right: false }, link: { eeg: 'holding', buds: false, lost: true },
+  }));
+  check('ops banner: canonical loss still reads as the signal stalling',
     !!loss.alerts.find(a => a.id === 'signal-stall'));
 }
 

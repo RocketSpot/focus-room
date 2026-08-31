@@ -403,21 +403,39 @@ class WornGate:
 
     @staticmethod
     def _best_trusted_ohm(channels):
-        """channels: iterable of (kohm, state) or (kohm, state, kohm_raw).
+        """channels: iterable of (kohm, state), (kohm, state, kohm_raw), or
+        (kohm, state, kohm_raw, phase).
         Returns (best_ohm, enter_ok): the lowest trusted smoothed impedance in
         ohms (None when no channel can be trusted), and whether any channel
         qualifies for the ENTER streak - which demands the RAW window estimate
-        agree with the smoothed one, so EMA lag (a desk bud riding a recently
-        worn or tone-ramp-depressed average through the pass band) can never
-        finish a streak the electrode did not earn. no_signal (which includes
-        the implausibly-low missing-lead mode), idle and measuring are not
-        evidence."""
+        agree with the smoothed one AND, when supplied by the production fit
+        path, the channel's QC phase say ``good``. This last condition is
+        intentionally independent of the broad worn/not-worn threshold: the
+        2026-08-31 hardware run produced 0.99-2.12 MOhm values which were below
+        the worn threshold while every channel simultaneously reported
+        open/bad/no skin contact. A bad QC channel must never vote a side worn.
+        EMA lag (a desk bud riding a recently worn or tone-ramp-depressed
+        average through the pass band) can never finish a streak the electrode
+        did not earn. no_signal (which includes the implausibly-low
+        missing-lead mode), idle and measuring are not evidence.
+
+        The phase field is optional only for compatibility with the lower-level
+        unit probes which predate it. ZoneSource always supplies it."""
         best = None
         enter_ok = False
         for c in channels:
             kohm, state = c[0], c[1]
             raw = c[2] if len(c) > 2 else kohm
+            phase = c[3] if len(c) > 3 else None
             if kohm is None or state in ("no_signal", "idle", "measuring"):
+                continue
+            phase_ok = phase is None or phase == "good"
+            # A production channel whose independent QC is bad is not trusted
+            # for either entering OR staying worn. Excluding it from `best`
+            # also lets the existing staleness guard demote a previously-good
+            # ear after a short transient, instead of letting a low-looking
+            # open/no-contact number preserve "good" forever.
+            if not phase_ok:
                 continue
             ohm = kohm * 1000.0
             if best is None or ohm < best:

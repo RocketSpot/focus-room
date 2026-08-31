@@ -13,6 +13,7 @@
 // ============================================================
 process.env.FOCUSROOM_FIT_IMPEDANCE_CAP_MS = '80';   // before require: module constant
 const assert = require('assert');
+const fs = require('fs');
 const path = require('path');
 const { Orchestrator } = require(path.join(__dirname, '..', 'app', 'orchestrator.js'));
 
@@ -71,6 +72,22 @@ const seatNoBuds = (o) => {
   seat(o);
   check('seating opens the impedance phase, not the stream',
     sent.includes('start_fit') && !sent.some((s) => s.startsWith('start_session')), sent.join(','));
+  // Captured hardware shape from 2026-08-31: numerically below the old broad
+  // worn threshold, but every estimator row explicitly says bad/no contact.
+  const badQcChannels = {
+    left: {
+      ch1: { kohm: 1201.5, kohmRaw: 550.6, state: 'open', phase: 'bad', hint: 'no skin contact' },
+      ch2: { kohm: 1014.4, kohmRaw: 493.2, state: 'open', phase: 'bad', hint: 'no skin contact' },
+    },
+    right: {
+      ch1: { kohm: 2123.3, kohmRaw: 1122.4, state: 'open', phase: 'bad', hint: 'no skin contact' },
+      ch2: { kohm: 1699.9, kohmRaw: 952.9, state: 'open', phase: 'bad', hint: 'no skin contact' },
+    },
+  };
+  o.onSidecar({ type: 'fit/impedance', allGood: false, channels: badQcChannels,
+    worn: { left: 'checking', right: 'checking' } });
+  check('bad-QC/no-contact hardware evidence cannot hand over to the stream',
+    !sent.some((s) => s.startsWith('start_session')), sent.join(','));
   o.onSidecar({ type: 'fit/impedance', allGood: true, channels: {}, worn: { left: 'good', right: 'good' } });
   check('the worn verdict hands over to the signal-check stream',
     sent.includes('start_session:signal_check'), sent.join(','));
@@ -79,6 +96,18 @@ const seatNoBuds = (o) => {
   check('a second allGood does not double-start the stream',
     sent.filter((s) => s === 'start_session:signal_check').length === n, sent.join(','));
   o._clearSession();
+}
+
+// Cross-language contract: the Python producer must feed the independent QC
+// phase into WornGate and require both ears before emitting allGood. The Python
+// behavioral test replays every captured row; these assertions prevent a
+// future bridge edit from silently dropping that evidence again.
+{
+  const zoneSource = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'zone_source.py'), 'utf8');
+  check('sidecar forwards each channel QC phase into WornGate',
+    /c\["kohm"\], c\["state"\], c\["kohmRaw"\], c\["phase"\]/.test(zoneSource));
+  check('sidecar allGood requires explicit good verdicts from both ears',
+    /all\(verdict\.get\(side\) == "good" for side in \("left", "right"\)\)/.test(zoneSource));
 }
 
 // ---- exit 2: the guest moves ahead (NEVER gated) ----
