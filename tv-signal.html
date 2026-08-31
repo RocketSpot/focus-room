@@ -334,6 +334,14 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
     // engineering view + the operator's coaching prompt, it just never reaches the wall.
     var QUAL = null, selL = 'Left-A', selR = 'Right-A', selSwitchL = null, selSwitchR = null;
     var GUEST_WORD = 'This is you', GUEST_SUB = 'live from your earbuds';
+    // the sub-line's claim waits for actual data: over an empty field it read
+    // as a broken screen for the first ~20s of a real fit-up
+    var GUEST_SUB_WARMUP = 'the room is warming up';
+    function liveSub() { return (typeof haveData !== 'undefined' && haveData) ? GUEST_SUB : GUEST_SUB_WARMUP; }
+    var subHoldTimer = setInterval(function () {
+      try { if (typeof haveData !== 'undefined' && haveData) { setSub(GUEST_SUB); clearInterval(subHoldTimer); } }
+      catch (e) { clearInterval(subHoldTimer); }
+    }, 500);
     function onQuality(m) {
       QUAL = m;
       var sel = m.selectedConsumerChannels || {};
@@ -527,7 +535,20 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
 
     function render() {
       ctx.clearRect(0, 0, CW, CH);
-      if (!haveData || count < 2) { requestAnimationFrame(render); return; }
+      if (!haveData || count < 2) {
+        // The guest sits in front of this screen for up to ~20s before the
+        // first sample lands (connect + tone settle + stream start), and a
+        // headline claiming "live from your earbuds" over a blank field reads
+        // as broken. Quiet centrelines say "warming up" without a single word
+        // about signal.
+        ctx.strokeStyle = 'rgba(214,212,201,0.10)';
+        ctx.lineWidth = 1;
+        for (var li = 0; li < 5; li++) {
+          var ly = Math.round(CH * (li + 0.5) / 5) + 0.5;
+          ctx.beginPath(); ctx.moveTo(16, ly); ctx.lineTo(CW - 16, ly); ctx.stroke();
+        }
+        requestAnimationFrame(render); return;
+      }
       var rightIdx = lastIndex, leftIdx = rightIdx - Math.round(WINDOW_S * CFG.expectedRate);
 
       if (!engOn) {
@@ -653,7 +674,7 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
       lastSeq = 0; droppedDisplayBatches = 0; selSwitchL = null; selSwitchR = null;
       for (var i = 0; i < 4; i++) { rawRing[i].fill(0); filtRing[i].fill(0); presentRing[i].fill(0); }
       cf = [makeChannelFilter(), makeChannelFilter(), makeChannelFilter(), makeChannelFilter()];
-      setWord(GUEST_WORD); setSub(GUEST_SUB); document.getElementById('stL').textContent = ''; document.getElementById('stR').textContent = '';
+      setWord(GUEST_WORD); setSub(liveSub()); document.getElementById('stL').textContent = ''; document.getElementById('stR').textContent = '';
     }
 
     // ============================================================
@@ -749,7 +770,7 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
       document.getElementById('glowB').style.transform = 'translate(' + (Math.cos(t / 13) * 18).toFixed(1) + 'px,' + (Math.sin(t / 10) * 12).toFixed(1) + 'px)';
       requestAnimationFrame(idleGlow); })();
 
-    setWord(GUEST_WORD); setSub(GUEST_SUB);
+    setWord(GUEST_WORD); setSub(liveSub());
     // Staff caption carries the engineering wording (relative display amplitude ·
     // uncalibrated); the guest just sees where it comes from, never a signal verdict.
     function captionFor(staff) {

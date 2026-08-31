@@ -532,6 +532,20 @@ class DualBLEConnection:
             matched = False
             for size in (BLE_PACKET_SIZE_LOFF, BLE_PACKET_SIZE):
                 if i + size <= data_len and data[i] == 0xA0 and data[i + size - 1] == 0xC0:
+                    # Say ONCE which firmware framing this pair speaks. The
+                    # 2026-08-31 session ran all day on legacy 9-byte packets,
+                    # so in-reading contact monitoring (the inline lead-off
+                    # bits) was silently inert and nobody knew why the coach
+                    # never spoke from measured contact.
+                    if not getattr(self, '_framing_reported', None):
+                        self._framing_reported = True
+                        if size == BLE_PACKET_SIZE:
+                            print('[connection] firmware sends legacy 9-byte packets: '
+                                  'no inline lead-off bits, in-reading contact '
+                                  'monitoring unavailable for this pair', flush=True)
+                        else:
+                            print('[connection] firmware sends 11-byte packets: '
+                                  'inline lead-off contact monitoring active', flush=True)
                     self._process_packet(bytes(data[i: i + size]), device_id)
                     i += size
                     matched = True
@@ -578,6 +592,14 @@ class DualBLEConnection:
             adm["abs"] += 1
         else:
             delta = (raw_num - adm["last"] + 256) % 256
+            # the firmware's wrap skip (see the stats block below): a 2-step
+            # across the wrap is one packet, not a hole. Folding it here keeps
+            # the absolute index continuous, so the impedance tone's true
+            # positions do not gain a phantom +1 shift per wrap (a mid-window
+            # shift rotates half the window against the other and shaves the
+            # measured amplitude).
+            if delta == 2 and adm["last"] >= 0xFE:
+                delta = 1
             if delta == 0:
                 adm["dupes"] += 1
                 return
@@ -615,17 +637,27 @@ class DualBLEConnection:
             ch2_raw -= 0x1000000
 
         # Track statistics
+        # WRAP SKIP (2026-08-31 forensics): this pair's firmware skips one
+        # counter value each wrap, so 'dropped' accumulated exactly
+        # received/255 on BOTH buds all session, a deterministic artifact the
+        # operator read as steady packet loss. A step of 2 that crosses the
+        # wrap boundary is that skip, not a lost packet. Cost: a genuine
+        # single-packet loss landing exactly on a wrap (1 in 255 positions)
+        # is absorbed; a systematic +0.4% phantom loss on every session is
+        # the worse lie.
+        def _wrap_skip(last, cur):
+            return last is not None and last >= 0xFE and ((cur - last) & 0xFF) == 2
         if device_id == 1:
             if self._dev1_last_sample is not None:
                 expected = (self._dev1_last_sample + 1) & 0xFF
-                if raw_num != expected:
+                if raw_num != expected and not _wrap_skip(self._dev1_last_sample, raw_num):
                     self._dev1_dropped += (raw_num - expected) & 0xFF
             self._dev1_last_sample = raw_num
             self._dev1_received += 1
         else:
             if self._dev2_last_sample is not None:
                 expected = (self._dev2_last_sample + 1) & 0xFF
-                if raw_num != expected:
+                if raw_num != expected and not _wrap_skip(self._dev2_last_sample, raw_num):
                     self._dev2_dropped += (raw_num - expected) & 0xFF
             self._dev2_last_sample = raw_num
             self._dev2_received += 1

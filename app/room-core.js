@@ -142,6 +142,16 @@ function createRoom(hooks = {}) {
       fs.appendFile(ROOM_LOG, line, () => {});
     } catch (_) { /* the log must never be able to hurt the room */ }
   }
+  // the trail is diagnostics, not the session record: a guest's email address
+  // is recognisable there (a***@domain) but never raw
+  function maskEmailIn(obj) {
+    const raw = obj && obj.payload && typeof obj.payload.email === 'string'
+      ? obj.payload.email : null;
+    if (!raw) return obj;
+    const at = raw.indexOf('@');
+    const masked = at > 1 ? raw[0] + '***' + raw.slice(at) : '***';
+    return Object.assign({}, obj, { payload: Object.assign({}, obj.payload, { email: masked }) });
+  }
   function pushDiag(channel, payload) {
     try { if (hooks.onDiag) hooks.onDiag(channel, payload); } catch (_) {}
     // the frame channel is ~1/s of noise with no diagnostic value on disk
@@ -296,8 +306,13 @@ function createRoom(hooks = {}) {
     });
     server.on('client-message', ({ role, msg }) => {
       // EVERY inbound action - every iPad tap, every operator command - lands
-      // in the trail with its role and timestamp before it is acted on
-      pushDiag('client:msg', { role, msg });
+      // in the trail with its role and timestamp before it is acted on.
+      // The one exception is the guest's email address: the trail and its ops
+      // mirror are diagnostics, not the session record, and the address was
+      // being written into both raw against the masking policy the outputs
+      // pipeline already follows. The record keeps the real address; the
+      // trail keeps enough to recognise it.
+      pushDiag('client:msg', { role, msg: maskEmailIn(msg) });
       // The desktop signal bridge is plumbing, not a guest: its traffic belongs
       // to the RemoteSupervisor (which listens on the server itself), never to
       // the orchestrator.
@@ -348,7 +363,7 @@ function createRoom(hooks = {}) {
         if (msg && msg.type === 'audio/event' && msg.kind === 'ducked') orchestrator.onRoomAudioEvent(msg);
         return;
       }
-      pushDiag('surface:client', { role, msg });
+      pushDiag('surface:client', { role, msg: maskEmailIn(msg) });
       orchestrator.onClientMessage(msg, role);
     });
     server.on('client-joined', (info) => pushDiag('surface:client', { joined: info }));
@@ -394,7 +409,7 @@ function createRoom(hooks = {}) {
       try { if (hooks.onBeat) hooks.onBeat({ surface, beat }); } catch (_) {}
       pushDiag('orch:beat', { beat, surface });
     });
-    orchestrator.on('event', (ev) => pushDiag('orch:event', ev));
+    orchestrator.on('event', (ev) => pushDiag('orch:event', maskEmailIn(ev)));
 
     // Outputs: card auto-prints + profile renders the moment results are processed.
     orchestrator.on('process-outputs', async ({ reveal, answers, sessionId }) => {

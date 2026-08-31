@@ -603,9 +603,15 @@ window.addEventListener('unhandledrejection',function(e){er({kind:'unhandledreje
   var numEls=null, numPrev=[];
   function paintNums(){
     var nb=live.bands, nm=live.metrics, nf=live.frame;
+    // The SDK's own focus/stress/drowsiness are vendor diagnostics from the
+    // share-of-total pipeline and sat PEGGED at their rails for the whole
+    // 2026-08-31 session while being displayed as if live. A railed value is
+    // labelled so an operator never reads a saturated diagnostic as a reading.
+    var railed=function(v){ return v!=null && (v<=0.001 || v>=0.999); };
+    var sdkVal=function(v){ return v==null ? '–' : (railed(v) ? fx3(v)+' (railed)' : fx3(v)); };
     var nums=[['δ delta',fx3(nb.delta)],['θ theta',fx3(nb.theta)],['α alpha',fx3(nb.alpha)],['β beta',fx3(nb.beta)],['γ gamma',fx3(nb.gamma)],
       ['β/(α+θ)',fx3(nb.engIndex)],['engagement',fx3(nf.engagementRel)],['state',nf.stateWord||'–'],
-      ['focus',fx3(nm.focus)],['stress',fx3(nm.stress)],['drowsiness',fx3(nm.drowsiness)]];
+      ['focus (SDK diag)',sdkVal(nm.focus)],['stress (SDK diag)',sdkVal(nm.stress)],['drowsiness (SDK diag)',sdkVal(nm.drowsiness)]];
     var host=$('nums');
     if(!numEls || numEls.length!==nums.length){
       host.innerHTML=''; numEls=[]; numPrev=[];

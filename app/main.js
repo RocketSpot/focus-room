@@ -203,6 +203,17 @@ function windowConfigArg() {
 // by the server's bind-time reload.
 // main-process failures land in the trail too. uncaughtExceptionMonitor is
 // OBSERVATION ONLY: it never swallows the exception or changes crash behaviour.
+// The trail must say WHICH code produced it: the 2026-08-31 session was run on
+// a stale launch and the visual captures the marker promised never happened.
+// One line at boot ties every later line to a commit (dev) or version (packaged).
+try {
+  const { execSync } = require('child_process');
+  let commit = null;
+  try { commit = execSync('git rev-parse --short HEAD', { cwd: __dirname, timeout: 2000 }).toString().trim(); } catch (_) {}
+  const pkg = require('../package.json') || {};
+  room.pushDiag('app:version', { version: pkg.version || null, commit, packaged: !!config.isPackaged });
+} catch (_) { /* a version line must never block a boot */ }
+
 process.on('uncaughtExceptionMonitor', (e) => {
   try { room.pushDiag('main:uncaught', { msg: String((e && e.message) || e), stack: String((e && e.stack) || '').slice(0, 2000) }); } catch (_) {}
 });

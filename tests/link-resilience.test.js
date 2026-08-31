@@ -53,8 +53,13 @@ function toReading(o) {
   intake(o, { reading: { id: 'octopus', title: 'How an Octopus Thinks' } });
 }
 // a frame as the sidecar sends it
-const frame = (o, tRel, v) => o.onSidecar({
-  type: 'eeg/frame', tRel, t: Date.now(), engagementRel: v == null ? 0.6 : v, signalQuality: 0.9,
+// The reading clock is wall-anchored and frames map through their own master
+// stamp, so simulating time means moving the MASTER clock, not the tRel field.
+// Scenarios that need seconds to pass install a virtual clock on the
+// orchestrator (o.now) and stamp frames from it.
+const frame = (o, tRel, v, tMs) => o.onSidecar({
+  type: 'eeg/frame', tRel, t: tMs != null ? tMs : Date.now(),
+  engagementRel: v == null ? 0.6 : v, signalQuality: 0.9,
 });
 
 (async () => {
@@ -128,10 +133,14 @@ const frame = (o, tRel, v) => o.onSidecar({
     const o = newOrch();
     ipadPresent = true;
     toReading(o);
-    for (let i = 0; i < 4; i++) frame(o, i, 0.6);
+    let vnow = Date.now();
+    o.now = () => vnow;
+    for (let i = 0; i < 4; i++) { vnow += 1000; frame(o, i, 0.6, vnow); }
     check('a live stream reports link.eeg = live', o._linkState().eeg === 'live');
 
-    await sleep(300);   // > EEG_STALL_MS with no frames at all
+    // ten virtual seconds of silence, stepped so the real stall interval can
+    // fire mid-gap the way it does in the room
+    for (let i = 0; i < 10; i++) { vnow += 1000; await sleep(30); }
     check('the stall is detected', o._eegDown === true);
     check('the beat did NOT change when the stream died', o.beat === 'reading', `beat=${o.beat}`);
     // The guest is NEVER told the signal dropped — the room holds quietly and the
@@ -141,7 +150,8 @@ const frame = (o, tRel, v) => o.onSidecar({
     check('the session is flagged so the reveal leans on clean stretches', o.signalIssue === true);
 
     // the buds come back
-    frame(o, 10, 0.6);
+    vnow += 1000;
+    frame(o, 10, 0.6, vnow);
     check('a returning frame clears the hold', o._eegDown === false);
     check('the notice clears with it', o._notice() === null);
     check('the dropout was recorded as a gap', o._streamGaps.length === 1,
@@ -157,13 +167,16 @@ const frame = (o, tRel, v) => o.onSidecar({
     const o = newOrch();
     ipadPresent = true;
     toReading(o);
-    for (let i = 0; i <= 10; i++) frame(o, i, 0.6);
+    let vnow = Date.now();
+    o.now = () => vnow;
+    for (let i = 0; i <= 10; i++) { vnow += 1000; frame(o, i, 0.6, vnow); }
     const beforeMax = o._streamT();
     check('the clock advanced with the stream', beforeMax >= 10, `t=${beforeMax}`);
 
-    // the sidecar dies and comes back; its tRel reopens at zero
+    // the sidecar dies and comes back; its tRel reopens at zero, but the wall
+    // keeps moving, so the mapped clock simply continues
     o.onSidecarReady();
-    for (let i = 0; i <= 5; i++) frame(o, i, 0.6);
+    for (let i = 0; i <= 5; i++) { vnow += 1000; frame(o, i, 0.6, vnow); }
 
     const ts = (o.streamLog.frames || []).map((f) => f.t);
     let monotonic = true;

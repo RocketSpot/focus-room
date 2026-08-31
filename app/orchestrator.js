@@ -250,9 +250,8 @@ class Orchestrator extends EventEmitter {
     this._gapOpenT = null;       // stream time a still-open gap started at
     // The stream clock must never run backwards. A sidecar restart re-anchors
     // tRel at 0, so every later sample would land back at the start of the
-    // chart and scramble the session's timeline. The offset carries the clock
-    // across the gap instead.
-    this._streamOffset = 0;
+    // chart and scramble the session's timeline. The reading clock is wall-
+    // anchored now, so there is no offset to carry.
     this._maxStreamT = 0;
   }
 
@@ -264,9 +263,16 @@ class Orchestrator extends EventEmitter {
   // shared master (wall) clock, with the documented uncertainty. Never Date.now-only.
   _mono() { try { return +perf.now().toFixed(3); } catch (e) { return null; } }
 
-  // map a master-clock timestamp onto the EEG session timeline (seconds)
+  // Map a master-clock timestamp onto the session timeline (seconds since the
+  // READING began). The epoch used to be anchored at the FIRST EEG FRAME, which
+  // on real hardware lands ~11.6s after the guest starts reading (SDK warm-up),
+  // so every guest-facing clock was silently short by that much: the 2026-08-31
+  // session told its guest the notification came at 0:50 when they experienced
+  // it at 1:01.5, and the chart's left edge dropped their first 11.6 seconds.
+  // The reading's own wall start is the one anchor every surface, event and
+  // sample can honestly share; frames map through their own master stamp.
   eegTimeOf(masterT) {
-    if (this.timeline.streamEpoch == null) return null;
+    if (this.timeline.streamEpoch == null || !Number.isFinite(masterT)) return null;
     return +((masterT - this.timeline.streamEpoch) / 1000).toFixed(2);
   }
 
@@ -276,6 +282,11 @@ class Orchestrator extends EventEmitter {
   _readingEegTimeOf(masterT) {
     if (this.sessionStartedAt == null || !Number.isFinite(masterT)
       || masterT < this.sessionStartedAt) return null;
+    // Once the reading's stream has stopped, later taps (the strongest-stretch
+    // guess, the email, the close) are not brain coordinates: stamping them on
+    // the reading clock put eegT 194.68 on an email tap for a 99-second
+    // reading. Events after the reading carry wall time only.
+    if (this._readingEndedAtMs != null && masterT > this._readingEndedAtMs) return null;
     const mapped = this.eegTimeOf(masterT);
     return Number.isFinite(mapped) && mapped >= 0 ? mapped : null;
   }
@@ -377,8 +388,25 @@ class Orchestrator extends EventEmitter {
       else if (!l) { side = 'left'; reason = 'contact'; }
       else if (!r) { side = 'right'; reason = 'contact'; }
     }
+    // The card is only meaningful while a stream can be coached. Without this
+    // it froze on its last advice: the 2026-08-31 operator watched "push the
+    // LEFT earbud in" from 14:42 to the end of the session, long after the
+    // reading had moved on.
+    if (!this._streamingBeat()) { side = null; reason = null; }
     const key = side ? `${side}:${reason}` : 'none';
     if (key === this._coachKey) return;          // only speak when the advice changes
+    // HYSTERESIS: eligibility flaps sub-second at stream start, and a card
+    // that changes its mind faster than an operator can read it trains them
+    // to ignore it. New advice must hold for a beat before it is shown;
+    // clearing the card is always immediate.
+    const nowMs = this.now();
+    if (side && this._coachPendingKey !== key) {
+      this._coachPendingKey = key;
+      this._coachPendingAt = nowMs;
+      return;
+    }
+    if (side && nowMs - (this._coachPendingAt || 0) < 2500) return;
+    this._coachPendingKey = null;
     this._coachKey = key;
     const SAY = {
       left: 'Ask them to gently push the LEFT earbud in and settle, no need to mention the signal.',
@@ -450,6 +478,11 @@ class Orchestrator extends EventEmitter {
     const ad = this.interruptionTiming.audioDuck;
     if (ad.scheduledAudioContextTime != null) return;  // first report wins (one duck per fire)
     if (typeof p.scheduledAudioContextTime === 'number') ad.scheduledAudioContextTime = p.scheduledAudioContextTime;
+    // clock-domain hygiene (forensics 2026-08-31): the block used to carry the
+    // ORCHESTRATOR's request stamp under the same monotonic label as the audio
+    // page's own numbers, so the duck appeared to start 185ms before it was
+    // requested. Each domain's stamp now travels under its own name.
+    if (typeof p.requestMonotonicMs === 'number') ad.clientRequestMonotonicMs = p.requestMonotonicMs;
     if (typeof p.estimatedStartMonotonicMs === 'number') ad.estimatedStartMonotonicMs = p.estimatedStartMonotonicMs;
     else if (typeof p.requestMonotonicMs === 'number') ad.estimatedStartMonotonicMs = p.requestMonotonicMs;
     if (typeof p.baseLatency === 'number') ad.baseLatencySec = p.baseLatency;
@@ -540,6 +573,7 @@ class Orchestrator extends EventEmitter {
     // first tap was silently dropped and the room sat wedged until someone
     // reloaded the page. Treat a seat-the-earbud tap at idle as the start of a
     // fresh session. (reset() first: it wipes the event log, so record after.)
+    if (kind === GUEST_EVENT.EARBUD_SEATED) this._guestSeatedAtMs = this.now();
     if (this.beat === 'idle' && kind === GUEST_EVENT.EARBUD_SEATED) {
       this.reset();
       this.setBeat('welcome');
@@ -597,7 +631,17 @@ class Orchestrator extends EventEmitter {
         } else if (kind === GUEST_EVENT.FIT_CONFIRMED) {
           if (this.baseline && !this.baseline.endedAt) {
             this.baseline.endedAt = this.now();
-            this.log(`baseline: captured ${this.baseline.frames.length} frames / ${this.baseline.bands.length} band samples`);
+            // The window can open inside a rejection stretch (it did on
+            // 2026-08-31: ~7s of usable reference inside the 15s window).
+            // Every consumer already has its own row minimum; the record now
+            // carries the coverage so a thin baseline is visible instead of
+            // silently thin.
+            const windowSec = Math.max(0.1, (this.baseline.endedAt - this.baseline.startedAt) / 1000);
+            this.baseline.windowSec = +windowSec.toFixed(1);
+            this.baseline.coverage = +Math.min(1, this.baseline.bands.length / windowSec).toFixed(2);
+            this.log(`baseline: captured ${this.baseline.frames.length} frames / `
+              + `${this.baseline.bands.length} band samples over ${this.baseline.windowSec}s `
+              + `(coverage ${this.baseline.coverage})`);
           }
           if (this._fitImpWaiting) {
             this._fitImpWaiting = false;   // never armed; nothing to stop
@@ -614,6 +658,10 @@ class Orchestrator extends EventEmitter {
         }
         break;
       case 'reading':
+        if (kind === GUEST_EVENT.READING_FINISHED) {
+          // the boundary after which taps are no longer brain coordinates
+          this._readingEndedAtMs = this.now();
+        }
         if (kind === GUEST_EVENT.READING_STARTED) {
           // already streaming; this just records the guest-perceived start
         } else if (kind === GUEST_EVENT.READING_SCROLL) {
@@ -695,8 +743,19 @@ class Orchestrator extends EventEmitter {
       this.interruptionTiming.eventRenderedTime = shown;
       this.interruptionTiming.eventRenderedEegT = this._readingEegTimeOf(shown);
       this.interruptionTiming.timingMethod = 'ipad_render_report';
-      this.interruptionTiming.timingUncertaintyMs = 400;  // real render time; still no sample marker
+      // The uncertainty of any EEG-relative claim is bounded below by the
+      // WEAKEST link in the chain: the render report is ~400ms but the EEG
+      // alignment leg declares 1200ms, and quoting the smaller number for a
+      // figure that depends on both overstated the room's own precision.
+      this.interruptionTiming.timingUncertaintyMs = Math.max(400,
+        (this.interruptionTiming.eegAlignment
+          && this.interruptionTiming.eegAlignment.estimatedUncertaintyMs) || 0);
       this.interruptionTiming.timingConfidence = 'low_medium';
+      // interruptEegT drives every guest-facing "at 0:50" figure, and the
+      // timing block declares the committed paint as its PRIMARY marker; the
+      // figure now honours its own declaration instead of the fire call.
+      const renderedEegT = this.interruptionTiming.eventRenderedEegT;
+      if (Number.isFinite(renderedEegT)) this.interruptEegT = renderedEegT;
     }
     // One committed render produces one event. A reconnect/retry may send the
     // report again, and a delayed report may arrive after the reading beat, but
@@ -715,14 +774,14 @@ class Orchestrator extends EventEmitter {
     // wall-clock anchor for the progress trigger, so a fast scroller still
     // cannot pull the notification into the settle-in stretch
     this._readingStartedAtMs = this.now();
+    this._readingEndedAtMs = null;
     this.interruptionFired = false;
-    this.timeline = { streamEpoch: null, lastFrame: null };
-    // Reset the stream clock's high-water mark and restart offset: the signal
-    // check already ran _streamT() (its clock counts from earbud-in, easily
-    // minutes), and a sidecar restart mid-reading would otherwise compute
-    // _streamOffset from the SIGNAL CHECK's high water instead of the
-    // reading's, teleporting the rest of the session far right on the chart.
-    this._streamOffset = 0;
+    // the epoch IS the reading's start; frames join it via their own master
+    // stamps instead of defining it 11.6 SDK-warm-up seconds too late
+    this.timeline = { streamEpoch: this._readingStartedAtMs, lastFrame: null };
+    // Reset the stream clock's high-water mark: the signal check already ran
+    // _streamT() (its clock counts from earbud-in, easily minutes), and the
+    // reading's chart must not inherit that high water.
     this._maxStreamT = 0;
     // open a fresh full-session recording (stable id → one file, updated in place)
     this.sessionId = this.now();
@@ -914,7 +973,7 @@ class Orchestrator extends EventEmitter {
       // stretches with no signal at all. The chart MUST break its lines here:
       // interpolating across a Bluetooth dropout draws a clean, confident line
       // through a window where nothing was recorded.
-      gaps: this._streamGaps || [],
+      gaps: this._reconciledGaps(),
     };
   }
 
@@ -928,9 +987,14 @@ class Orchestrator extends EventEmitter {
   // across a sidecar restart or a Bluetooth dropout instead of snapping back to
   // zero and stacking the rest of the session on top of its own opening.
   _streamT() {
+    // NEVER the last frame's tRel: that clock froze between frames, so scroll
+    // taps 14 seconds apart were all stamped onto one instant at a gap's left
+    // edge, a track ran backwards when the frame clock re-zeroed, and a no-
+    // signal tail measured zero seconds long (from == to) and was discarded.
+    // The reading clock is wall-anchored and simply advances.
     let t = 0;
-    if (this.timeline.lastFrame) t = this.timeline.lastFrame.tRel;
-    else if (this.sessionStartedAt) t = (this.now() - this.sessionStartedAt) / 1000;
+    if (this.sessionStartedAt != null) t = (this.now() - this.sessionStartedAt) / 1000;
+    else if (this.timeline.lastFrame) t = this.timeline.lastFrame.tRel;
     if (t > this._maxStreamT) this._maxStreamT = t;
     return +t.toFixed(2);
   }
@@ -968,6 +1032,17 @@ class Orchestrator extends EventEmitter {
       id: this.sessionId,
       startedAt: this.sessionStartedAt,
       savedAt: this.now(),
+      // CLOCKS, stated instead of implied (four unlabeled time bases coexisted
+      // in the 2026-08-31 record). Every t/eegT in this file is seconds since
+      // readingStartedAt on the master (wall) clock, except baseline rows
+      // (sidecar fit-stream clock, relative use only) and interruptionTiming
+      // (its own multi-domain block with per-field labels).
+      clocks: {
+        readingStartedAt: this.sessionStartedAt,
+        readingEndedAt: this._readingEndedAtMs || null,
+        guestSeatedAt: this._guestSeatedAtMs || null,
+        note: 'all t and eegT fields are seconds since readingStartedAt',
+      },
       archetype: { label: a.archetype, name: a.archetypeName },
       archetypeFeatures: r.archetype || null,      // settle / variability / raw features
       intake: a.intake || {},                       // the three belief answers
@@ -1001,7 +1076,7 @@ class Orchestrator extends EventEmitter {
       reads: r.reads || null,                       // the four reads
       stats: r.stats || null,                       // the measured figures the reveal quoted
       scroll: this.scrollTrack || [],               // reading pace, on the EEG clock
-      gaps: this._streamGaps || [],                 // stream-clock stretches with no signal
+      gaps: this._reconciledGaps(),                 // reading-clock stretches with no accepted data
       events: this.events || [],                    // guest events on the EEG timeline
       focusLine: this.sessionSamples || [],         // the relative engagement line (t, v, vr)
       stream: this.streamLog || null,               // live frames / bands / metrics, full session, uncapped
@@ -1091,6 +1166,37 @@ class Orchestrator extends EventEmitter {
   // Persist the record. Emitted (not written directly) so main.js owns the store;
   // called at the reveal (core data ready) and again as email/door fill in, the
   // stable id means each save updates the same file.
+  // The gap ledger the chart and reveal consume. Live detection (the stall
+  // watch) is tick-based and can miss a hole that ends just as it would fire:
+  // the 2026-08-31 session had a 6.03s mid-reading hole with no entry, and its
+  // final 6.5 rejected seconds measured zero long (from == to on the frozen
+  // frame clock) and were discarded. The frames themselves are the ground
+  // truth, so the ledger is rebuilt from them at save: every inter-frame hole
+  // above the chart's own break threshold, plus the no-data tail to the end of
+  // the reading, merged with whatever live detection recorded.
+  _reconciledGaps() {
+    const out = (this._streamGaps || []).map((g) => ({ from: g.from, to: g.to }));
+    const frames = (this.streamLog && this.streamLog.frames) || [];
+    const HOLE = 4.5;   // matches the reveal chart's own line-break threshold
+    let prev = 0;       // the reading clock starts at the reading, not the first frame
+    for (const f of frames) {
+      if (!Number.isFinite(f.t)) continue;
+      if (f.t - prev >= HOLE) out.push({ from: +prev.toFixed(2), to: +f.t.toFixed(2) });
+      prev = Math.max(prev, f.t);
+    }
+    const endT = this._readingEndedAtMs != null && this.sessionStartedAt != null
+      ? (this._readingEndedAtMs - this.sessionStartedAt) / 1000 : null;
+    if (endT != null && endT - prev >= HOLE) out.push({ from: +prev.toFixed(2), to: +endT.toFixed(2) });
+    out.sort((a, b) => a.from - b.from);
+    const merged = [];
+    for (const g of out) {
+      const last = merged[merged.length - 1];
+      if (last && g.from <= last.to + 0.5) last.to = Math.max(last.to, g.to);
+      else merged.push({ from: g.from, to: g.to });
+    }
+    return merged;
+  }
+
   _saveSession() {
     if (this.sessionId == null) return;
     try { this.emit('session-record', this._sessionRecord()); }
@@ -1385,17 +1491,10 @@ class Orchestrator extends EventEmitter {
       case 'reading':
         this.log('sidecar restarted during reading, re-issuing START_SESSION; the timeline has a gap');
         this.signalIssue = true; // sticky: the reveal already leans on the clean data
-        // Carry the session clock across the restart. The fresh stream's tRel
-        // reopens at 0, so without this every post-restart sample lands back at
-        // the start of the chart, stacked on top of the session's own opening.
-        // Carry the clock forward by the wall time actually lost, not just to
-        // where it stopped: those seconds happened to the guest, and a reveal
-        // that quietly closes the gap would misplace everything after it.
-        {
-          const lostSec = this._lastFrameAt ? Math.max(0, (this.now() - this._lastFrameAt) / 1000) : 0;
-          this._streamOffset = this._maxStreamT + lostSec;
-        }
-        this.timeline = { streamEpoch: null, lastFrame: null }; // re-anchor on the fresh stream
+        // No clock carry needed: the reading clock is wall-anchored and frames
+        // map through their own master stamps, so the fresh stream lands at the
+        // right seconds on its own and the outage shows as the hole it was.
+        this.timeline.lastFrame = null;
         this.sup.send(SIDECAR_IN.START_SESSION, { reason: 'sidecar_restart' });
         break;
       case 'strongest':
@@ -1419,13 +1518,16 @@ class Orchestrator extends EventEmitter {
   onSidecar(msg) {
     switch (msg.type) {
       case SIDECAR_OUT.FRAME: {
-        // anchor the EEG timeline: streamEpoch = frame master time − tRel.
-        // tRel is shifted by _streamOffset so a restarted stream continues the
-        // session clock rather than reopening it at zero.
-        const tRel = typeof msg.tRel === 'number' ? +(msg.tRel + this._streamOffset).toFixed(3) : null;
-        if (tRel != null && typeof msg.t === 'number') {
-          if (this.timeline.streamEpoch == null) this.timeline.streamEpoch = msg.t - tRel * 1000;
-          this.timeline.lastFrame = { tRel, t: msg.t };
+        // Each frame carries its own master timestamp, so it maps directly onto
+        // the wall-anchored reading clock. No epoch inference, no restart
+        // offset arithmetic: a sidecar restart's fresh tRel=0 lands exactly
+        // where its wall time says, and the outage in between is simply a
+        // visible hole rather than bookkeeping.
+        const mapped = typeof msg.t === 'number' ? this.eegTimeOf(msg.t) : null;
+        const tRel = mapped != null ? mapped
+          : (typeof msg.tRel === 'number' ? +msg.tRel.toFixed(3) : null);
+        if (tRel != null) {
+          this.timeline.lastFrame = { tRel, t: typeof msg.t === 'number' ? msg.t : this.now() };
         }
         // A frame is also the proof the link is alive. Called AFTER the timeline
         // update so a gap being closed can be measured to the RESUMING frame,
@@ -1587,9 +1689,13 @@ class Orchestrator extends EventEmitter {
         if (msg.label) {
           this.answers.archetype = msg.label;
           this.answers.archetypeName = msg.name || this.answers.archetypeName;
-          // let the iPad close screen lead with the real archetype
-          this.server.broadcast(SERVER.ARCHETYPE,
-            { label: msg.label, name: msg.name, settle: msg.settle, variability: msg.variability });
+          // NOT broadcast from here. The sidecar names an archetype the moment
+          // its stream ends, three seconds before the room may rule the same
+          // session unmeasurable, and on 2026-08-31 every surface heard
+          // "Sprinter" for a session whose verdict was "Not measured". The
+          // reveal payload is the single channel that carries the archetype,
+          // after the measurement verdict, so no surface can hear a name the
+          // room has not stood behind.
         }
         break;
       case SIDECAR_OUT.SESSION_SAMPLES:

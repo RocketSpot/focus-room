@@ -26,11 +26,18 @@
     document.getElementById('baseline').setAttribute('y2', (BOX.y + BOX.h * (1 - 0.30)).toFixed(1));
     function el(t, a) { var e = document.createElementNS(NS, t); for (var k in a) e.setAttribute(k, a[k]); return e; }
     function render(data) {
-      var key = 'deep';
-      if (data && data.samples && data.samples.length) {
-        FocusLine.setSamples('session', data.samples, data.troughT != null ? { interruptT: data.troughT } : null);
-        key = 'session';
+      // NO SYNTHETIC FALLBACK. This was the one render surface the no-fallback
+      // fix missed: with no samples it drew the 'deep' preview curve, and a
+      // guest's emailed report carried a line that was not theirs (the
+      // 2026-08-31 report artifacts are quarantined for exactly this). No
+      // samples means a render ERROR the outputs pipeline must see and skip,
+      // never a fabricated line.
+      if (!data || !data.samples || !data.samples.length) {
+        document.body.setAttribute('data-render-error', 'no-samples');
+        return;
       }
+      var key = 'session';
+      FocusLine.setSamples('session', data.samples, data.troughT != null ? { interruptT: data.troughT } : null);
       document.getElementById('line').setAttribute('d', FocusLine.linePath(key, BOX, { samples: 180 }));
       var trough = (data && data.troughT != null) ? data.troughT : FocusLine.interruptInfo(key).trough;
       var pt = FocusLine.pointAt(key, trough, BOX);
@@ -43,8 +50,10 @@
       document.body.setAttribute('data-rendered', '1');
     }
     var q = new URLSearchParams(location.search).get('d');
-    if (q) { try { render(JSON.parse(decodeURIComponent(escape(atob(q))))); } catch (e) { render(null); } }
-    else render(null);
+    if (q) {
+      try { render(JSON.parse(decodeURIComponent(escape(atob(q))))); }
+      catch (e) { document.body.setAttribute('data-render-error', 'parse-failed'); }
+    } else { document.body.setAttribute('data-render-error', 'no-payload'); }
   })();
   </script>
 </body>

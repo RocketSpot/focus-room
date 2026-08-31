@@ -121,6 +121,45 @@ function hasOsc(bands) {
 }
 const oscOf = (b, k) => (b && b.osc && Number.isFinite(+b.osc[k]) ? +b.osc[k] : 0);
 
+// The two earbuds can publish the same accepted analysis window as adjacent
+// rows. Treat that pair as one measured moment everywhere, not only in the
+// chart: otherwise uneven duplication changes medians, lets three baseline
+// moments masquerade as six, and weights one instant twice in a percentage.
+function mergeBandMoments(rows) {
+  const merged = [];
+  for (const src of Array.isArray(rows) ? rows : []) {
+    const t = Number(src && src.t);
+    if (!Number.isFinite(t)) continue;
+    const last = merged[merged.length - 1];
+    if (last && Math.abs(last.t - t) < SAME_T_EPS) {
+      BANDS5.forEach((k) => {
+        last[k] = (last[k] * last._n + Math.max(0, +src[k] || 0)) / (last._n + 1);
+      });
+      last._n += 1;
+      if (src.osc) {
+        if (!last.osc) {
+          last.osc = {}; BANDS5.forEach((k) => { last.osc[k] = oscOf(src, k); });
+          last._oscN = 1;
+        } else {
+          BANDS5.forEach((k) => {
+            last.osc[k] = (last.osc[k] * last._oscN + oscOf(src, k)) / (last._oscN + 1);
+          });
+          last._oscN += 1;
+        }
+      }
+    } else {
+      const row = { t, _n: 1, _oscN: 0 };
+      BANDS5.forEach((k) => { row[k] = Math.max(0, +src[k] || 0); });
+      if (src.osc) {
+        row.osc = {}; BANDS5.forEach((k) => { row.osc[k] = oscOf(src, k); });
+        row._oscN = 1;
+      }
+      merged.push(row);
+    }
+  }
+  return merged;
+}
+
 function medianOf(xs) {
   const a = xs.filter(Number.isFinite).slice().sort((x, y) => x - y);
   if (!a.length) return 0;
@@ -136,9 +175,10 @@ function madOf(xs, mu) {
 // you" literally true rather than a slogan: the room already records fifteen
 // still seconds and, until now, used them for nothing at all.
 function bandReference(bands, baseline) {
-  const base = (baseline && Array.isArray(baseline.bands)) ? baseline.bands.filter((b) => b && b.osc) : [];
+  const base = mergeBandMoments((baseline && Array.isArray(baseline.bands)) ? baseline.bands : [])
+    .filter((b) => b && b.osc);
   const useBaseline = base.length >= BASELINE_MIN_WINDOWS;
-  const src = useBaseline ? base : (bands || []).filter((b) => b && b.osc);
+  const src = useBaseline ? base : mergeBandMoments(bands).filter((b) => b && b.osc);
   const mu = {}; const sigma = {};
   BANDS5.forEach((k) => {
     const vals = src.map((b) => oscOf(b, k));
@@ -156,7 +196,8 @@ const pctFromDb = (d) => (Math.pow(10, d / 10) - 1) * 100;
 // own session. Relative band power is measured directly (unlike a derived "focus"
 // score), so the reveal tells its story through the bands and quotes the figures.
 function bandLayer(bands, reads) {
-  if (!bands || bands.length < 4) return null;
+  bands = mergeBandMoments(bands);
+  if (bands.length < 4) return null;
   const totalT = bands[bands.length - 1].t || 1;
 
   // whole-session share per band (each band's mean power / the sum of all five)
@@ -248,15 +289,18 @@ function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 // And ALL FIVE bands compete. The old code ranked only theta, alpha and beta,
 // then fell back to all five only if those three were under a floor.
 function interruptBandShiftOsc(bands, interruptT, ref) {
-  const rows = (bands || []).filter((b) => b && b.osc);
+  const rows = mergeBandMoments(bands).filter((b) => b && b.osc);
   if (rows.length < 4) return null;
   const totalT = rows[rows.length - 1].t || 1;
   const markT = interruptT * totalT;
   const pre = rows.filter((b) => b.t >= markT - 6 && b.t < markT - 1);
   const post = rows.filter((b) => b.t > markT + 1 && b.t <= markT + 8);
-  const nearest = (n) => [...rows].sort((a, b) => Math.abs(a.t - markT) - Math.abs(b.t - markT)).slice(0, n);
-  const preSrc = pre.length >= 2 ? pre : nearest(3);
-  const postSrc = post.length >= 2 ? post : nearest(3);
+  // No clean row on either side means no effect estimate. Reusing the same
+  // nearest rows for both sides (the old fallback) produced a confident 0%
+  // comparison inside an analysis hole.
+  if (pre.length < 2 || post.length < 2) return null;
+  const preSrc = pre;
+  const postSrc = post;
   let best = null;
   BANDS5.forEach((k) => {
     const d = medianOf(postSrc.map((b) => oscOf(b, k))) - medianOf(preSrc.map((b) => oscOf(b, k)));
@@ -271,7 +315,8 @@ function interruptBandShiftOsc(bands, interruptT, ref) {
 }
 
 function interruptBandShift(bands, interruptT) {
-  if (!bands || bands.length < 6) return null;
+  bands = mergeBandMoments(bands);
+  if (bands.length < 6) return null;
   const totalT = bands[bands.length - 1].t || 1;
   const sm = bands.map((b) => { let t = 0; BANDS5.forEach((k) => { t += Math.max(0, +b[k] || 0); }); t = t || 1e-9;
     const o = { f: b.t / totalT }; BANDS5.forEach((k) => { o[k] = Math.max(0, +b[k] || 0) / t; }); return o; });
@@ -337,16 +382,7 @@ const percentile = (sortedAsc, p) => {
 function bandFocusLine(bands, eventEegT) {
   if (!bands || bands.length < 6) return null;
   // 1) merge the L/R samples that land at the same instant (they arrive as pairs)
-  const merged = [];
-  for (const s of bands) {
-    const last = merged[merged.length - 1];
-    if (last && Math.abs(last.t - s.t) < SAME_T_EPS) {
-      BANDS5.forEach((k) => { last[k] = (last[k] * last._n + Math.max(0, +s[k] || 0)) / (last._n + 1); });
-      last._n += 1;
-    } else {
-      const o = { t: s.t, _n: 1 }; BANDS5.forEach((k) => { o[k] = Math.max(0, +s[k] || 0); }); merged.push(o);
-    }
-  }
+  const merged = mergeBandMoments(bands);
   if (merged.length < 4) return null;
   // 2) per-sample share of the moment's total power
   const sh = merged.map((s) => {

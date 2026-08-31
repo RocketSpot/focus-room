@@ -25,7 +25,14 @@ class EngagementEngine:
     def __init__(
         self,
         smooth_seconds: float = 6.0,   # 4-8s rolling window (doc)
-        emit_interval: float = 1.0,    # update ~once per second (doc)
+        # The analyser hands over one value per 1.0s hop, and a gate of
+        # exactly 1.0s beats against that cadence: whether an incoming value
+        # clears (t - last_emit) >= 1.0 depends on sub-millisecond arrival
+        # jitter, so roughly every other window was swallowed and the guest
+        # line ran at ~0.5 Hz (measured on 2026-08-31: 45 frames over 92s).
+        # Half the hop passes every window exactly once and still absorbs a
+        # burst of duplicates.
+        emit_interval: float = 0.5,
         warmup_seconds: float = 5.0,   # ignore cold-start for the relative scale
     ):
         self.smooth_seconds = smooth_seconds
