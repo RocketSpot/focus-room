@@ -137,16 +137,17 @@ class Orchestrator extends EventEmitter {
     // sessions until a staff member clears it (like the demo state), the safe direction,
     // since it only SUPPRESSES claims, never fabricates them. Set via setStaffOverride().
     this._staffOverride = false;
+    // LINK state lives OUTSIDE both reset() and _clearSession(): those run per
+    // guest, and wiping the connection verdict there blinded the next guest's
+    // seat decision until the first heartbeat arrived. Only real connection
+    // evidence ever writes this after construction.
+    this._budsConnected = null;  // last eeg/connection verdict (null = not reported yet)
     this.reset();
   }
 
   reset() {
     this.beat = 'idle';
     this._clearSession();
-    // LINK state lives OUTSIDE the session lifecycle: _clearSession runs per
-    // guest, and wiping the connection verdict there blinded the next guest's
-    // seat decision until the first heartbeat arrived
-    this._budsConnected = null;  // last eeg/connection verdict (null = not reported yet)
     this._clearWatchdog(); // idle has no inactivity budget
   }
 

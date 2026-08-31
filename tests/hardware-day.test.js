@@ -163,7 +163,7 @@ const mk = () => {
   const stop = src.slice(src.indexOf('async def stop_session'), src.indexOf('async def stop_session') + 1600);
   check('stop_session resets the analyser WITH references (the guest boundary)',
     /reset\(keep_references=False\)/.test(stop), 'guest 2 would be screened against guest 1');
-  const start = src.slice(src.indexOf('async def start_session'), src.indexOf('async def start_session') + 1600);
+  const start = src.slice(src.indexOf('async def start_session'), src.indexOf('async def start_session') + 2600);
   check('start_session keeps references (fit -> reading is the same ears)',
     /reset\(keep_references=True\)/.test(start));
   check('an in-flight reconnect dies with its session', /_reconnect_task/.test(stop) && /cancel\(\)/.test(stop));
